@@ -45,7 +45,7 @@ async function jsonRequest(url: string, init: RequestInit, signal?: AbortSignal)
   if (signal?.aborted) controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
   const timer = setTimeout(abort, 20_000);
-  try {
+  const readResponse = async (): Promise<Json> => {
     const response = await fetch(url, { ...init, signal: controller.signal, redirect: 'error' });
     if (response.status === 429 || response.status >= 500) throw new Error('GitHub is temporarily unavailable or rate limited. Try again shortly.');
     const text = await response.text();
@@ -58,12 +58,13 @@ async function jsonRequest(url: string, init: RequestInit, signal?: AbortSignal)
       throw new Error(`GitHub returned HTTP ${response.status}. Check your connection and account access.`);
     }
     return data;
-  } catch (error) {
+  };
+  return readResponse().catch((error: unknown) => {
     if (signal?.aborted) throw new Error('GitHub sign-in was cancelled.');
     if (controller.signal.aborted) throw new Error('GitHub did not respond within 20 seconds. Check your connection and try again.');
     if (error instanceof TypeError) throw new Error('Could not connect to GitHub. Check your connection and try again.');
     throw error;
-  } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort); }
+  }).finally(() => { clearTimeout(timer); signal?.removeEventListener('abort', abort); });
 }
 async function form(endpoint: 'device/code' | 'oauth/access_token', values: Record<string, string>, signal?: AbortSignal) {
   return jsonRequest(`https://github.com/login/${endpoint}`, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Git Workbench' }, body: new URLSearchParams(values).toString() }, signal);

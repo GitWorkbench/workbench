@@ -234,3 +234,86 @@ describe('expiring GitHub sessions', () => {
     expect(mock.saved.token).toBe('replacement');
   });
 });
+
+describe('device flow cancellation and delayed responses', () => {
+  it('handles a cancellation from a subscriber before the first HTTP request starts', async () => {
+    auth.registerGitHubSignIn(state => { if (state.phase === 'requesting') auth.cancelGitHubSignIn(); });
+    mock.fetch.mockImplementation(async (_url, init) => {
+      expect(init.signal.aborted).toBe(true);
+      throw new DOMException('aborted', 'AbortError');
+    });
+    expect(await auth.startGitHubSignIn()).toMatchObject({ phase: 'cancelled' });
+    expect(mock.save).not.toHaveBeenCalled();
+  });
+  it('stops scheduling when the subscriber cancels after receiving a code', async () => {
+    auth.registerGitHubSignIn(state => { if (state.phase === 'waiting') auth.cancelGitHubSignIn(); });
+    mock.fetch.mockResolvedValueOnce(response(code()));
+    expect(await auth.startGitHubSignIn()).toMatchObject({ phase: 'cancelled' });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mock.fetch).toHaveBeenCalledOnce();
+  });
+  it('expires a code whose deadline passes while subscribers process its state', async () => {
+    auth.registerGitHubSignIn(state => { if (state.phase === 'waiting') vi.setSystemTime(Date.now() + 901_000); });
+    mock.fetch.mockResolvedValueOnce(response(code()));
+    expect(await auth.startGitHubSignIn()).toMatchObject({ phase: 'expired' });
+    expect(mock.fetch).toHaveBeenCalledOnce();
+  });
+  it('ignores an already-queued poll callback after cancellation', async () => {
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    mock.fetch.mockResolvedValueOnce(response(code())); await auth.startGitHubSignIn();
+    const scheduled = timers.mock.calls.find(([, delay]) => delay === 5000)?.[0];
+    expect(typeof scheduled).toBe('function');
+    auth.cancelGitHubSignIn();
+    if (typeof scheduled === 'function') scheduled();
+    await Promise.resolve();
+    expect(mock.fetch).toHaveBeenCalledOnce(); expect(mock.save).not.toHaveBeenCalled();
+  });
+  it.each(['response', 'rejection'])('ignores a poll %s delivered after cancellation', async outcome => {
+    mock.fetch.mockResolvedValueOnce(response(code())); await auth.startGitHubSignIn();
+    mock.fetch.mockImplementationOnce(async () => {
+      auth.cancelGitHubSignIn();
+      if (outcome === 'rejection') throw new Error('late request failure');
+      return response({ access_token: token });
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(auth.getGitHubSignInState().phase).toBe('cancelled'); expect(mock.save).not.toHaveBeenCalled();
+    expect(mock.fetch).toHaveBeenCalledTimes(2);
+  });
+  it('discards an approved session cancelled while installation details are arriving', async () => {
+    mock.fetch.mockResolvedValueOnce(response(code())); await auth.startGitHubSignIn();
+    mock.fetch.mockResolvedValueOnce(response({ access_token: token })).mockResolvedValueOnce(response(user()));
+    mock.fetch.mockImplementationOnce(async () => { auth.cancelGitHubSignIn(); return response({ total_count: 1 }); });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(auth.getGitHubSignInState().phase).toBe('cancelled'); expect(mock.save).not.toHaveBeenCalled();
+  });
+  it('treats a malformed installation count as unknown', async () => {
+    mock.saved = oauth({ expiresAt: '2099-01-01' });
+    mock.fetch.mockResolvedValueOnce(response(user())).mockResolvedValueOnce(response({ total_count: -1 }));
+    expect(await auth.refreshGitHubAccount()).toMatchObject({ connected: true, account: { installations: undefined } });
+  });
+  it('uses the default slow-down interval when GitHub does not supply one', async () => {
+    mock.fetch.mockResolvedValueOnce(response(code())); await auth.startGitHubSignIn();
+    mock.fetch.mockResolvedValueOnce(response({ error: 'slow_down' })); await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(9999); expect(mock.fetch).toHaveBeenCalledTimes(2);
+    mock.fetch.mockResolvedValueOnce(response({ error: 'access_denied' })); await vi.advanceTimersByTimeAsync(1);
+    expect(auth.getGitHubSignInState().phase).toBe('error');
+  });
+  it('reports non-Error failures while starting, polling and saving an approved session', async () => {
+    mock.fetch.mockRejectedValueOnce('connection failed');
+    expect((await auth.startGitHubSignIn()).message).toBe('Could not start GitHub sign-in.');
+    mock.fetch.mockResolvedValueOnce(response(code())); await auth.startGitHubSignIn();
+    mock.fetch.mockRejectedValueOnce('connection failed'); await vi.advanceTimersByTimeAsync(5000);
+    expect(auth.getGitHubSignInState().message).toContain('GitHub could not be reached. Retrying');
+    mock.fetch.mockResolvedValueOnce(response({ access_token: token })).mockResolvedValueOnce(response(user())).mockResolvedValueOnce(response({ total_count: 1 }));
+    mock.save.mockImplementationOnce(() => { throw 'keychain locked'; });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(auth.getGitHubSignInState()).toMatchObject({ phase: 'error', message: expect.stringContaining('Unlock the system keyring') });
+    expect(mock.saved).toBeNull();
+  });
+  it('can update connection state before an event subscriber is registered', async () => {
+    vi.resetModules(); const withoutSubscriber = await import('../../src/main/git/github-auth');
+    mock.fetch.mockResolvedValueOnce(response({ error: 'access_denied' }));
+    expect(await withoutSubscriber.startGitHubSignIn()).toMatchObject({ phase: 'error' });
+    withoutSubscriber.stopGitHubSignIn();
+  });
+});
