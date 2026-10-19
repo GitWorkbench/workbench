@@ -44,13 +44,13 @@ describe('website release asset selection', () => {
   });
 });
 
-describe('website workspace preview', () => {
+describe('website screenshot gallery', () => {
   it('switches panels with clicks and complete tab keyboard navigation', () => {
     mountWebsite();
     const tabs = [...document.querySelectorAll<HTMLButtonElement>('[data-preview]')];
     tabs[1].click();
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
-    expect(document.getElementById('panel-merge')).not.toHaveAttribute('hidden');
+    expect(document.getElementById('panel-diff')).not.toHaveAttribute('hidden');
     expect(document.getElementById('panel-history')).toHaveAttribute('hidden');
     for (const [source, key, next] of [[1, 'ArrowRight', 2], [2, 'ArrowRight', 0], [0, 'ArrowLeft', 2], [2, 'Home', 0], [0, 'End', 2]] as const) {
       tabs[source].dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
@@ -59,19 +59,20 @@ describe('website workspace preview', () => {
     tabs[2].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
   });
-  it('updates commit details and both merge previews without repository operations', () => {
-    mountWebsite();
-    document.querySelector<HTMLButtonElement>('[data-commit="5"]')!.click();
-    expect(document.getElementById('commit-title')).toHaveTextContent('preserve line endings');
-    expect(document.getElementById('commit-meta')).toHaveTextContent('Sam Rivera');
-    expect(document.getElementById('commit-stats')).toHaveTextContent('+31 −8');
-    expect(document.querySelector('[data-commit="0"]')).toHaveAttribute('aria-pressed', 'false');
-    document.querySelector<HTMLButtonElement>('[data-merge="incoming"]')!.click();
-    expect(document.getElementById('merge-result')).toHaveTextContent('Hello, workbench.');
-    expect(document.getElementById('merge-state')).toHaveTextContent('Incoming preview');
-    document.querySelector<HTMLButtonElement>('[data-merge="current"]')!.click();
-    expect(document.getElementById('merge-result')).toHaveTextContent('Hello, world.');
-    expect(document.getElementById('merge-state')).toHaveTextContent('Current preview');
+  it('shows real local screenshots with full-size links and demo-data disclosure', () => {
+    const screenshots = [...document.querySelectorAll<HTMLImageElement>('.screenshot-gallery img')];
+    expect(screenshots).toHaveLength(3);
+    for (const screenshot of screenshots) {
+      const source = screenshot.getAttribute('src')!;
+      expect(source).toMatch(/^\.\/assets\/screenshots\/(history|diff|merge)\.jpg$/);
+      expect(readFileSync(path.resolve('website', source)).subarray(0, 2).toString('hex')).toBe('ffd8');
+      expect(screenshot.alt.length).toBeGreaterThan(30);
+      expect(screenshot.closest('a')).toHaveAttribute('href', source);
+      expect(screenshot.closest('a')).toHaveAttribute('rel', 'noopener');
+    }
+    expect(document.body).toHaveTextContent('browser preview with disposable demo repository data');
+    expect(document.querySelectorAll('[data-commit], [data-merge]')).toHaveLength(0);
+    expect(html).toContain('<link rel="canonical" href="https://gitworkbench.github.io/">');
   });
   it.each([['MacIntel', 'mac'], ['Win32', 'windows'], ['Linux x86_64', 'linux'], ['iPhone', null]])('highlights %s without hiding other platforms', (platform, expected) => {
     vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
@@ -87,7 +88,7 @@ describe('website workspace preview', () => {
       if (id) expect(document.getElementById(id)).not.toBeNull();
     }
     expect(html).not.toMatch(/(?:src|href)="\/(?!\/)/);
-    expect(document.body).toHaveTextContent('Illustrative demo');
+    expect(document.body).toHaveTextContent('Actual application interface');
     expect(document.body).toHaveTextContent('macOS builds are unsigned');
   });
 });
@@ -112,6 +113,7 @@ describe('website public release loading', () => {
   it('explains a repository without a public stable release', async () => {
     await loadRelease(document, vi.fn(async () => ({ status: 404 })));
     expect(document.getElementById('release-status')).toHaveTextContent('being prepared');
+    for (const link of document.querySelectorAll('[data-download]')) expect(link).toHaveAttribute('href', RELEASES_URL);
   });
   it.each(['offline', 'rate limit', 'draft', 'prerelease', 'invalid response'])('keeps usable release-page links on %s', async mode => {
     const request = vi.fn(async () => {
@@ -120,7 +122,7 @@ describe('website public release loading', () => {
     });
     await loadRelease(document, request);
     expect(document.getElementById('release-status')).toHaveTextContent('unavailable');
-    expect(document.querySelector('[data-download="AppImage"]')).toHaveAttribute('href', `${RELEASES_URL}/latest`);
+    expect(document.querySelector('[data-download="AppImage"]')).toHaveAttribute('href', RELEASES_URL);
   });
   it('aborts a slow lookup and clears the timer', async () => {
     vi.useFakeTimers();

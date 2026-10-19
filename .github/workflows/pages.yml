@@ -1,11 +1,10 @@
-name: Deploy Git Workbench website
+name: Redirect to Git Workbench website
 
 on:
   push:
     branches: [main]
     paths:
       - 'website/**'
-      - 'build/icon-128.png'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -37,9 +36,8 @@ jobs:
         uses: actions/configure-pages@v6
       - name: Prepare static files
         run: |
-          mkdir -p _site/assets
-          cp website/index.html website/styles.css website/site.js _site/
-          cp build/icon-128.png _site/assets/icon.png
+          mkdir -p _site
+          cp website/redirect.html _site/index.html
       - name: Upload website
         uses: actions/upload-pages-artifact@v5
         with:

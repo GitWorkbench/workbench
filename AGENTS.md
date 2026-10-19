@@ -122,7 +122,7 @@ Follow the user's latest validation instructions. Do not add or run tests or typ
 - Keep quiet startup checks, useful manual-check results, explicit download, visible progress, and explicit restart/install actions. Do not enable automatic downloading or installation without a requested change.
 - Preserve the GitHub release provider for `GitWorkbench/workbench`. Updater metadata and blockmaps must come from the same build as their installers; never substitute an older build's files.
 - Use **Git Workbench** / `git-workbench` for every product, code, storage, package, and integration identifier. Do not add previous product names, aliases, fallback keys, profile migrations, or installer compatibility identities. Follow [application identity and data locations](docs/branding.md).
-- The public website is deployed separately to GitHub Pages; see [website deployment](docs/website.md). Keep its assets relative to the `/workbench/` base path, label illustrative content, and select downloads from actual public release assets with a useful fallback. Never include desktop source or credentials in the Pages artifact.
+- The public website is deployed separately to GitHub Pages; see [website deployment](docs/website.md). Publish it at `https://gitworkbench.github.io/` using the separate `GitWorkbench/gitworkbench.github.io` repository. Keep assets relative, label screenshot demo data, and select downloads from actual public release assets with a useful fallback. Never include desktop source or credentials in the Pages artifact.
 
 ## Git workflow and completion
 

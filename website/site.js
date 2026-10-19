@@ -1,16 +1,6 @@
 export const REPOSITORY = 'GitWorkbench/workbench';
 export const RELEASES_URL = `https://github.com/${REPOSITORY}/releases`;
 
-const commits = [
-  ['feat: bring your projects into one workspace', 'Alex Chen', 'AC', 'a8c41f2', '3 files changed', '+128', '−34'],
-  ['feat: add pinned repository overview', 'Alex Chen', 'AC', 'b7d90e1', '4 files changed', '+96', '−12'],
-  ["Merge branch 'feature/workspaces'", 'Sam Rivera', 'SR', 'c9f31a8', '4 files changed', '+214', '−46'],
-  ['refactor: simplify repository navigation', 'Alex Chen', 'AC', 'd4a18e2', '2 files changed', '+58', '−91'],
-  ['chore: prepare the first public release', 'Sam Rivera', 'SR', 'e6b90c3', '5 files changed', '+76', '−15'],
-  ['fix: preserve line endings in merge results', 'Sam Rivera', 'SR', 'f8c24b7', '2 files changed', '+31', '−8'],
-  ['feat: compare changes side by side', 'Alex Chen', 'AC', 'a2d76f9', '6 files changed', '+256', '−42']
-];
-
 /** Accept only the public repository's release assets, without trusting API-supplied markup or URLs. */
 export function assetUrl(asset) {
   if (!asset || typeof asset.name !== 'string' || typeof asset.browser_download_url !== 'string') return null;
@@ -55,26 +45,6 @@ export function mountWebsite(root = document) {
       if (next) { event.preventDefault(); showPanel(next); next.focus(); }
     });
   }
-  for (const row of root.querySelectorAll('[data-commit]')) row.addEventListener('click', () => {
-    const commit = commits[Number(row.dataset.commit)];
-    if (!commit) return;
-    for (const item of root.querySelectorAll('[data-commit]')) {
-      item.classList.toggle('selected', item === row);
-      item.setAttribute('aria-pressed', String(item === row));
-    }
-    root.getElementById('commit-title').textContent = commit[0];
-    root.getElementById('commit-avatar').textContent = commit[2];
-    root.getElementById('commit-meta').textContent = `${commit[1]} · ${commit[3]} · ${commit[4]}`;
-    const stats = root.getElementById('commit-stats');
-    stats.replaceChildren(root.createTextNode(`${commit[5]} `));
-    const removed = root.createElement('span'); removed.textContent = commit[6]; stats.append(removed);
-  });
-  for (const button of root.querySelectorAll('[data-merge]')) button.addEventListener('click', () => {
-    const current = button.dataset.merge === 'current';
-    root.getElementById('merge-result').textContent = `export const welcome = {\n  title: '${current ? 'Hello, world.' : 'Hello, workbench.'}',\n  theme: '${current ? 'dark' : 'system'}'\n};`;
-    root.getElementById('merge-state').textContent = current ? 'Current preview' : 'Incoming preview';
-    for (const item of root.querySelectorAll('[data-merge]')) item.setAttribute('aria-pressed', String(item === button));
-  });
   const platform = navigator.userAgentData?.platform || navigator.platform || '';
   const detected = /mac/i.test(platform) ? 'mac' : /win/i.test(platform) ? 'windows' : /linux/i.test(platform) && !/android/i.test(navigator.userAgent) ? 'linux' : null;
   if (detected) root.querySelector(`[data-platform="${detected}"]`)?.setAttribute('data-detected', 'true');
@@ -116,7 +86,7 @@ export async function loadRelease(root = document, request = fetch) {
   } finally { clearTimeout(timeout); }
 }
 
-if (typeof document !== 'undefined' && document.querySelector('.workbench')) {
+if (typeof document !== 'undefined' && document.querySelector('.screenshot-gallery')) {
   mountWebsite();
   void loadRelease();
 }

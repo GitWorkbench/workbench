@@ -6,7 +6,7 @@
 
 See [application identity and data locations](docs/branding.md) for configuration and packaging details.
 
-[Website](https://gitworkbench.github.io/workbench/) · [Downloads](https://github.com/GitWorkbench/workbench/releases) · [Website deployment guide](docs/website.md)
+[Website](https://gitworkbench.github.io/) · [Downloads](https://github.com/GitWorkbench/workbench/releases) · [Website deployment guide](docs/website.md)
 
 **Visual commit strata &amp; effortless Git workflow for Linux and macOS.**
 
