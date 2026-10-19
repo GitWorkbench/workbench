@@ -1,0 +1,31 @@
+.about-page { display: grid; gap: 20px; min-width: 0; font-size: var(--font-size-sm, 12px); line-height: 1.6; }
+.about-heading p, .about-heading h2, .about-product p, .about-product h3, .about-details-grid p, .about-details-grid h3 { margin: 0; }
+.about-heading h2 { color: var(--color-fg); font-size: var(--font-size-base, 13px); font-weight: 600; }
+.about-heading p { margin-top: 4px; color: var(--color-dim); }
+.about-card { min-width: 0; padding: 20px; border: 1px solid var(--color-edge); border-radius: 12px; background: var(--color-panel); }
+.about-product { padding: 24px; }
+.about-brand { display: flex; align-items: center; gap: 16px; }
+.about-brand-copy { min-width: 0; }
+.about-product-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.about-product-title h3 { color: var(--color-fg); font-size: calc(var(--font-size-ui, 13px) * 1.75); font-weight: 650; line-height: 1.2; letter-spacing: -0.025em; }
+.about-product-title h3 span { color: var(--color-accent); }
+.about-version { padding: 2px 8px; border: 1px solid var(--color-edge); border-radius: 6px; color: var(--color-dim); font-size: var(--font-size-xs, 11px); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.about-brand-copy p { max-width: 68ch; margin-top: 8px; color: var(--color-dim); }
+.about-product-meta { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 20px; color: var(--color-dim); font-size: var(--font-size-xs, 11px); }
+.about-product-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--color-edge); }
+.about-page .btn-secondary { display: inline-flex; min-height: 26px; padding: 4px 10px; font-size: var(--font-size-xs, 11px); text-decoration: none; }
+.about-details-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; }
+.about-card-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--color-dim); }
+.about-card-heading h3 { color: var(--color-fg); font-size: var(--font-size-sm, 12px); font-weight: 600; }
+.about-page .about-developer-name { color: var(--color-fg); font-size: var(--font-size-base, 13px); font-weight: 600; overflow-wrap: anywhere; }
+.about-description { color: var(--color-dim); }
+.about-page .about-developer-name + .about-description { margin-top: 4px; }
+.about-profile-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; color: var(--color-accent); text-decoration: none; }
+.about-profile-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.about-resource-links { display: grid; gap: 2px; margin: 12px -8px -4px; }
+.about-resource-links a { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border-radius: 6px; color: var(--color-fg); text-decoration: none; transition: background-color 150ms; }
+.about-resource-links a:hover { background: var(--color-panel3); }
+.about-resource-links a span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.about-resource-links a > svg { flex-shrink: 0; color: var(--color-dim); }
+.about-page a:focus-visible, .about-page button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.about-footer { color: var(--color-dim); font-size: var(--font-size-xs, 11px); }

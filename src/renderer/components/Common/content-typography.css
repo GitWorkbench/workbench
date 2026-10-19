@@ -1,0 +1,18 @@
+/* Content surfaces have separate settings; interface/code changes do not resize them. */
+.home-page { --content-font-size: var(--font-size-home, 13px); }
+.explore-dialog { --content-font-size: var(--font-size-guide, 13px); }
+
+.home-page,
+.explore-dialog {
+  --content-text-caption: calc(var(--content-font-size) - 2px);
+  --content-text-small: calc(var(--content-font-size) - 1px);
+  --content-text-body: var(--content-font-size);
+  --content-text-reading: var(--content-font-size);
+  --content-text-subheading: calc(var(--content-font-size) * 1.15);
+  --content-text-heading: calc(var(--content-font-size) * 1.4);
+  --content-text-title: calc(var(--content-font-size) * 2);
+  --content-text-metric: calc(var(--content-font-size) * 1.7);
+  --content-text-display: calc(var(--content-font-size) * 3);
+  font-size: var(--content-text-body);
+  line-height: 1.5;
+}

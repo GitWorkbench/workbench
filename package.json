@@ -1,0 +1,126 @@
+{
+  "name": "git-workbench",
+  "productName": "Git Workbench",
+  "version": "1.0.0",
+  "description": "A commit-graph-centric visual Git client for Linux, macOS, and Windows",
+  "main": "out/main/index.js",
+  "author": {
+    "name": "Naowas Morshed Eimon",
+    "email": "naowas.morshed@gmail.com"
+  },
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "start": "electron-vite preview",
+    "demo:create": "node scripts/create-demo-repos.cjs",
+    "test:features": "node scripts/test-features.cjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dist": "electron-vite build && node scripts/build-dist.cjs",
+    "dist:linux": "electron-vite build && node scripts/build-linux.cjs",
+    "dist:win": "electron-vite build && electron-builder --win nsis --publish never",
+    "dist:mac": "electron-vite build && electron-builder --mac dmg zip --publish never",
+    "test": "vitest run && npm run test:features",
+    "test:unit": "vitest run tests/unit tests/main",
+    "test:renderer": "vitest run tests/renderer",
+    "test:integration": "vitest run tests/integration",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:report": "node scripts/report-test-coverage.cjs"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/language-data": "^6.5.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "@gitgraph/core": "^1.5.0",
+    "@gitgraph/js": "^1.4.0",
+    "@gitgraph/react": "^1.6.0",
+    "@lezer/highlight": "^1.2.5",
+    "codemirror": "^6.0.2",
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^0.469.0",
+    "simple-git": "^3.27.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^3.2.7",
+    "electron": "^44.4.5",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "js-yaml": "^4.3.2",
+    "jsdom": "^30.1.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^3.2.7"
+  },
+  "build": {
+    "appId": "dev.gitworkbench.app",
+    "productName": "Git Workbench",
+    "artifactName": "git-workbench-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "GitWorkbench",
+      "repo": "workbench",
+      "releaseType": "release"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm",
+        "pacman"
+      ],
+      "maintainer": "naowas.morshed@gmail.com",
+      "category": "Development",
+      "executableName": "git-workbench",
+      "desktop": {
+        "StartupWMClass": "git-workbench"
+      },
+      "icon": "build/icon.png"
+    },
+    "deb": {
+      "packageName": "git-workbench"
+    },
+    "rpm": {
+      "packageName": "git-workbench"
+    },
+    "pacman": {
+      "packageName": "git-workbench"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "git-workbench-setup-${version}.${ext}",
+      "icon": "build/icon.ico"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.png"
+    }
+  }
+}

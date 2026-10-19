@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build and distribution outputs
+dist/
+dist-electron/
+out/
+build/linux-unpacked/
+release/
+*.asar
+*.AppImage
+*.deb
+*.rpm
+*.pacman
+*.pkg.tar.zst
+*.snap
+*.dmg
+*.zip
+*.exe
+
+# Temporary files and caches
+.tmp/
+.tmp-bundle/
+.temp/
+*.tsbuildinfo
+.eslintcache
+.vite/
+.turbo/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS metadata
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and Editor directories
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.cursor/
+.gemini/
+.claude/
+.junie/
+*.sublime-project
+*.sublime-workspace
+
+# Testing & Coverage
+coverage/
+.nyc_output/
+
+# Temporary / Scratch Scripts
+scripts/tmp-*
+scripts/temp-*

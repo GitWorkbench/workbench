@@ -1,0 +1,104 @@
+// @vitest-environment jsdom
+import './setup';
+import React from 'react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+const mock = vi.hoisted(() => ({ state: {} as Record<string, any>, setState: vi.fn(), api: Object.fromEntries(['listCommitSplitPreviews', 'getCommitSplit', 'previewCommitSplit', 'discardCommitSplit', 'applyCommitSplit', 'getBranchStack', 'setStackParent', 'previewStackRestack', 'resumeStackRestack', 'applyStackRestack', 'discardStackRestack', 'getPullRequestContext', 'getPullReview', 'retargetPullRequest'].map(name => [name, vi.fn()])) }));
+vi.mock('../../src/renderer/store', () => ({ useApp: Object.assign((select: (state: any) => any) => select(mock.state), { getState: () => mock.state, setState: mock.setState }) }));
+vi.mock('../../src/renderer/lib/api', () => ({ api: mock.api }));
+import { CommitSplitModal } from '../../src/renderer/components/Rebase/CommitSplitModal';
+import { BranchStackModal } from '../../src/renderer/components/Rebase/BranchStackModal';
+const plan = () => ({ hash: 'abc123full', head: 'head123full', message: 'Original subject\n\nBody', descendantCount: 2, units: [{ id: 'a', file: 'a.txt', label: 'Hunk 1', patch: 'first patch' }, { id: 'b', file: 'a.txt', label: 'Hunk 2', patch: 'second patch' }, { id: 'c', file: 'b.txt', label: 'Whole file', patch: 'third patch' }] });
+const split = () => ({ id: 'split-1', branch: 'feature', oldHead: 'old123full', descendantCount: 2, commits: [{ hash: 'new123full', message: 'First subject\n\nBody', files: ['a.txt'] }, { hash: 'new456full', message: 'Second subject', files: ['b.txt'] }] });
+const session = (state = 'ready') => ({ id: 'session-1', root: 'main', state, index: 1, path: '/preview', steps: [{ id: 'step-1', branch: 'feature', parent: 'main', oldHead: 'old123full', newHead: 'new123full', commits: 2 }] });
+const stack = () => ({ branches: ['main', 'feature', 'child'], links: [{ branch: 'feature', parent: 'main', base: 'base123full', commits: 2 }, { branch: 'child', parent: 'feature', base: 'base456full', error: 'Missing saved boundary' }], sessions: [session()] });
+const context = () => ({ provider: 'github', remoteName: 'origin', repository: 'org/repo', pullRequests: [{ id: '12', sourceBranch: 'child', targetBranch: 'feature' }] });
+beforeEach(() => {
+  Object.assign(mock.state, { activeTab: '/repo', selectedCommit: 'abc123full', commitSplitOpen: true, branchStackOpen: true, openRepo: vi.fn(), refresh: vi.fn().mockResolvedValue(undefined), notify: vi.fn() });
+  mock.state.runAndRefresh = vi.fn(async (fn: () => any) => { try { await fn(); return true; } catch (e) { mock.state.notify('error', String(e)); return false; } });
+  mock.setState.mockReset(); Object.values(mock.api).forEach(fn => fn.mockReset());
+  mock.api.listCommitSplitPreviews.mockResolvedValue([]); mock.api.getCommitSplit.mockResolvedValue(plan()); mock.api.previewCommitSplit.mockResolvedValue(split()); mock.api.discardCommitSplit.mockResolvedValue(undefined); mock.api.applyCommitSplit.mockResolvedValue({ ok: true });
+  mock.api.getBranchStack.mockResolvedValue(stack()); mock.api.setStackParent.mockResolvedValue({ ok: true }); mock.api.previewStackRestack.mockResolvedValue(session()); mock.api.resumeStackRestack.mockResolvedValue(session()); mock.api.applyStackRestack.mockResolvedValue({ ok: true }); mock.api.discardStackRestack.mockResolvedValue(undefined);
+  mock.api.getPullRequestContext.mockResolvedValue(context()); mock.api.getPullReview.mockResolvedValue({ head: 'provider-head' }); mock.api.retargetPullRequest.mockResolvedValue({ ok: true });
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+});
+async function loadSplit() { render(<CommitSplitModal />); fireEvent.click(screen.getByRole('button', { name: 'Load commit' })); await screen.findByLabelText('Assign a.txt Hunk 1'); }
+async function showSplitPreview() { await loadSplit(); fireEvent.click(screen.getByRole('button', { name: 'Preview split' })); await screen.findByRole('button', { name: 'Apply split' }); }
+async function showStack() { render(<BranchStackModal />); await screen.findByText('Missing saved boundary'); }
+async function selectSession() { await showStack(); fireEvent.change(screen.getByLabelText('Saved restack preview'), { target: { value: 'session-1' } }); }
+async function loadRequest() { await showStack(); fireEvent.click(screen.getByRole('button', { name: 'Load open requests' })); await screen.findByLabelText('Request to retarget'); fireEvent.change(screen.getByLabelText('Request to retarget'), { target: { value: '12' } }); fireEvent.change(screen.getByLabelText('New target branch'), { target: { value: 'main' } }); }
+
+describe('commit split workspace', () => {
+  it.each(['closed', 'no-repo'])('stays hidden when %s', state => { if (state === 'closed') mock.state.commitSplitOpen = false; else mock.state.activeTab = null; expect(render(<CommitSplitModal />).container).toBeEmptyDOMElement(); });
+  it('uses HEAD without a selected commit and closes explicitly', () => { mock.state.selectedCommit = null; render(<CommitSplitModal />); expect(screen.getByLabelText('Commit to split')).toHaveValue('HEAD'); expect(screen.getByRole('button', { name: 'Preview split' })).toBeDisabled(); fireEvent.click(screen.getByLabelText('Close')); expect(mock.setState).toHaveBeenCalledWith({ commitSplitOpen: false }); });
+  it('loads an edited revision, assigns individual pieces and whole files, and submits exact groups', async () => {
+    render(<CommitSplitModal />); fireEvent.change(screen.getByLabelText('Commit to split'), { target: { value: 'HEAD~2' } }); fireEvent.click(screen.getByRole('button', { name: 'Load commit' })); await screen.findByLabelText('Assign a.txt Hunk 1'); expect(mock.api.getCommitSplit).toHaveBeenCalledWith('HEAD~2');
+    fireEvent.change(screen.getByLabelText('Move all changes in a.txt'), { target: { value: '1' } }); fireEvent.change(screen.getByLabelText('Assign a.txt Hunk 2'), { target: { value: '0' } }); fireEvent.change(screen.getByLabelText(/Commit 1 · 1 pieces/), { target: { value: 'First edit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add commit' })); fireEvent.change(screen.getByLabelText(/Commit 3 · 0 pieces/), { target: { value: 'Third edit' } }); fireEvent.change(screen.getByLabelText('Assign b.txt Whole file'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preview split' })); await screen.findByRole('button', { name: 'Apply split' });
+    expect(mock.api.previewCommitSplit).toHaveBeenCalledWith({ hash: 'abc123full', head: 'head123full', groups: [{ message: 'First edit', units: ['b'] }, { message: 'Split: Original subject', units: ['a'] }, { message: 'Third edit', units: ['c'] }] });
+    expect(screen.getByText('1. First subject')).toBeVisible(); expect(screen.getByText('a.txt')).toBeVisible(); expect(screen.getByText(/2 later commits will receive new hashes/)).toBeVisible();
+  });
+  it('limits the number of split commits and truncates only the displayed patch', async () => {
+    const value = plan(); value.units[0].patch = 'x'.repeat(100_001); mock.api.getCommitSplit.mockResolvedValue(value); await loadSplit(); expect(screen.getByText(/Preview truncated; full patch is used/)).toBeInTheDocument();
+    for (let i = 2; i < 20; i++) fireEvent.click(screen.getByRole('button', { name: 'Add commit' })); expect(screen.getByRole('button', { name: 'Add commit' })).toBeDisabled(); expect(screen.getAllByRole('textbox')).toHaveLength(21);
+  });
+  it('loads saved previews and discards them without rewriting the branch', async () => {
+    mock.api.listCommitSplitPreviews.mockResolvedValue([split()]); render(<CommitSplitModal />); await screen.findByLabelText('Saved split previews'); fireEvent.change(screen.getByLabelText('Saved split previews'), { target: { value: 'split-1' } }); fireEvent.click(screen.getByRole('button', { name: 'Discard preview' }));
+    await waitFor(() => expect(mock.api.discardCommitSplit).toHaveBeenCalledWith('split-1')); await waitFor(() => expect(screen.queryByLabelText('Saved split previews')).not.toBeInTheDocument()); expect(mock.api.applyCommitSplit).not.toHaveBeenCalled();
+  });
+  it('requires confirmation before applying and leaves the preview available on cancellation', async () => {
+    vi.mocked(window.confirm).mockReturnValue(false); await showSplitPreview(); fireEvent.click(screen.getByRole('button', { name: 'Apply split' })); await waitFor(() => expect(screen.getByRole('button', { name: 'Apply split' })).toBeEnabled()); expect(mock.api.applyCommitSplit).not.toHaveBeenCalled();
+  });
+  it.each([undefined, 'Review rewritten descendants'])('applies the preview and forwards warnings: %s', async warning => {
+    mock.api.applyCommitSplit.mockResolvedValue({ ok: true, warning }); await showSplitPreview(); fireEvent.click(screen.getByRole('button', { name: 'Apply split' })); await waitFor(() => expect(mock.setState).toHaveBeenCalledWith({ commitSplitOpen: false })); expect(mock.api.applyCommitSplit).toHaveBeenCalledWith('split-1'); if (warning) expect(mock.state.notify).toHaveBeenCalledWith('warn', warning);
+  });
+  it('keeps the dialog open after an apply failure', async () => { mock.api.applyCommitSplit.mockRejectedValue(new Error('tip moved')); await showSplitPreview(); fireEvent.click(screen.getByRole('button', { name: 'Apply split' })); await waitFor(() => expect(mock.state.notify).toHaveBeenCalledWith('error', 'Error: tip moved')); expect(mock.setState).not.toHaveBeenCalled(); });
+  it.each(['getCommitSplit', 'previewCommitSplit', 'discardCommitSplit'])('displays %s errors and restores enabled controls', async method => {
+    mock.api[method].mockRejectedValue(new Error('operation refused'));
+    if (method === 'discardCommitSplit') { await showSplitPreview(); fireEvent.click(screen.getByRole('button', { name: 'Discard preview' })); }
+    else if (method === 'previewCommitSplit') { await loadSplit(); fireEvent.click(screen.getByRole('button', { name: 'Preview split' })); }
+    else { render(<CommitSplitModal />); fireEvent.click(screen.getByRole('button', { name: 'Load commit' })); }
+    expect(await screen.findByRole('alert')).toHaveTextContent('operation refused'); expect(screen.getByLabelText('Close')).toBeEnabled();
+  });
+  it('reports saved-preview errors and ignores deferred results after unmount', async () => {
+    mock.api.listCommitSplitPreviews.mockRejectedValueOnce('read failure'); const first = render(<CommitSplitModal />); expect(await screen.findByRole('alert')).toHaveTextContent('read failure'); first.unmount(); let resolve!: (v: any) => void; mock.api.listCommitSplitPreviews.mockReturnValue(new Promise(done => { resolve = done; })); const second = render(<CommitSplitModal />); second.unmount(); await act(async () => resolve([split()])); expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});
+
+describe('branch stack workspace', () => {
+  it.each(['closed', 'no-repo'])('stays hidden when %s', state => { if (state === 'closed') mock.state.branchStackOpen = false; else mock.state.activeTab = null; expect(render(<BranchStackModal />).container).toBeEmptyDOMElement(); });
+  it('handles empty stacks and closes through the header', async () => { mock.api.getBranchStack.mockResolvedValue({ branches: [], links: [], sessions: [] }); render(<BranchStackModal />); expect(screen.getByRole('button', { name: 'Save link' })).toBeDisabled(); expect(screen.getByRole('button', { name: 'Build restack preview' })).toBeDisabled(); await screen.findByText('No linked branches yet.'); fireEvent.click(screen.getByLabelText('Close')); expect(mock.setState).toHaveBeenCalledWith({ branchStackOpen: false }); });
+  it('links and unlinks branches and requires confirmation before recalculating boundaries', async () => {
+    await showStack(); fireEvent.change(screen.getByLabelText('Child branch'), { target: { value: 'child' } }); fireEvent.change(screen.getByLabelText('Parent branch'), { target: { value: 'main' } }); fireEvent.click(screen.getByRole('button', { name: 'Save link' })); await waitFor(() => expect(mock.api.setStackParent).toHaveBeenCalledWith('child', 'main', false)); await waitFor(() => expect(screen.getByRole('button', { name: 'Save link' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('checkbox')); vi.mocked(window.confirm).mockReturnValueOnce(false); fireEvent.click(screen.getByRole('button', { name: 'Save link' })); await waitFor(() => expect(screen.getByRole('button', { name: 'Save link' })).toBeEnabled()); expect(mock.api.setStackParent).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Save link' })); await waitFor(() => expect(mock.api.setStackParent).toHaveBeenCalledWith('child', 'main', true)); await waitFor(() => expect(screen.getAllByRole('button', { name: 'Unlink' })[0]).toBeEnabled()); fireEvent.click(screen.getAllByRole('button', { name: 'Unlink' })[0]); await waitFor(() => expect(mock.api.setStackParent).toHaveBeenCalledWith('feature', null));
+  });
+  it('walks cyclic/stale saved links without duplicate rows and uses a local branch as fallback base', async () => {
+    mock.api.getBranchStack.mockResolvedValue({ branches: ['main', 'a', 'b'], links: [{ branch: 'a', parent: 'b', base: 'old' }, { branch: 'b', parent: 'a', base: 'old' }], sessions: [] }); render(<BranchStackModal />); await waitFor(() => expect(screen.getAllByRole('button', { name: 'Unlink' })).toHaveLength(2)); expect(screen.getByLabelText('Stack base branch')).toHaveValue('main');
+  });
+  it.each(['ready', 'paused'])('builds and resumes a %s restack preview', async state => {
+    const value = { ...session(state), ...(state === 'paused' ? { error: 'Resolve conflicts first', steps: [{ ...session().steps[0], newHead: undefined }] } : {}) }; mock.api.previewStackRestack.mockResolvedValue(value); mock.api.getBranchStack.mockResolvedValue({ ...stack(), sessions: [value] }); await showStack();
+    fireEvent.change(screen.getByLabelText('Stack base branch'), { target: { value: 'feature' } }); fireEvent.click(screen.getByRole('button', { name: 'Build restack preview' })); await screen.findByRole('button', { name: 'Resume preview' }); await waitFor(() => expect(screen.getByRole('button', { name: 'Resume preview' })).toBeEnabled()); expect(mock.api.previewStackRestack).toHaveBeenCalledWith('feature'); expect(screen.getByRole('status')).toHaveTextContent(state === 'ready' ? 'Preview ready.' : 'Resolve conflicts first');
+    mock.api.resumeStackRestack.mockResolvedValue({ ...session('paused'), error: undefined }); fireEvent.click(screen.getByRole('button', { name: 'Resume preview' })); await waitFor(() => expect(mock.api.resumeStackRestack).toHaveBeenCalledWith('session-1')); await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Preview paused.'));
+  });
+  it('opens the preview worktree and disables application until ready', async () => { mock.api.getBranchStack.mockResolvedValue({ ...stack(), sessions: [session('paused')] }); await selectSession(); expect(screen.getByRole('button', { name: 'Apply to branches' })).toBeDisabled(); fireEvent.click(screen.getByRole('button', { name: 'Open preview / resolve conflicts' })); expect(mock.state.openRepo).toHaveBeenCalledWith('/preview'); expect(mock.setState).toHaveBeenCalledWith({ branchStackOpen: false }); });
+  it.each([undefined, 'Some tips were already current'])('confirms application and reports the result: %s', async warning => {
+    mock.api.applyStackRestack.mockResolvedValue({ warning }); await selectSession(); vi.mocked(window.confirm).mockReturnValueOnce(false); fireEvent.click(screen.getByRole('button', { name: 'Apply to branches' })); await waitFor(() => expect(screen.getByRole('button', { name: 'Apply to branches' })).toBeEnabled()); expect(mock.api.applyStackRestack).not.toHaveBeenCalled(); fireEvent.click(screen.getByRole('button', { name: 'Apply to branches' })); await waitFor(() => expect(mock.state.refresh).toHaveBeenCalledOnce()); await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(warning || 'Stack applied.')); expect(mock.api.applyStackRestack).toHaveBeenCalledWith('session-1');
+  });
+  it('removes a confirmed preview and hides resume on applied sessions', async () => { mock.api.getBranchStack.mockResolvedValue({ ...stack(), sessions: [session('applied')] }); await selectSession(); expect(screen.queryByRole('button', { name: 'Resume preview' })).not.toBeInTheDocument(); vi.mocked(window.confirm).mockReturnValueOnce(false); fireEvent.click(screen.getByRole('button', { name: 'Remove preview' })); await waitFor(() => expect(screen.getByRole('button', { name: 'Remove preview' })).toBeEnabled()); expect(mock.api.discardStackRestack).not.toHaveBeenCalled(); fireEvent.click(screen.getByRole('button', { name: 'Remove preview' })); await waitFor(() => expect(mock.api.discardStackRestack).toHaveBeenCalledWith('session-1')); await waitFor(() => expect(screen.queryByRole('button', { name: 'Remove preview' })).not.toBeInTheDocument()); });
+  it('loads an explicit hosting provider and clears stale context when configuration changes', async () => {
+    await showStack(); fireEvent.change(screen.getByLabelText('Hosting remote'), { target: { value: 'upstream' } }); fireEvent.change(screen.getByLabelText('Hosting provider'), { target: { value: 'gitlab' } }); mock.api.getPullRequestContext.mockResolvedValue({ ...context(), repository: undefined, remoteUrl: 'remote-url', error: 'No permission' }); fireEvent.click(screen.getByRole('button', { name: 'Load open requests' })); await screen.findByText(/remote-url · 1 requests/); await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('No permission')); expect(mock.api.getPullRequestContext).toHaveBeenCalledWith('upstream', 'gitlab'); fireEvent.change(screen.getByLabelText('Hosting provider'), { target: { value: 'bitbucket' } }); expect(screen.queryByLabelText('Request to retarget')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Hosting remote'), { target: { value: '' } }); expect(screen.getByRole('button', { name: 'Load open requests' })).toBeDisabled();
+  });
+  it('retargets only a selected request to a different branch after confirmation and head lookup', async () => {
+    await loadRequest(); fireEvent.change(screen.getByLabelText('New target branch'), { target: { value: 'feature' } }); expect(screen.getByRole('button', { name: 'Retarget request' })).toBeDisabled(); fireEvent.change(screen.getByLabelText('New target branch'), { target: { value: 'main' } }); vi.mocked(window.confirm).mockReturnValueOnce(false); fireEvent.click(screen.getByRole('button', { name: 'Retarget request' })); await waitFor(() => expect(screen.getByRole('button', { name: 'Retarget request' })).toBeEnabled()); expect(mock.api.getPullReview).not.toHaveBeenCalled(); fireEvent.click(screen.getByRole('button', { name: 'Retarget request' })); await waitFor(() => expect(mock.api.retargetPullRequest).toHaveBeenCalledWith({ provider: 'github', remoteName: 'origin', requestId: '12', head: 'provider-head', previousTarget: 'feature', newTarget: 'main' })); await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Hosted request retargeted.'));
+  });
+  it('refuses retargeting after the active repository changes during the head lookup', async () => {
+    await loadRequest(); mock.api.getPullReview.mockImplementation(async () => { mock.state.activeTab = '/another-repo'; return { head: 'provider-head' }; }); fireEvent.click(screen.getByRole('button', { name: 'Retarget request' })); await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('The active repository changed.')); expect(mock.api.retargetPullRequest).not.toHaveBeenCalled();
+  });
+  it('reports initial and operation failures and ignores initial results after unmount', async () => {
+    mock.api.getBranchStack.mockRejectedValueOnce(new Error('read denied')); const first = render(<BranchStackModal />); await screen.findByRole('status'); expect(screen.getByRole('status')).toHaveTextContent('read denied'); first.unmount(); await showStack(); mock.api.getBranchStack.mockRejectedValueOnce(new Error('refresh denied')); fireEvent.click(screen.getByTitle('Refresh stack')); await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('refresh denied')); expect(screen.getByLabelText('Close')).toBeEnabled();
+  });
+  it('ignores an initial response or error after unmount', async () => { let reject!: (e: Error) => void; mock.api.getBranchStack.mockReturnValue(new Promise((_done, fail) => { reject = fail; })); const { unmount } = render(<BranchStackModal />); unmount(); await act(async () => reject(new Error('late error'))); expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); });
+});
