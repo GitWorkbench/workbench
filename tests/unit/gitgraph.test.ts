@@ -18,6 +18,16 @@ describe('lane colors and dimensions', () => {
 });
 
 describe('buildGitGraph with actual graph renderer', () => {
+  it('creates the trunk for a merge whose first parent is outside the loaded history', () => {
+    const result = buildGitGraph([commit('merge', ['unloaded', 'side']), commit('side', ['root']), commit('root')]);
+    expect(result.commits[0].hash).toBe('merge');
+    expect(result.commits[0].color).toBe(LANE_COLORS[0]);
+  });
+  it('allocates a side lane for a merge whose first parent is outside the loaded history', () => {
+    const result = buildGitGraph([commit('head', ['main']), commit('side-merge', ['unloaded', 'side']), commit('main', ['root']), commit('side', ['root']), commit('root')]);
+    expect(result.commits.map(row => row.hash)).toContain('side-merge');
+    expect(result.commits.every(row => Number.isFinite(row.x) && Number.isFinite(row.y))).toBe(true);
+  });
   it('returns bounded dimensions for empty history and custom spacing', () => {
     expect(buildGitGraph([])).toEqual({ commits: [], branchesPaths: [], width: 80, height: 32 });
     expect(buildGitGraph([], { rowH: 40 }).height).toBe(40);

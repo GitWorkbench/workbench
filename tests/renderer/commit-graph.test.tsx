@@ -51,6 +51,38 @@ describe('branch and tag consolidation', () => {
 });
 
 describe('commit graph rendering, metadata and selection', () => {
+  it('uses bounded layout and lane colors when graph metadata is temporarily empty', () => {
+    mock.settings.graphRowHeight = 0;
+    mock.state.status.staged = [{ path: 'file', status: 'modified' }];
+    mock.build.mockReturnValue({ width: 80, height: 32, paths: [], commits: [] });
+    render(<CommitGraph />);
+    expect(row()).toHaveStyle({ height: '32px' });
+    expect(mock.build).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({ rowH: 32 }));
+  });
+  it('handles queued hover delivery after its row has unmounted', async () => {
+    const timers = vi.spyOn(globalThis, 'setTimeout');
+    const { unmount } = render(<CommitGraph />);
+    await act(async () => mock.canvas.onHover('aaaa1111'));
+    const callback = timers.mock.calls.find(([, delay]) => delay === 300)?.[0];
+    expect(typeof callback).toBe('function'); unmount();
+    if (typeof callback === 'function') expect(() => callback()).not.toThrow();
+    timers.mockRestore();
+  });
+  it('keeps WIP hover quiet, counts singular files and handles a status disappearing before a double click', async () => {
+    vi.useFakeTimers();
+    mock.state.status.staged = [{ path: 'one', status: 'modified' }];
+    mock.state.status.unstaged = [{ path: 'two', status: 'untracked' }];
+    const { rerender } = render(<CommitGraph />);
+    let wip = screen.getByText('// WIP').closest('.cursor-pointer'); if (!wip) throw new Error('WIP row missing');
+    fireEvent.mouseEnter(wip); await act(async () => vi.advanceTimersByTime(301));
+    expect(screen.queryByRole('group', { name: /Preview for commit/ })).not.toBeInTheDocument();
+    expect(screen.getByTitle('1 added/untracked file')).toBeVisible();
+    mock.state.status = null; fireEvent.doubleClick(wip);
+    expect(mock.state.openFileDiff).not.toHaveBeenCalled();
+    mock.state.status = { currentBranch: 'main', staged: [{ path: 'same', status: 'modified' }], unstaged: [{ path: 'same', status: 'modified' }, { path: 'same', status: 'conflicted' }, { path: 'del-a', status: 'deleted' }, { path: 'del-b', status: 'deleted' }, { path: 'mod-a', status: 'modified' }, { path: 'mod-b', status: 'modified' }] };
+    rerender(<CommitGraph />);
+    expect(screen.getByTitle('2 modified files')).toBeVisible(); expect(screen.getByTitle('2 deleted files')).toBeVisible();
+  });
   it('resizes and persists metadata columns and resets widths from the column menu', () => {
     render(<CommitGraph />); fireEvent.keyDown(screen.getByLabelText('Resize author column'), { key: 'ArrowRight' }); expect(mock.settings.setCommitColumnWidths).toHaveBeenCalledWith({ author: 190 });
     fireEvent.click(screen.getByLabelText('Choose visible commit columns')); fireEvent.click(screen.getByRole('checkbox', { name: 'SHA' })); expect(mock.settings.setCommitColumns).toHaveBeenCalledWith({ sha: false }); fireEvent.click(screen.getByRole('button', { name: 'Reset column widths' })); expect(mock.settings.setCommitColumnWidths).toHaveBeenCalledWith({ author: 180, date: 200, sha: 110 });

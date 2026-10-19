@@ -15,6 +15,12 @@ import { useApp, WIP_HASH } from '../../store';
 import { api } from '../../lib/api';
 import { BisectState } from '../../../shared/types';
 
+/** Supply only boundaries that Git still needs for an incremental bisect. */
+export function bisectBoundaries(state: BisectState, bad: string, good: string): [string | undefined, string | undefined] {
+  return [state.active && !state.needsBad ? undefined : bad.trim() || undefined,
+    state.active && !state.needsGood ? undefined : good.trim() || undefined];
+}
+
 export function BisectModal() {
   const isOpen = useApp((s) => s.bisectModalOpen);
   const close = useApp((s) => s.closeBisectModal);
@@ -54,7 +60,7 @@ export function BisectModal() {
   const handleStart = async () => {
     setLoading(true);
     try {
-      const res = await api.startBisect(state.active && !state.needsBad ? undefined : badInput.trim() || undefined, state.active && !state.needsGood ? undefined : goodInput.trim() || undefined);
+      const res = await api.startBisect(...bisectBoundaries(state, badInput, goodInput));
       if (!res.ok) throw new Error(res.error || 'Failed to start bisect');
       if (res.state) setState(res.state);
       await runAndRefresh(async () => {}, 'Git bisect session started');

@@ -14,6 +14,7 @@ import {
 import type { ReflogEntry } from '../../../shared/types';
 import { useApp } from '../../store';
 import { api } from '../../lib/api';
+import { useExclusiveTask } from '../../lib/useExclusiveTask';
 
 function formatDate(value: string): string {
   if (!value) return 'Date unavailable';
@@ -40,6 +41,7 @@ export function ReflogModal() {
   const [loading, setLoading] = useState(false);
   const [action, setAction] = useState<'branch' | 'restore' | null>(null);
   const requestId = useRef(0);
+  const { run: runExclusive } = useExclusiveTask();
 
   const loadEntries = useCallback(async () => {
     const request = ++requestId.current;
@@ -74,6 +76,7 @@ export function ReflogModal() {
   }, [entries, query]);
 
   const selected = filteredEntries.find((entry) => entryKey(entry) === selectedKey) ?? filteredEntries[0] ?? null;
+  const selectedEntryKey = selected ? entryKey(selected) : null;
   const currentBranch = status?.currentBranch ?? '';
   const restoreBlockedReason = !status
     ? 'Repository status is still loading.'
@@ -98,42 +101,45 @@ export function ReflogModal() {
 
   if (!isOpen) return null;
 
-  const handleCreateBranch = async () => {
-    if (!selected || action) return;
+  const handleCreateBranch = (entry: ReflogEntry) => runExclusive(async () => {
     setAction('branch');
-    let createdBranchName = '';
-    const succeeded = await runAndRefresh(async () => {
-      const result = await api.createRecoveryBranch(selected.hash, desiredBranchName);
-      if (!result.ok) throw new Error(result.error || 'Could not create a recovery branch');
-      createdBranchName = result.branchName || '';
-      return result;
-    });
-    if (succeeded) {
-      notify('success', createdBranchName ? `Saved as ${createdBranchName}` : `Saved ${selected.shortHash} as a recovery branch`);
-      await loadEntries();
-    }
-    setAction(null);
-  };
+    try {
+      let createdBranchName = '';
+      const succeeded = await runAndRefresh(async () => {
+        const result = await api.createRecoveryBranch(entry.hash, desiredBranchName);
+        if (!result.ok) throw new Error(result.error || 'Could not create a recovery branch');
+        createdBranchName = result.branchName || '';
+        return result;
+      });
+      if (succeeded) {
+        notify('success', createdBranchName ? `Saved as ${createdBranchName}` : `Saved ${entry.shortHash} as a recovery branch`);
+        await loadEntries();
+      }
+    } finally { setAction(null); }
+  });
 
-  const handleRestore = async () => {
-    if (!selected || action) return;
-    const branch = currentBranch || 'the current branch';
+  const handleRestore = (entry: ReflogEntry) => {
+    const branch = useApp.getState().status?.currentBranch;
+    if (!branch || branch !== currentBranch) { notify('warn', 'The current branch changed. Refresh the reflog before restoring.'); return; }
     const confirmed = window.confirm(
-      `Move ${branch} to ${selected.shortHash} (${selected.subject})?\n\nGit Workbench will first create a safety branch at the current tip. This action requires a clean working tree.`
+      `Move ${branch} to ${entry.shortHash} (${entry.subject})?\n\nGit Workbench will first create a safety branch at the current tip. This action requires a clean working tree.`
     );
     if (!confirmed) return;
 
-    setAction('restore');
-    let backupBranch = '';
-    const succeeded = await runAndRefresh(async () => {
-      const result = await api.restoreHeadFromReflog(selected.hash);
-      if (!result.ok) throw new Error(result.error || 'Could not restore HEAD');
-      backupBranch = result.backupBranch || '';
-      return result;
-    }, 'Current branch restored from reflog');
-    if (succeeded && backupBranch) notify('info', `Previous tip saved as ${backupBranch}`);
-    if (succeeded) close();
-    setAction(null);
+    return runExclusive(async () => {
+      setAction('restore');
+      try {
+        let backupBranch = '';
+        const succeeded = await runAndRefresh(async () => {
+          const result = await api.restoreHeadFromReflog(entry.hash);
+          if (!result.ok) throw new Error(result.error || 'Could not restore HEAD');
+          backupBranch = result.backupBranch || '';
+          return result;
+        }, 'Current branch restored from reflog');
+        if (succeeded && backupBranch) notify('info', `Previous tip saved as ${backupBranch}`);
+        if (succeeded) close();
+      } finally { setAction(null); }
+    });
   };
 
   return (
@@ -188,7 +194,7 @@ export function ReflogModal() {
                 </div>
               ) : filteredEntries.map((entry) => {
                 const key = entryKey(entry);
-                const isSelected = key === (selected ? entryKey(selected) : selectedKey);
+                const isSelected = key === selectedEntryKey;
                 return (
                   <button
                     key={key}
@@ -241,7 +247,7 @@ export function ReflogModal() {
                   />
                   <button
                     className="btn mt-3 w-full justify-center text-xs px-3 py-2"
-                    onClick={() => void handleCreateBranch()}
+                    onClick={() => void handleCreateBranch(selected)}
                     disabled={!!action}
                   >
                     {action === 'branch' ? <Loader2 size={13} className="animate-spin" /> : <GitBranch size={13} />}
@@ -258,7 +264,7 @@ export function ReflogModal() {
                   </p>
                   <button
                     className="btn mt-3 w-full justify-center border border-amber-400/30 text-xs px-3 py-2 hover:bg-amber-400/10"
-                    onClick={() => void handleRestore()}
+                    onClick={() => void handleRestore(selected)}
                     disabled={!!action || !!restoreBlockedReason}
                     title={restoreBlockedReason || 'Restore the current branch from this reflog entry'}
                   >

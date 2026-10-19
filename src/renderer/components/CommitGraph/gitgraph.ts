@@ -132,7 +132,7 @@ export function buildGitGraph(
 
   for (const c of oldestFirst) {
     const isTrunk = trunkSet.has(c.hash);
-    const parents = c.parents || [];
+    const parents = c.parents;
 
     if (parents.length === 0) {
       // Root commit

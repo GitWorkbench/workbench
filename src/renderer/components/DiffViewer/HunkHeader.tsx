@@ -21,7 +21,8 @@ export function HunkHeader({
 
   if (openDiff.compareCommits || openDiff.stashIndex !== undefined) return <div className="px-3 py-1.5 text-xs text-dim font-mono bg-panel2">{hunk.header}</div>;
 
-  const isCommitted = openDiff.commitHash !== null;
+  const commitHash = openDiff.commitHash;
+  const isCommitted = commitHash !== null;
   const isStaged = openDiff.staged === true;
   const isUnstaged = !isCommitted && !isStaged;
 
@@ -53,10 +54,10 @@ export function HunkHeader({
     }, `Hunk #${hunkIndex + 1} discarded`);
   };
 
-  const handleRevertHunk = async (e: React.MouseEvent) => {
+  const handleRevertHunk = async (e: React.MouseEvent, hash: string) => {
     e.stopPropagation();
     await runAndRefresh(async () => {
-      await api.revertHunk(openDiff.commitHash ?? '', openDiff.filePath, hunkIndex);
+      await api.revertHunk(hash, openDiff.filePath, hunkIndex);
       await reloadCurrentDiff();
     }, `Hunk #${hunkIndex + 1} reverted`);
   };
@@ -106,7 +107,7 @@ export function HunkHeader({
           <button
             className="flex items-center gap-1 px-2 py-0.5 rounded bg-panel3 hover:bg-del/20 text-dim hover:text-del border border-edge/40 hover:border-del/40 text-[11px] font-sans transition-all"
             title="Revert this hunk in the working tree"
-            onClick={handleRevertHunk}
+            onClick={event => void handleRevertHunk(event, commitHash)}
           >
             <RotateCcw size={11} />
             <span>Revert Hunk</span>

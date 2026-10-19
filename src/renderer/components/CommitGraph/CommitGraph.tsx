@@ -113,7 +113,7 @@ export function consolidateRefs(refs: CommitRef[]): DisplayRef[] {
   results.sort((a, b) => {
     if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
     if (a.hasLocal !== b.hasLocal) return a.hasLocal ? -1 : 1;
-    if ((a.kind === 'tag') !== (b.kind === 'tag')) return a.kind === 'tag' ? -1 : 1;
+    if ((a.kind === 'tag') !== (b.kind === 'tag')) return Number(b.kind === 'tag') - Number(a.kind === 'tag');
     return a.label.localeCompare(b.label);
   });
 
@@ -173,7 +173,6 @@ const WIP_COMMIT: Commit = {
 };
 
 function formatRelativeDate(iso: string): string {
-  if (!iso) return '';
   try {
     const d = new Date(iso);
     const now = Date.now();
@@ -189,7 +188,6 @@ function formatRelativeDate(iso: string): string {
 }
 
 function formatFullDate(iso: string): string {
-  if (!iso) return '';
   try {
     const d = new Date(iso);
     return d.toLocaleString(undefined, {
@@ -303,7 +301,7 @@ function CommitRow({
 
   const wipStats = useMemo(() => {
     if (!isWip || !status) return null;
-    const all = [...(status.staged || []), ...(status.unstaged || [])];
+    const all = [...status.staged, ...status.unstaged];
     const pathMap = new Map<string, GitFileStatus>();
     for (const f of all) {
       if (!pathMap.has(f.path)) {

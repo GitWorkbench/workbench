@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mock = vi.hoisted(() => ({ state: {} as Record<string, any>, api: {
   stageHunk: vi.fn(), unstageHunk: vi.fn(), discardHunk: vi.fn(), revertHunk: vi.fn(), getBlame: vi.fn(), getFileHistory: vi.fn(), openInEditor: vi.fn()
 } }));
-vi.mock('../../src/renderer/store', () => ({ useApp: (selector: (state: any) => any) => selector(mock.state) }));
+vi.mock('../../src/renderer/store', () => ({ useApp: Object.assign((selector: (state: any) => any) => selector(mock.state), { getState: () => mock.state }) }));
 vi.mock('../../src/renderer/lib/api', () => ({ api: mock.api }));
 import { UnifiedDiffView } from '../../src/renderer/components/DiffViewer/UnifiedDiffView';
 import { SplitDiffView } from '../../src/renderer/components/DiffViewer/SplitDiffView';
@@ -32,6 +32,11 @@ beforeEach(() => {
 });
 
 describe('diff workspace', () => {
+  it('ignores an editor launch after the file selection closes before rendering', () => {
+    render(<DiffViewer />); mock.state.openDiff = null;
+    fireEvent.click(screen.getByTitle('Open this file in default editor or system handler'));
+    expect(mock.api.openInEditor).not.toHaveBeenCalled();
+  });
   it('renders no pane without a file selection and explains empty/binary/loading states', () => {
     mock.state.openDiff = null; const { container, rerender } = render(<DiffViewer />); expect(container).toBeEmptyDOMElement();
     mock.state.openDiff = { commitHash: null, filePath: 'file.txt' }; rerender(<DiffViewer />);

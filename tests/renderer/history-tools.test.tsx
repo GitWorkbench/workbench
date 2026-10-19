@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mock = vi.hoisted(() => ({ state: {} as Record<string, any>, api: Object.fromEntries(['getBisectState', 'startBisect', 'stepBisect', 'resetBisect', 'getReflog', 'createRecoveryBranch', 'restoreHeadFromReflog'].map(name => [name, vi.fn()])) }));
 vi.mock('../../src/renderer/store', () => ({ WIP_HASH: 'WIP', useApp: Object.assign((select: (state: any) => any) => select(mock.state), { getState: () => mock.state }) }));
 vi.mock('../../src/renderer/lib/api', () => ({ api: mock.api }));
-import { BisectModal } from '../../src/renderer/components/Bisect/BisectModal';
+import { BisectModal, bisectBoundaries } from '../../src/renderer/components/Bisect/BisectModal';
 import { ReflogModal } from '../../src/renderer/components/Reflog/ReflogModal';
 const commit = { hash: 'abc123full', shortHash: 'abc123', message: 'Regression commit', authorName: 'Alice', authorEmail: 'alice@example.invalid', date: '2026-10-19', body: 'Detailed commit body' };
 const entries = () => [
@@ -27,6 +27,27 @@ async function startBisect() {
   fireEvent.change(screen.getByPlaceholderText(/e.g. v1.0.0/), { target: { value: ' good-old ' } }); fireEvent.click(screen.getByRole('button', { name: 'Start Bisect' }));
   await screen.findByRole('button', { name: 'Good (No Bug)' });
 }
+
+it('keeps unspecified bisect boundaries absent and excludes boundaries already recorded by Git', () => {
+  expect(bisectBoundaries({ active: false }, ' ', ' ')).toEqual([undefined, undefined]);
+  expect(bisectBoundaries({ active: true }, 'bad', 'good')).toEqual([undefined, undefined]);
+});
+it.each([null, { currentBranch: 'another', staged: [], unstaged: [] }])('does not restore a branch that changed before the action was delivered: %j', async status => {
+  render(<ReflogModal />); await screen.findByLabelText('Branch name');
+  mock.state.status = status; fireEvent.click(screen.getByRole('button', { name: 'Restore current branch' }));
+  expect(mock.api.restoreHeadFromReflog).not.toHaveBeenCalled();
+  expect(mock.state.notify).toHaveBeenCalledWith('warn', 'The current branch changed. Refresh the reflog before restoring.');
+});
+it('reports a restore without an error message and closes a successful restore without a backup label', async () => {
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
+  mock.api.restoreHeadFromReflog.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: true });
+  render(<ReflogModal />); await screen.findByLabelText('Branch name');
+  fireEvent.click(screen.getByRole('button', { name: 'Restore current branch' }));
+  await waitFor(() => expect(mock.state.notify).toHaveBeenCalledWith('error', 'Error: Could not restore HEAD'));
+  fireEvent.click(screen.getByRole('button', { name: 'Restore current branch' }));
+  await waitFor(() => expect(mock.state.closeReflogModal).toHaveBeenCalledOnce());
+  expect(mock.state.notify).not.toHaveBeenCalledWith('info', expect.any(String));
+});
 
 describe('bisect wizard', () => {
   it('stays hidden while closed and prefills real selected commits but not WIP', async () => {

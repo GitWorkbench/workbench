@@ -53,8 +53,9 @@ export function DiffViewer() {
   };
 
   const handleOpenInEditor = () => {
-    if (!openDiff) return;
-    api.openInEditor(openDiff.filePath).catch((err) => {
+    const current = useApp.getState().openDiff;
+    if (!current) return;
+    api.openInEditor(current.filePath).catch((err) => {
       console.error('Failed to open file in editor:', err);
     });
   };
