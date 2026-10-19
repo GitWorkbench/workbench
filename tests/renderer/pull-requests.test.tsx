@@ -25,6 +25,30 @@ beforeEach(() => {
 const ready = async () => screen.findByText('GitHub provider settings');
 
 describe('hosted request context', () => {
+  it('ignores provider context delivered after the modal closes', async () => {
+    let finish!: (value: PullRequestContext) => void;
+    mocks.api.getPullRequestContext.mockImplementation(() => new Promise<PullRequestContext>(resolve => { finish = resolve; }));
+    const { unmount } = render(<PullRequestsModal />);
+    await waitFor(() => expect(mocks.api.getPullRequestContext).toHaveBeenCalledOnce()); unmount();
+    await act(async () => finish(context()));
+    expect(mocks.app.notify).not.toHaveBeenCalled();
+  });
+  it('clears remote selection without issuing a request against an unintended default remote', async () => {
+    render(<PullRequestsModal />); await ready(); mocks.api.getPullRequestContext.mockClear();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Git remote' }), { target: { value: '' } });
+    expect(mocks.api.getPullRequestContext).not.toHaveBeenCalled();
+    expect(screen.getByTitle('Refresh pull requests')).toBeDisabled();
+  });
+  it('can clear a manual provider choice while its remote remains unidentified', async () => {
+    mocks.api.getPullRequestContext.mockResolvedValue(context({ provider: null }));
+    render(<PullRequestsModal />); await screen.findByText('Choose the hosting service');
+    const selector = screen.getAllByRole('combobox')[1];
+    fireEvent.change(selector, { target: { value: 'gitlab' } });
+    await waitFor(() => expect(mocks.api.getPullRequestContext).toHaveBeenLastCalledWith('origin', 'gitlab'));
+    await screen.findByText('Choose the hosting service');
+    fireEvent.change(screen.getAllByRole('combobox')[1], { target: { value: '' } });
+    await waitFor(() => expect(mocks.api.getPullRequestContext).toHaveBeenLastCalledWith('origin', undefined));
+  });
   it('loads the tracked remote, suggests a readable branch title and closes by controls, Escape or backdrop', async () => {
     const { container } = render(<PullRequestsModal />); await ready();
     expect(mocks.api.getPullRequestContext).toHaveBeenCalledWith('origin', undefined);
@@ -87,6 +111,16 @@ describe('hosted request context', () => {
 });
 
 describe('request browsing and creation', () => {
+  it('ignores duplicate form submission and retains successful creation feedback after reloading', async () => {
+    let finish!: (value: { ok: true; pullRequest: HostedPullRequest }) => void;
+    mocks.api.createHostedPullRequest.mockImplementation(() => new Promise<{ ok: true; pullRequest: HostedPullRequest }>(resolve => { finish = resolve; }));
+    render(<PullRequestsModal />); await ready();
+    const form = screen.getByRole('textbox', { name: 'Title' }).closest('form'); if (!form) throw new Error('Request form missing');
+    fireEvent.submit(form); fireEvent.submit(form);
+    expect(mocks.api.createHostedPullRequest).toHaveBeenCalledOnce();
+    await act(async () => finish({ ok: true, pullRequest: request() }));
+    expect(await screen.findByText('Request created.')).toHaveClass('text-add');
+  });
   it('selects the current open request, hides creation duplicates and opens the in-app review workspace', async () => {
     mocks.api.getPullRequestContext.mockResolvedValue(context({ pullRequests: [request({ sourceBranch: 'feature/new-work' }), request({ id: '13', title: 'Draft request', draft: true, createdAt: 'invalid-date' }), request({ id: '14', title: 'Closed request', state: 'closed' })] }));
     render(<PullRequestsModal />); await ready();

@@ -149,7 +149,7 @@ export function PullRequestsModal() {
     setContext(null);
     setProviderOverride(undefined);
     setMessage('');
-    void loadContext(remoteName || undefined, undefined, remotes);
+    if (remoteName) void loadContext(remoteName, undefined, remotes);
   };
 
   const selectProvider = (nextProvider: PullRequestProvider | '') => {
@@ -165,7 +165,7 @@ export function PullRequestsModal() {
     useSettings.getState().openSettings('providers');
   };
 
-  const createRequest = async (event: React.FormEvent) => {
+  const createRequest = async (event: React.FormEvent, selectedProvider: { label: string }) => {
     event.preventDefault();
     if (!context?.remoteName || creatingRequest) return;
     setCreatingRequest(true);
@@ -179,10 +179,10 @@ export function PullRequestsModal() {
         providerOverride
       });
       if (!result.ok || !result.pullRequest) throw new Error(result.error || 'Could not create the request.');
-      setMessage('Request created.');
       setSelectedRequestId(result.pullRequest.id);
       await loadContext(context.remoteName, providerOverride, remotes);
-      notify('success', `${provider?.label || 'Provider'} request created`);
+      setMessage('Request created.');
+      notify('success', `${selectedProvider.label} request created`);
     } catch (error) {
       setMessage(String(error).replace(/^Error:\s*/, ''));
     } finally {
@@ -214,7 +214,7 @@ export function PullRequestsModal() {
             <button
               className="btn-icon !w-8 !h-8 text-dim hover:text-fg"
               title="Refresh pull requests"
-              onClick={() => void loadContext(selectedRemote || undefined, providerOverride, remotes)}
+              onClick={() => void loadContext(selectedRemote, providerOverride, remotes)}
               disabled={loading || !selectedRemote}
             >
               {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
@@ -330,7 +330,7 @@ export function PullRequestsModal() {
                 </div>
 
                 {configured ? (
-                  <form className="rounded-xl border border-edge bg-panel2/35 p-4 space-y-3" onSubmit={(event) => void createRequest(event)}>
+                  <form className="rounded-xl border border-edge bg-panel2/35 p-4 space-y-3" onSubmit={(event) => void createRequest(event, provider)}>
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <h3 className="text-xs font-semibold text-fg">Create from current branch</h3>
@@ -368,7 +368,7 @@ export function PullRequestsModal() {
               </>
             )}
 
-            {message ? <div className={`rounded-lg border p-3 text-[11px] leading-relaxed ${/created\.$/.test(message) || /removed from this device/.test(message) ? 'border-add/30 bg-add/5 text-add' : /Pushing/.test(message) ? 'border-accent/30 bg-accent/5 text-accent' : 'border-warn/30 bg-warn/5 text-warn'}`}>
+            {message ? <div className={`rounded-lg border p-3 text-[11px] leading-relaxed ${/created\.$/.test(message) ? 'border-add/30 bg-add/5 text-add' : /Pushing/.test(message) ? 'border-accent/30 bg-accent/5 text-accent' : 'border-warn/30 bg-warn/5 text-warn'}`}>
               {/Pushing/.test(message) ? <Loader2 size={12} className="inline mr-1.5 animate-spin" /> : <AlertCircle size={12} className="inline mr-1.5" />}{message}
             </div> : null}
           </section>

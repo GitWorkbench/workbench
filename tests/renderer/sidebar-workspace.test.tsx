@@ -1,16 +1,22 @@
 // @vitest-environment jsdom
 import './setup';
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const app: Record<string, any> = {};
-  return { app, clipboard: vi.fn(), useApp: Object.assign((selector: (state: any) => any) => selector(app), { getState: () => app, setState: vi.fn((patch: any) => Object.assign(app, patch)) }),
+  return { app, clipboard: vi.fn(), checkout: null as null | { onClose: () => void; onConfirmCheckout: () => void; onMoreActions?: () => void }, useApp: Object.assign((selector: (state: any) => any) => selector(app), { getState: () => app, setState: vi.fn((patch: any) => Object.assign(app, patch)) }),
     api: Object.fromEntries(['checkoutBranch', 'createBranch', 'renameBranch', 'mergeBranch', 'rebaseBranch', 'pushSetUpstream', 'setUpstream', 'deleteBranch', 'pull', 'pushTag', 'deleteTag', 'fetch', 'pruneRemote', 'setRemoteUrl', 'renameRemote', 'removeRemote', 'updateSubmodules', 'removeWorktree', 'stashPop', 'stashApply', 'stashDrop', 'stash'].map(name => [name, vi.fn()])) };
 });
 vi.mock('../../src/renderer/store', () => ({ useApp: mocks.useApp }));
 vi.mock('../../src/renderer/lib/api', () => ({ api: mocks.api }));
+vi.mock('../../src/renderer/components/Sidebar/CheckoutBranchModal', async original => {
+  const module = await original<typeof import('../../src/renderer/components/Sidebar/CheckoutBranchModal')>();
+  return { ...module, CheckoutBranchModal: (props: React.ComponentProps<typeof module.CheckoutBranchModal>) => {
+    mocks.checkout = props; return <module.CheckoutBranchModal {...props} />;
+  } };
+});
 import { Sidebar } from '../../src/renderer/components/Sidebar/Sidebar';
 
 const local = (name: string, current = false) => ({ name, fullName: name, isCurrent: current, tracking: current ? 'origin/main' : undefined });
@@ -35,6 +41,41 @@ function context(kind: 'local' | 'remoteBranch' | 'tag' | 'remote' | 'submodule'
 }
 
 describe('Sidebar navigation, sizing and selection', () => {
+  it.each(['onConfirmCheckout', 'onMoreActions'] as const)('ignores a queued %s after the checkout dialog closes', callback => {
+    render(<Sidebar />); fireEvent.click(branchButton('feature'));
+    const child = mocks.checkout; if (!child) throw new Error('Checkout dialog missing');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    act(() => child[callback]?.());
+    expect(mocks.api.checkoutBranch).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'Merge "feature" into "main"' })).not.toBeInTheDocument();
+  });
+  it('renders detached root paths and remote URL fallbacks with no repository selection', () => {
+    mocks.app.activeTab = null; mocks.app.status = null;
+    mocks.app.tags[0].message = ''; mocks.app.worktrees = [{ path: '/', branch: '', hash: 'root' }];
+    mocks.app.remotes[0].fetchUrl = '';
+    render(<Sidebar />);
+    expect(screen.getByTitle(/^v1\.0\.0 \(tag-sha\)\s*$/)).toBeVisible(); expect(screen.getByTitle('/ (detached)')).toHaveTextContent('/');
+    const remote = screen.getByTitle('origin → git@example.test:org/repo.git');
+    expect(remote).toHaveTextContent('git@example.test:org/repo.git');
+    fireEvent.contextMenu(remote);
+    expect(screen.getByPlaceholderText('New remote URL')).toHaveValue('git@example.test:org/repo.git');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy Remote URL' }));
+    expect(mocks.clipboard).toHaveBeenCalledWith('git@example.test:org/repo.git');
+    fireEvent.click(screen.getByTitle('vendor/engine (1234567)'));
+    expect(mocks.app.openRepo).toHaveBeenLastCalledWith('vendor/engine');
+    context('submodule'); fireEvent.click(screen.getByRole('button', { name: 'Open Submodule in New Tab' }));
+    expect(mocks.app.openRepo).toHaveBeenLastCalledWith('vendor/engine');
+  });
+  it.each(['standalone', '/topic'])('uses a remote branch name without assuming a nonempty remote prefix: %s', name => {
+    mocks.app.branches.remote = [{ name, fullName: name, isCurrent: false }];
+    render(<Sidebar />); fireEvent.contextMenu(branchButton(name));
+    fireEvent.click(screen.getByRole('button', { name: `Delete Remote Branch "${name}"` }));
+    expect(mocks.api.deleteBranch).toHaveBeenCalledWith(name === 'standalone' ? 'standalone' : 'topic', { local: false, remote: true, remoteName: name === 'standalone' ? 'standalone' : 'origin', force: true });
+  });
+  it('suggests origin for a tag when no remote has been configured', () => {
+    mocks.app.remotes = []; render(<Sidebar />); context('tag');
+    expect(screen.getAllByPlaceholderText('Remote name (e.g. origin)').map(input => (input as HTMLInputElement).value)).toEqual(['origin', 'origin']);
+  });
   it('shows the tracking reference of a non-current local branch', () => { mocks.app.branches.local[1].tracking = 'upstream/feature'; render(<Sidebar />); expect(screen.getByTitle('feature → upstream/feature (Double-click to checkout, right-click for actions)')).toBeVisible(); });
   it('collapses, expands, resizes without leaving listeners and exposes the placeholder Agent action', () => {
     const { container, rerender } = render(<Sidebar />);

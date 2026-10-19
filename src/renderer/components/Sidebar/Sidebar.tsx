@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   List as ListIcon,
   Bot,
@@ -387,7 +387,10 @@ function SidebarFull({
     items: ContextMenuItem[];
   } | null>(null);
 
-  const [checkoutTarget, setCheckoutTarget] = useState<CheckoutTarget | null>(null);
+  type SidebarCheckoutTarget = CheckoutTarget & { branchObj: BranchInfo };
+  const [checkoutTarget, storeCheckoutTarget] = useState<SidebarCheckoutTarget | null>(null);
+  const checkoutTargetRef = useRef<SidebarCheckoutTarget | null>(null);
+  const setCheckoutTarget = (target: SidebarCheckoutTarget | null) => { checkoutTargetRef.current = target; storeCheckoutTarget(target); };
 
   const currentBranchName = status?.currentBranch || 'HEAD';
   const isCurrentLocalBranch = (branch: BranchInfo) => branch.isCurrent || branch.name === currentBranchName;
@@ -593,7 +596,7 @@ function SidebarFull({
           initial: defaultRemote,
           submitLabel: 'Push Tag',
           onSubmit: (rem) => {
-            void runAndRefresh(() => api.pushTag(tag.name, rem || defaultRemote), `Pushed tag ${tag.name} to ${rem || defaultRemote}`);
+            void runAndRefresh(() => api.pushTag(tag.name, rem), `Pushed tag ${tag.name} to ${rem}`);
           }
         }
       },
@@ -623,8 +626,8 @@ function SidebarFull({
           submitLabel: 'Delete Remote Tag',
           onSubmit: (rem) => {
             void runAndRefresh(
-              () => api.deleteTag(tag.name, true, rem || defaultRemote),
-              `Deleted tag ${tag.name} on remote ${rem || defaultRemote}`
+              () => api.deleteTag(tag.name, true, rem),
+              `Deleted tag ${tag.name} on remote ${rem}`
             );
           }
         }
@@ -1169,12 +1172,12 @@ function SidebarFull({
           currentBranch={currentBranchName}
           onClose={() => setCheckoutTarget(null)}
           onConfirmCheckout={() => {
-            const target = checkoutTarget;
+            const target = checkoutTargetRef.current;
             setCheckoutTarget(null);
             if (!target) return;
             if (target.isRemote) {
               void runAndRefresh(
-                () => api.checkoutBranch(target.branchObj ? target.branchObj.name : target.fullName),
+                () => api.checkoutBranch(target.branchObj.name),
                 `Checked out ${target.name}`
               );
             } else {
@@ -1185,7 +1188,7 @@ function SidebarFull({
             }
           }}
           onMoreActions={() => {
-            const target = checkoutTarget;
+            const target = checkoutTargetRef.current;
             setCheckoutTarget(null);
             if (!target) return;
             const syntheticEvent = {
@@ -1195,9 +1198,9 @@ function SidebarFull({
               clientY: 200
             } as unknown as React.MouseEvent;
 
-            if (target.isRemote && target.branchObj) {
+            if (target.isRemote) {
               handleRemoteBranchContextMenu(syntheticEvent, target.branchObj);
-            } else if (target.branchObj) {
+            } else {
               handleLocalBranchContextMenu(syntheticEvent, target.branchObj);
             }
           }}
