@@ -24,9 +24,8 @@ function normalizeRemoteUrl(rawUrl: string): URL | null {
   const value = rawUrl.trim();
   if (!value) return null;
   try {
-    if (/^[^@\s]+@[^:\s]+:.+$/.test(value)) {
-      const match = value.match(/^[^@\s]+@([^:\s]+):(.+)$/);
-      if (!match) return null;
+    const match = value.match(/^[^@\s]+@([^:\s]+):(.+)$/);
+    if (match) {
       return new URL(`https://${match[1]}/${match[2]}`);
     }
     const parsed = new URL(value);
@@ -127,7 +126,7 @@ export async function requestJson<T>(
   const activeCredential = config.provider === 'github' ? await githubRequestCredential(credential) : credential;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
-  try {
+  const readResponse = async (): Promise<T> => {
     let url = `${config.apiBase}${path}`;
     let response: Response;
     for (let redirects = 0; ; redirects++) {
@@ -156,13 +155,14 @@ export async function requestJson<T>(
     }
     if (body.length > 12_000_000) throw new Error('The provider response is too large. Review this request on the provider.');
     return (asText ? body : body ? JSON.parse(body) : null) as T;
-  } catch (error) {
+  };
+  return readResponse().catch((error: unknown) => {
     if (error instanceof Error && error.name === 'AbortError') throw new Error('The provider API did not respond within 20 seconds. Check your connection and try again.');
     if (error instanceof TypeError) throw new Error('Could not connect to the provider API. Check your internet connection and try again.');
     throw error;
-  } finally {
+  }).finally(() => {
     clearTimeout(timer);
-  }
+  });
 }
 
 /** Resolve credentials only against a configured remote, never a renderer-provided API URL. */
@@ -252,12 +252,17 @@ function createPayload(config: PullRequestApiConfig, sourceBranch: string, targe
   };
 }
 
-export async function getPullRequestContext(
+type ResolvedPullRequestContext =
+  | { ok: false; context: PullRequestContext & { error: string } }
+  | { ok: true; hosted: HostedRepository; context: PullRequestContext };
+
+/** Retain the validated repository for mutations instead of reparsing display fields. */
+async function resolvePullRequestContext(
   repoPath: string,
   remoteName?: string,
   providerOverride?: PullRequestProvider,
   getCredential?: (provider: PullRequestProvider) => PullRequestCredential | null
-): Promise<PullRequestContext> {
+): Promise<ResolvedPullRequestContext> {
   const git = gitFor(repoPath);
   const currentBranch = (await git.raw(['branch', '--show-current'])).trim();
   const remotes = await getRemotes(repoPath);
@@ -266,16 +271,16 @@ export async function getPullRequestContext(
     remotes.find((remote) => remote.name === trackingRemote) ||
     remotes.find((remote) => remote.name === 'origin') || remotes[0];
   if (!selected) {
-    return { provider: null, remoteName: null, currentBranch, defaultBranch: '', credentialConfigured: false, pullRequests: [], error: 'This repository has no Git remote. Add a GitHub, GitLab, or Bitbucket remote first.' };
+    return { ok: false, context: { provider: null, remoteName: null, currentBranch, defaultBranch: '', credentialConfigured: false, pullRequests: [], error: 'This repository has no Git remote. Add a GitHub, GitLab, or Bitbucket remote first.' } };
   }
 
   const hosted = parseHostedRepository(selected, providerOverride);
   if (!hosted) {
-    return {
+    return { ok: false, context: {
       provider: null, remoteName: selected.name, remoteUrl: selected.fetchUrl || selected.pushUrl, currentBranch,
       defaultBranch: '', credentialConfigured: false, pullRequests: [],
       error: 'This remote is not a supported GitHub.com, GitLab, or Bitbucket Cloud repository. For a self-managed GitLab host, choose GitLab in the provider selector.'
-    };
+    } };
   }
 
   const credential = getCredential?.(hosted.provider) ?? null;
@@ -290,7 +295,7 @@ export async function getPullRequestContext(
     credentialConfigured: !!credential?.token,
     pullRequests: []
   };
-  if (!credential?.token) return context;
+  if (!credential?.token) return { ok: true, hosted, context };
 
   const config = apiConfig(hosted);
   try {
@@ -298,14 +303,23 @@ export async function getPullRequestContext(
       repositoryMetadata(config, credential),
       requestJson<unknown>(config, credential, listPath(config), 'GET')
     ]);
-    return {
+    return { ok: true, hosted, context: {
       ...context,
       ...metadata,
       pullRequests: mapPullRequests(hosted.provider, requestList)
-    };
+    } };
   } catch (error) {
-    return { ...context, error: error instanceof Error ? error.message : String(error) };
+    return { ok: true, hosted, context: { ...context, error: error instanceof Error ? error.message : String(error) } };
   }
+}
+
+export async function getPullRequestContext(
+  repoPath: string,
+  remoteName?: string,
+  providerOverride?: PullRequestProvider,
+  getCredential?: (provider: PullRequestProvider) => PullRequestCredential | null
+): Promise<PullRequestContext> {
+  return (await resolvePullRequestContext(repoPath, remoteName, providerOverride, getCredential)).context;
 }
 
 export async function createHostedPullRequest(
@@ -317,25 +331,24 @@ export async function createHostedPullRequest(
   providerOverride: PullRequestProvider | undefined,
   getCredential: (provider: PullRequestProvider) => PullRequestCredential | null
 ): Promise<HostedPullRequest> {
-  const context = await getPullRequestContext(repoPath, remoteName, providerOverride, getCredential);
-  if (!context.provider || !context.remoteName || !context.repository) throw new Error(context.error || 'Select a supported Git remote first.');
-  if (!context.credentialConfigured) throw new Error(`Connect your ${providerLabel(context.provider)} account before creating a request.`);
+  const resolved = await resolvePullRequestContext(repoPath, remoteName, providerOverride, getCredential);
+  if (!resolved.ok) throw new Error(resolved.context.error);
+  const { context, hosted } = resolved;
+  if (!context.credentialConfigured) throw new Error(`Connect your ${providerLabel(hosted.provider)} account before creating a request.`);
   const sourceBranch = context.currentBranch.trim();
   const destination = targetBranch.trim();
   if (!sourceBranch || sourceBranch === 'HEAD') throw new Error('Check out a local source branch before creating a request.');
   if (!destination) throw new Error('Choose a target branch.');
   if (sourceBranch === destination) throw new Error('The source and target branches must be different.');
   if (!title.trim()) throw new Error('Enter a title for the request.');
-  const credential = getCredential(context.provider);
-  if (!credential) throw new Error(`Connect your ${providerLabel(context.provider)} account before creating a request.`);
+  const credential = getCredential(hosted.provider);
+  if (!credential) throw new Error(`Connect your ${providerLabel(hosted.provider)} account before creating a request.`);
 
   // Push first so the hosted provider can resolve the source branch. If API creation
   // fails, the branch remains safely published and can be retried from this panel.
   const git = gitFor(repoPath);
   await git.raw(['push', '--set-upstream', remoteName, sourceBranch]);
 
-  const hosted = parseHostedRepository({ name: remoteName, fetchUrl: context.remoteUrl || '', pushUrl: context.remoteUrl || '' }, context.provider);
-  if (!hosted) throw new Error('Could not resolve the selected remote repository.');
   const config = apiConfig(hosted);
   const result = await requestJson<Record<string, any>>(
     config,
@@ -344,7 +357,7 @@ export async function createHostedPullRequest(
     'POST',
     createPayload(config, sourceBranch, destination, title.trim(), description.trim())
   );
-  const created = mapPullRequests(context.provider, context.provider === 'bitbucket' ? { values: [result] } : [result])[0];
+  const created = mapPullRequests(hosted.provider, hosted.provider === 'bitbucket' ? { values: [result] } : [result])[0];
   if (!created) throw new Error('The provider accepted the request but returned an unreadable response. Refresh the request list.');
   return created;
 }

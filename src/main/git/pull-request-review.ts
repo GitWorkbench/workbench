@@ -10,7 +10,7 @@ async function client(repo: string, target: PullReviewTarget, credentials: Crede
   const { config, credential } = await hostedReviewClient(repo, target.remoteName, target.provider, credentials);
   const root = apiPath(config);
   const pr = `${root}/${target.provider === 'gitlab' ? 'merge_requests' : target.provider === 'github' ? 'pulls' : 'pullrequests'}/${target.requestId}`;
-  return { root, pr, get: <T = Row>(path: string) => requestJson<T>(config, credential, path, 'GET'),
+  return { root, pr, apiBase: config.apiBase, get: <T = Row>(path: string) => requestJson<T>(config, credential, path, 'GET'),
     graph: async (query: string, variables?: unknown) => {
       const result = await requestJson<Row>({ ...config, apiBase: new URL(config.apiBase).origin }, credential, '/api/graphql', 'POST', { query, variables });
       if (result.errors?.length) throw new Error(result.errors.map((e: Row) => e.message).join('; '));
@@ -29,7 +29,11 @@ async function nativeGitLabChanges(c: Awaited<ReturnType<typeof client>>) {
 async function collect(c: Awaited<ReturnType<typeof client>>, path: string, warnings: string[], key?: string): Promise<Row[]> {
   const result: Row[] = [];
   for (let page = 1; page <= 10; page++) {
-    const data = await c.get<any>(`${path}${path.includes('?') ? '&' : '?'}per_page=100&pagelen=100&page=${page}`);
+    const url = new URL(path, c.apiBase);
+    url.searchParams.set('per_page', '100');
+    url.searchParams.set('pagelen', '100');
+    url.searchParams.set('page', String(page));
+    const data = await c.get<any>(url.pathname + url.search);
     const rows = key ? data[key] || [] : Array.isArray(data) ? data : data.values || [];
     result.push(...rows);
     if (rows.length < 100 || (!Array.isArray(data) && !key && !data.next)) return result;
