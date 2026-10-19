@@ -289,3 +289,17 @@ it('keeps write admission usable after a missing repository and after a failed m
   expect(recovered).toEqual({ staged: [], unstaged: [] });
   expect(mock.git.add.mock.calls.map(([paths]) => paths[0])).toEqual(['first', 'second']);
 });
+
+it('completes pull and push with existing upstreams without fallback commands', async () => {
+  expect(await call('git:pull')).toEqual({ ok: true });
+  expect(mock.git.pull).toHaveBeenCalledExactlyOnceWith();
+  expect(await call('git:push')).toEqual({ ok: true });
+  expect(mock.git.push).toHaveBeenCalledExactlyOnceWith();
+});
+it('creates an initial commit for a gitignore-only scaffold', async () => {
+  const directory = path.join(root, 'ignore-only');
+  expect(await call('repo:init', { path: directory, gitignoreTemplate: 'node', createReadme: false })).toMatchObject({ ok: true });
+  expect(mock.git.add).toHaveBeenCalledWith('.'); expect(mock.git.commit).toHaveBeenCalledWith('Initial commit');
+  expect(fs.existsSync(path.join(directory, 'README.md'))).toBe(false);
+  expect(fs.readFileSync(path.join(directory, '.gitignore'), 'utf8')).toContain('node_modules');
+});

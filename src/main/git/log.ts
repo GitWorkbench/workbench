@@ -41,7 +41,6 @@ function parseRefs(refsField: string, currentBranch: string, remotes: Set<string
     if (remotes) return remotes.has(label.slice(0, slash));
     return /^[^/]+\/[^/]+$/.test(label);
   };
-  if (!refsField) return [];
   return refsField
     .split(', ')
     .map((r) => r.trim())
@@ -182,7 +181,7 @@ export function assignLanes(commits: RawCommit[]): LaneAssignment[] {
       // column, return-curve back into the merge node, and continue below in
       // the mergeLane column.
       pl2 = parentLanes.map((pl, pi) => {
-        if (pi === 0) return { lane: pl ?? lane, bottom: 'v' as const };
+        if (pi === 0) return { lane: pl, bottom: 'v' as const };
         return { lane: mergeLane, bottom: 'v' as const, returnFrom: mergeLane };
       });
     } else {

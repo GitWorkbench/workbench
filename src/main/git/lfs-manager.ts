@@ -34,7 +34,8 @@ export async function configureLfs(repo: string, skipSmudge: boolean) {
 export async function setLfsTracking(repo: string, pattern: string, tracked: boolean, literal = false) {
   if (typeof pattern !== 'string' || !pattern.trim() || pattern.length > 4096 || /[\0\r\n]/.test(pattern) || pattern.startsWith('!') || pattern.startsWith('-')) throw new Error('Enter one non-empty file pattern, such as *.psd or assets/**.');
   const attrs = await fs.lstat(path.join(repo, '.gitattributes')).catch(() => null);
-  if (attrs && (!attrs.isFile() || attrs.isSymbolicLink())) throw new Error('.gitattributes must be a regular file in this repository.');
+  // lstat reports symbolic links as non-files, so this also rejects symlinks.
+  if (attrs && !attrs.isFile()) throw new Error('.gitattributes must be a regular file in this repository.');
   await createRestorePoint(repo, `Before ${tracked ? 'tracking' : 'untracking'} LFS pattern: ${pattern}`);
   await gitCommand(repo, ['lfs', tracked ? 'track' : 'untrack', ...(tracked && literal ? ['--filename'] : []), '--', pattern]);
   return getLfsState(repo);

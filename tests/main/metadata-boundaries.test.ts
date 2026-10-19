@@ -82,3 +82,9 @@ describe('dashboard hosted and detached states', () => {
     expect(await repositoryOverview('/repo', false, () => null)).toMatchObject({ path: '/repo', error: 'Repository unavailable' });
   });
 });
+
+it('requests only the current path when a stash file has no rename source', async () => {
+  mock.summary.mockResolvedValue({ files: [{ path: 'file.txt', status: 'modified' }], insertions: 1, deletions: 1 });
+  expect(await getStashFileDiff('/repo', 0, 'file.txt')).toMatchObject({ path: 'file.txt', hunks: [] });
+  expect(mock.git.raw).toHaveBeenCalledWith(['diff', '-M', 'stash@{0}^1', 'stash@{0}', '--', 'file.txt']);
+});

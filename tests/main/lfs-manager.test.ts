@@ -125,6 +125,19 @@ describe('Git LFS subprocess adapter', () => {
     expect(await promise).toMatchObject({ state: 'completed', current: 1, message: 'LFS operation completed.' });
   });
 
+  it('keeps the cancellation message when progress arrives before the child exits', async () => {
+    const promise = runLfsTransfer(repo, { kind: 'fetch', remote: 'origin', head }, vi.fn());
+    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+    const progressFile = mocks.spawn.mock.calls[0][2].env.GIT_LFS_PROGRESS;
+    const transfer = await getLfsTransfer(repo);
+    expect(transfer).not.toBeNull();
+    await cancelLfsTransfer(repo, transfer!.id);
+    await writeFile(progressFile, 'download 1/2 100/300 assets/late.psd\n');
+    await vi.waitFor(async () => expect(await getLfsTransfer(repo)).toMatchObject({ current: 1, message: 'Cancelling…' }));
+    child.emit('close', 0);
+    expect(await promise).toMatchObject({ state: 'cancelled', current: 1 });
+  });
+
   it('redacts credentials from errors and records failed transfers', async () => {
     const promise = runLfsTransfer(repo, { kind: 'fetch', remote: 'origin', head }, vi.fn());
     await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
