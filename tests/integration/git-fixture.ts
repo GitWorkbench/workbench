@@ -6,6 +6,12 @@ import path from 'node:path';
 
 const execute = promisify(execFile);
 
+/** Git/antivirus handles can briefly outlive a command on Windows. Retry only
+ * the transient removal errors supported by Node, with a bounded delay. */
+export function cleanupGitFixture(root: string): Promise<void> {
+  return rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+}
+
 /** Every fixture lives outside the checkout and uses only local Git operations. */
 export async function createGitFixture(initialFiles: Record<string, string | Buffer> = { 'readme.txt': 'baseline\n' }, commit = true) {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'git-workbench-integration-')));
@@ -36,7 +42,7 @@ export async function createGitFixture(initialFiles: Record<string, string | Buf
   }
   for (const [file, content] of Object.entries(initialFiles)) await write(file, content);
   const initialHash = commit ? await commitAll('Initial fixture') : '';
-  return { root, repo, git, write, read, commitAll, initialHash, cleanup: () => rm(root, { recursive: true, force: true }) };
+  return { root, repo, git, write, read, commitAll, initialHash, cleanup: () => cleanupGitFixture(root) };
 }
 
 export type GitFixture = Awaited<ReturnType<typeof createGitFixture>>;
