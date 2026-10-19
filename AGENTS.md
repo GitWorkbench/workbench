@@ -39,6 +39,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 | `tests/` | Unit, main process, renderer and real Git integration suites |
 | `scripts/build-linux.cjs` | Isolated Linux packaging, package identities and verified update feeds |
 | `.github/workflows/` | Cross-platform validation and release packaging |
+| `website/` | Static public website and release download selection |
 
 ## TypeScript, state and IPC
 
@@ -121,6 +122,7 @@ Follow the user's latest validation instructions. Do not add or run tests or typ
 - Keep quiet startup checks, useful manual-check results, explicit download, visible progress, and explicit restart/install actions. Do not enable automatic downloading or installation without a requested change.
 - Preserve the GitHub release provider for `GitWorkbench/workbench`. Updater metadata and blockmaps must come from the same build as their installers; never substitute an older build's files.
 - Use **Git Workbench** / `git-workbench` for every product, code, storage, package, and integration identifier. Do not add previous product names, aliases, fallback keys, profile migrations, or installer compatibility identities. Follow [application identity and data locations](docs/branding.md).
+- The public website is deployed separately to GitHub Pages; see [website deployment](docs/website.md). Keep its assets relative to the `/workbench/` base path, label illustrative content, and select downloads from actual public release assets with a useful fallback. Never include desktop source or credentials in the Pages artifact.
 
 ## Git workflow and completion
 
