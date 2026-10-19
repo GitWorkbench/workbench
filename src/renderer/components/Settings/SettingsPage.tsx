@@ -203,7 +203,8 @@ export function SettingsPage() {
   };
 
   const handleApplyLocalConfig = async () => {
-    if (!activeRepoPath) return;
+    const currentRepo = useApp.getState().activeTab;
+    if (!currentRepo || currentRepo !== activeRepoPath) return;
     try {
       await api.setGitConfig({
         name: defaultAuthorName || undefined,
@@ -237,10 +238,11 @@ export function SettingsPage() {
   };
 
   const handleDeleteProfile = (id: string) => {
-    if (commitProfiles.length <= 1) return;
-    const remaining = commitProfiles.filter((p) => p.id !== id);
+    const current = useSettings.getState();
+    if (current.commitProfiles.length <= 1) return;
+    const remaining = current.commitProfiles.filter((p) => p.id !== id);
     setCommitProfiles(remaining);
-    if (activeProfileId === id) {
+    if (current.activeProfileId === id) {
       setActiveProfileId(remaining[0].id);
     }
   };
@@ -626,7 +628,7 @@ export function SettingsPage() {
                           key={pos.id}
                           onClick={() => {
                             setToastPosition(pos.id);
-                            notify('success', `Toast position set to ${pos.label.split(' ')[0]} ${pos.label.split(' ')[1] || ''}`);
+                            notify('success', `Toast position set to ${pos.label}`);
                           }}
                           className={`group relative flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
                             isSel
@@ -680,7 +682,7 @@ export function SettingsPage() {
                         const p = UI_FONT_PRESETS.find(
                           (x) => x.id === uiFontFamily || x.label === uiFontFamily || x.value === uiFontFamily
                         );
-                        return p ? p.id : (uiFontFamily === 'custom' ? 'custom' : 'Inter');
+                        return p ? p.id : 'Inter';
                       })()}
                       onChange={(e) => setUiFontFamily(e.target.value)}
                       className="text-xs px-3 py-1.5 min-w-48 bg-panel border border-edge rounded-lg text-fg focus:border-accent focus:outline-none"
@@ -716,7 +718,7 @@ export function SettingsPage() {
                         const p = CODE_FONT_PRESETS.find(
                           (x) => x.id === codeFontFamily || x.label === codeFontFamily || x.value === codeFontFamily
                         );
-                        return p ? p.id : (codeFontFamily === 'custom' ? 'custom' : 'JetBrains Mono');
+                        return p ? p.id : 'JetBrains Mono';
                       })()}
                       onChange={(e) => setCodeFontFamily(e.target.value)}
                       className="text-xs px-3 py-1.5 min-w-48 bg-panel border border-edge rounded-lg text-fg focus:border-accent focus:outline-none"

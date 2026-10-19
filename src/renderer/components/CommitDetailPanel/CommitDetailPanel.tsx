@@ -128,8 +128,9 @@ function WorkdirPanel() {
   };
 
   const handleGenerateCommitMessage = async (overrideMode?: 'smart' | 'ai') => {
-    const stagedCount = status?.staged.length ?? 0;
-    const unstagedCount = status?.unstaged.length ?? 0;
+    const currentStatus = useApp.getState().status;
+    const stagedCount = currentStatus?.staged.length ?? 0;
+    const unstagedCount = currentStatus?.unstaged.length ?? 0;
     if (stagedCount === 0 && unstagedCount === 0) {
       setAiError('No changes detected. Stage or modify files before generating a commit message.');
       return;
@@ -554,23 +555,19 @@ function FileList({ files, commitHash }: { files: FileChange[]; commitHash: stri
   const [mode, setMode] = useState<'path' | 'tree'>('path');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  const tree = useMemo(() => {
-    const root: { name: string; path: string; children: Map<string, never[]> } & { files: FileChange[] } = Object.assign(
-      { name: '', path: '', children: new Map(), files: [] as FileChange[] },
-      {}
-    );
+  const { tree, rootFiles } = useMemo(() => {
+    const rootFiles: FileChange[] = [];
     const folders = new Map<string, { name: string; files: FileChange[]; sub: Map<string, unknown> }>();
-    folders.set('', { name: '', files: [], sub: new Map() });
+    folders.set('', { name: '', files: rootFiles, sub: new Map() });
     for (const f of files) {
       const parts = f.path.split('/');
       const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
       if (!folders.has(dir)) folders.set(dir, { name: dir, files: [], sub: new Map() });
       folders.get(dir)!.files.push(f);
     }
-    return folders;
+    return { tree: folders, rootFiles };
   }, [files]);
 
-  const rootFiles = tree.get('')?.files ?? [];
   const dirs = [...tree.keys()].filter((k) => k !== '').sort();
 
   const toggleDir = (d: string) =>
@@ -838,6 +835,8 @@ export function CommitDetailPanel() {
   }, [selectedCommit, compareCommits, aiConfig]);
 
   const handleExplainChanges = async () => {
+    const commitHash = useApp.getState().selectedCommit;
+    if (!commitHash || commitHash === WIP_HASH) return;
     setExplainOpen(true);
     if (aiExplanation || explaining) return;
     const request = ++explanationRequest.current;
@@ -845,7 +844,7 @@ export function CommitDetailPanel() {
     setExplainError(null);
     try {
       const res = await api.explainChanges({
-        commitHash: selectedCommit && selectedCommit !== WIP_HASH ? selectedCommit : undefined,
+        commitHash,
         config: aiConfig
       });
       if (request !== explanationRequest.current) return;

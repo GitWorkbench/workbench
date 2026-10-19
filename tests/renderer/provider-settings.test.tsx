@@ -21,6 +21,16 @@ function provider(name: 'GitLab' | 'Bitbucket Cloud') { return within(screen.get
 async function ready() { await waitFor(() => expect(screen.queryAllByText('Checking')).toHaveLength(0)); }
 
 describe('provider credential settings', () => {
+  it('can remove a saved token while its replacement form is open', async () => {
+    mocks.api.getPullRequestCredentialStatus.mockResolvedValue({ github: false, gitlab: true, bitbucket: false });
+    render(<PullRequestProvidersSettings />); await ready();
+    fireEvent.click(provider('GitLab').getByRole('button', { name: 'Replace token' }));
+    fireEvent.change(provider('GitLab').getByPlaceholderText('Paste a replacement token'), { target: { value: 'unused-replacement' } });
+    fireEvent.click(provider('GitLab').getByRole('button', { name: 'Remove token' }));
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith('success', 'GitLab token removed'));
+    expect(provider('GitLab').getByPlaceholderText('Paste your access token')).toHaveValue('');
+    expect(provider('GitLab').queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+  });
   it('loads statuses, embeds browser sign-in and links each provider to token creation', async () => {
     render(<PullRequestProvidersSettings />);
     expect(screen.getAllByText('Checking saved credentials…')).toHaveLength(2);

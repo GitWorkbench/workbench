@@ -214,6 +214,16 @@ describe('About update controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View release', exact: true }));
     await screen.findByText('The update action failed. Please try again.');
   });
+  it('opens releases and preserves installation errors from a rejected retry', async () => {
+    render(<SettingsPage />); await ready();
+    fireEvent.click(screen.getByRole('button', { name: 'View releases' }));
+    await waitFor(() => expect(mocks.api.openAppReleasePage).toHaveBeenCalledOnce());
+    mocks.api.installAppUpdate.mockRejectedValue(new Error('Authorization unavailable'));
+    await emit({ status: 'downloaded' });
+    fireEvent.click(screen.getByRole('button', { name: 'Restart & install' }));
+    await screen.findByText('Authorization unavailable');
+    expect(screen.getByRole('button', { name: 'Retry installation' })).toBeEnabled();
+  });
   it('preserves the main-process installation error and offers retry instead of downloading again', async () => {
     render(<SettingsPage />); await ready();
     await emit({ status: 'downloaded', availableVersion: '1.0.0' });
@@ -238,6 +248,19 @@ describe('About update controls', () => {
 });
 
 describe('commit identity profiles', () => {
+  it.each([null, '/another'])('ignores a stale local identity action after switching repository to %j', path => {
+    mocks.app.activeTab = '/repo'; renderSection('profiles');
+    const button = screen.getByRole('button', { name: 'Save to Current Repo' });
+    mocks.app.activeTab = path; fireEvent.click(button);
+    expect(mocks.api.setGitConfig).not.toHaveBeenCalled();
+  });
+  it('keeps the final profile when an earlier delete control receives a queued click', () => {
+    renderSection('profiles');
+    const button = screen.getAllByTitle('Delete profile')[0];
+    const last = useSettings.getState().commitProfiles[0];
+    act(() => { useSettings.setState({ commitProfiles: [last], activeProfileId: last.id }); fireEvent.click(button); });
+    expect(useSettings.getState().commitProfiles).toEqual([last]);
+  });
   it('detects and edits identity, signing key, saves global/local config and dismisses success messages', async () => {
     mocks.app.activeTab = '/work/repo'; mocks.app.tabs = [{ path: '/work/repo', name: 'My repo' }];
     renderSection('profiles');

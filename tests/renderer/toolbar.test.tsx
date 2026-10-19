@@ -63,6 +63,15 @@ describe('Toolbar repository and branch controls', () => {
 });
 
 describe('Toolbar synchronization', () => {
+  it('ignores fetch while a pull is still running', async () => {
+    let finish!: (ok: boolean) => void;
+    mocks.app.runAndRefresh.mockImplementation(() => new Promise<boolean>(resolve => { finish = resolve; }));
+    render(<Toolbar />);
+    fireEvent.click(screen.getByRole('button', { name: /^Pull/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch' }));
+    expect(mocks.app.runAndRefresh).toHaveBeenCalledOnce();
+    await act(async () => finish(true));
+  });
   it.each([1, 2])('announces newly fetched incoming commits (%s)', async count => {
     mocks.app.status.behind = 0;
     mocks.app.runAndRefresh.mockImplementation(async (fn: () => any) => { await fn(); mocks.app.status = { ...mocks.app.status, behind: count }; return true; });

@@ -25,6 +25,14 @@ const ready = async () => screen.findByRole('button', { name: 'Files (1)' });
 function fillMessage(value: string) { fireEvent.change(screen.getByRole('textbox', { name: 'Review message' }), { target: { value } }); }
 
 describe('pull request review loading and navigation', () => {
+  it('bounds large patches and omits a conversation state that the provider did not supply', async () => {
+    mocks.api.getPullReview.mockResolvedValue(detail({ files: [{ ...detail().files[0], patch: '@@ -1,4001 +1,4001 @@\n' + ' line\n'.repeat(4001) }], comments: [{ id: 'note', author: 'Alice', body: 'General note' }] }));
+    render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />);
+    expect(await screen.findByText('Showing the first 4,000 patch lines. Open the provider for the rest.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Conversation (1)' }));
+    expect(screen.getByText('General note')).toBeVisible();
+    expect(screen.queryByText('Resolved')).not.toBeInTheDocument(); expect(screen.queryByText('Unresolved')).not.toBeInTheDocument();
+  });
   it('loads diff files, renders side-by-side line targets and warns about review limitations', async () => {
     render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />);
     expect(screen.getByText('Loading review…')).toBeVisible();
@@ -90,6 +98,14 @@ describe('pull request review loading and navigation', () => {
 });
 
 describe('review submission and inline replies', () => {
+  it('does not reload a submitted review after its dialog is closed', async () => {
+    let finish!: (response: { message: string }) => void;
+    mocks.api.submitPullReview.mockImplementation(() => new Promise<{ message: string }>(resolve => { finish = resolve; }));
+    const { unmount } = render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />); await ready();
+    fillMessage('Review before closing'); fireEvent.click(screen.getByRole('button', { name: 'Post comment' })); unmount();
+    await act(async () => finish({ message: 'Saved' }));
+    expect(mocks.api.getPullReview).toHaveBeenCalledOnce();
+  });
   it.each(['comment', 'approve', 'request-changes'] as const)('submits %s bound to the reviewed head', async action => {
     render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />); await ready();
     fireEvent.change(screen.getByRole('combobox', { name: 'Review action' }), { target: { value: action } });

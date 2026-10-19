@@ -71,7 +71,6 @@ export function TerminalDrawer() {
   }, [isOpen]);
 
   const handleResize = (e: React.MouseEvent) => {
-    if (isMaximized) return;
     e.preventDefault();
     const startY = e.clientY;
     const startH = height;
@@ -149,14 +148,14 @@ export function TerminalDrawer() {
       if (history.length > 0) {
         const nextIdx = historyIndex + 1 < history.length ? historyIndex + 1 : historyIndex;
         setHistoryIndex(nextIdx);
-        setCommand(history[nextIdx] || '');
+        setCommand(history[nextIdx]);
       }
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (historyIndex > 0) {
         const nextIdx = historyIndex - 1;
         setHistoryIndex(nextIdx);
-        setCommand(history[nextIdx] || '');
+        setCommand(history[nextIdx]);
       } else if (historyIndex === 0) {
         setHistoryIndex(-1);
         setCommand('');
@@ -165,7 +164,7 @@ export function TerminalDrawer() {
   };
 
   const copyLog = (log: CommandLog) => {
-    const text = `$ ${log.command}\n${log.stdout || ''}${log.stderr || ''}`;
+    const text = `$ ${log.command}\n${log.stdout}${log.stderr}`;
     void navigator.clipboard.writeText(text);
     setCopiedLogId(log.id);
     setTimeout(() => setCopiedLogId(null), 1500);

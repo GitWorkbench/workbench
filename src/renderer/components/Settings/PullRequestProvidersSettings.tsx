@@ -58,7 +58,8 @@ export function PullRequestProvidersSettings() {
 
   useEffect(() => { void refreshStatus(); }, [refreshStatus]);
 
-  const save = async (event: React.FormEvent, provider: PullRequestProvider) => {
+  const save = async (event: React.FormEvent, configuration: (typeof providers)[number]) => {
+    const { id: provider, name } = configuration;
     event.preventDefault();
     const token = tokens[provider]?.trim() || '';
     if (!token) return;
@@ -73,7 +74,7 @@ export function PullRequestProvidersSettings() {
       setTokens((existing) => ({ ...existing, [provider]: '' }));
       setEditing(null);
       await refreshStatus();
-      notify('success', `${providers.find((item) => item.id === provider)?.name || provider} token saved securely`);
+      notify('success', `${name} token saved securely`);
     } catch (reason) {
       const message = String(reason).replace(/^Error:\s*/, '');
       setError(message);
@@ -83,7 +84,8 @@ export function PullRequestProvidersSettings() {
     }
   };
 
-  const remove = async (provider: PullRequestProvider) => {
+  const remove = async (configuration: (typeof providers)[number]) => {
+    const { id: provider, name } = configuration;
     setRemoving(provider);
     setError('');
     try {
@@ -91,8 +93,8 @@ export function PullRequestProvidersSettings() {
       if (!result.ok) throw new Error(result.error || `Could not remove the ${provider} token.`);
       setCredentialStatus((current) => ({ ...current, [provider]: false }));
       setTokens((current) => ({ ...current, [provider]: '' }));
-      if (editing === provider) setEditing(null);
-      notify('success', `${providers.find((item) => item.id === provider)?.name || provider} token removed`);
+      setEditing(current => current === provider ? null : current);
+      notify('success', `${name} token removed`);
     } catch (reason) {
       const message = String(reason).replace(/^Error:\s*/, '');
       setError(message);
@@ -166,13 +168,13 @@ export function PullRequestProvidersSettings() {
               ) : !isEditing ? (
                 <div className="flex items-center gap-2 border-t border-edge/70 pt-3">
                   <button className="btn text-[11px] !px-3 !py-1.5" onClick={() => startEditing(provider.id)} disabled={busy}>Replace token</button>
-                  <button className="btn text-[11px] !px-3 !py-1.5 text-del" onClick={() => void remove(provider.id)} disabled={busy}>
+                  <button className="btn text-[11px] !px-3 !py-1.5 text-del" onClick={() => void remove(provider)} disabled={busy}>
                     {removing === provider.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                     Remove token
                   </button>
                 </div>
               ) : (
-                <form className="border-t border-edge/70 pt-3 space-y-2.5" onSubmit={(event) => void save(event, provider.id)}>
+                <form className="border-t border-edge/70 pt-3 space-y-2.5" onSubmit={(event) => void save(event, provider)}>
                   {provider.id === 'bitbucket' ? (
                     <label className="block space-y-1 text-[10px] text-dim">
                       Atlassian account email
@@ -209,6 +211,7 @@ export function PullRequestProvidersSettings() {
                       Create an access token <ExternalLink size={10} />
                     </a>
                     <div className="flex items-center gap-2">
+                      {configured ? <button type="button" className="btn text-[10px] !px-2.5 !py-1.5 text-del" disabled={busy} onClick={() => void remove(provider)}>Remove token</button> : null}
                       {configured ? <button type="button" className="btn text-[10px] !px-2.5 !py-1.5" onClick={() => { setEditing(null); setTokens((current) => ({ ...current, [provider.id]: '' })); }}>Cancel</button> : null}
                       <button type="submit" className="btn btn-primary text-[10px] !px-3 !py-1.5" disabled={saving === provider.id || !tokens[provider.id]?.trim() || (provider.id === 'bitbucket' && !bitbucketEmail.trim())}>
                         {saving === provider.id ? <><Loader2 size={11} className="animate-spin" /> Saving…</> : configured ? 'Replace token' : 'Save token'}

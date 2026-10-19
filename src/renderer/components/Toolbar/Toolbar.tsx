@@ -41,7 +41,7 @@ function ActionButton({
   label: string;
   onClick?: () => void;
   disabled?: boolean;
-  title?: string;
+  title: string;
   highlight?: boolean;
   loading?: boolean;
   badge?: number;
@@ -55,7 +55,7 @@ function ActionButton({
       }`}
       onClick={onClick}
       disabled={disabled || loading}
-      title={title || label}
+      title={title}
     >
       <span className={`text-fg/90 flex items-center justify-center h-4 w-4 ${loading ? 'animate-spin text-accent' : ''}`}>
         {loading ? <RefreshCw size={13} /> : icon}

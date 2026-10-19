@@ -128,6 +128,13 @@ describe('commit detail navigation and file presentation', () => {
 });
 
 describe('two-commit comparison and stash inspection', () => {
+  it('renders plural comparison files without optional line counts or an active diff', () => {
+    update({ compareCommits: ['base', 'target'], comparisonResult: { baseHash: 'base', targetHash: 'target', files: [changed('one.ts'), changed('two.ts')], insertions: 0, deletions: 0 } });
+    render(<CommitDetailPanel />);
+    expect(screen.getByText('2 changed files')).toBeVisible();
+    expect(screen.getByTitle('one.ts')).toHaveClass('text-fg/90');
+    expect(screen.queryByText('+undefined')).not.toBeInTheDocument();
+  });
   it('opens comparison diffs, swaps revision order, and closes through click or Escape', () => {
     update({ compareCommits: ['basehash', 'targethash'], comparisonResult: { baseHash: 'basehash', targetHash: 'targethash', files: [changed('file.ts', 'modified', 3, 2)], insertions: 3, deletions: 2 }, openDiff: { filePath: 'file.ts', compareCommits: ['basehash', 'targethash'] } });
     render(<CommitDetailPanel />); expect(screen.getByText('1 changed file')).toBeInTheDocument();
@@ -159,6 +166,10 @@ describe('two-commit comparison and stash inspection', () => {
 });
 
 describe('AI commit explanation', () => {
+  it.each([null, '__WIP__'])('ignores a stale explanation action after the selected revision becomes %j', selectedCommit => {
+    render(<CommitDetailPanel />); mocks.state.selectedCommit = selectedCommit; click('Explain');
+    expect(mocks.api.explainChanges).not.toHaveBeenCalled();
+  });
   it('requests the selected commit and reuses cached explanations after closing the accordion', async () => {
     render(<CommitDetailPanel />); click('Explain');
     expect(await screen.findByText('Summary of actual changes.')).toBeInTheDocument();
@@ -190,6 +201,23 @@ describe('AI commit explanation', () => {
 });
 
 describe('working directory staging and commit operations', () => {
+  it.each([null, { staged: [], unstaged: [] }])('revalidates generation after changes disappear before the next render: %j', status => {
+    workdir();
+    mocks.state.status = status;
+    click('Generate Message');
+    expect(screen.getByText('No changes detected. Stage or modify files before generating a commit message.')).toBeVisible();
+    expect(mocks.api.generateAiCommitMessage).not.toHaveBeenCalled(); expect(mocks.api.stageAll).not.toHaveBeenCalled();
+  });
+  it('clears commit availability when status disappears with a message drafted', () => {
+    workdir(); fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Keep draft' } });
+    act(() => update({ status: null }));
+    expect(screen.getByTitle('Commit staged changes (Ctrl+Enter)')).toBeDisabled();
+    expect(screen.getByRole('textbox')).toHaveValue('Keep draft');
+  });
+  it.each([{ filePath: 'work.ts', commitHash: 'other', staged: false }, { filePath: 'work.ts', commitHash: null, staged: true }, { filePath: 'work.ts', commitHash: null, staged: false }])('matches the unstaged selection with its revision and index side: %j', openDiff => {
+    update({ openDiff }); workdir([], [changed('work.ts')]);
+    expect(screen.getByTitle('work.ts').parentElement).toHaveClass(openDiff.commitHash === null && !openDiff.staged ? 'bg-accent/15' : 'hover:bg-panel2');
+  });
   it('shows WIP without immutable commit actions and opens conflicted files in the merge editor', () => {
     workdir([changed('staged.ts')], [changed('conflict.ts', 'conflicted'), changed('fresh.ts', 'untracked')]);
     expect(screen.getByText('Working directory')).toBeInTheDocument(); expect(screen.queryByTitle('Copy hash')).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Explain' })).not.toBeInTheDocument();
