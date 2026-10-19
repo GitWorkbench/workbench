@@ -178,7 +178,7 @@ export async function executeInteractiveRebase(
   await fs.promises.writeFile(todoFile, todoScript);
   await fs.promises.writeFile(msgFile, msgScript);
 
-  try {
+  const execute = async () => {
     await execFileP('git', ['rebase', '-i', baseHash], {
       cwd: repoPath,
       env: {
@@ -188,7 +188,8 @@ export async function executeInteractiveRebase(
       }
     });
     return { ok: true };
-  } catch (err: unknown) {
+  };
+  return execute().catch(async (err: unknown) => {
     const state = await getRepoOperationState(repoPath);
     if (state.inRebase || state.conflictedFiles.length > 0) {
       return { ok: false, hasConflicts: true, error: err instanceof Error ? err.message : String(err) };
@@ -197,9 +198,9 @@ export async function executeInteractiveRebase(
     await execFileP('git', ['rebase', '--abort'], { cwd: repoPath }).catch(() => {});
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: message };
-  } finally {
+  }).finally(async () => {
     if (!(await getRepoOperationState(repoPath)).inRebase) await cleanupRebaseEditor(repoPath);
-  }
+  });
 }
 
 /** Pre-flight check simulating merge without touching working tree or index */

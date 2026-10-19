@@ -43,10 +43,10 @@ describe('pull request worktree orchestration', () => {
     mock.remotes.mockResolvedValueOnce([]); await expect(run()).rejects.toThrow('remote no longer exists'); mock.request.mockResolvedValue({ head: { sha: 'b'.repeat(40) } }); await expect(run()).rejects.toThrow('new commits'); expect(calledWithCommand('fetch')).toHaveLength(0);
   });
   it('refuses a head that changes during fetch and always removes the temporary ref', async () => { mock.raw.mockImplementation(async args => { if (args[0] === 'show-ref') throw new Error('missing'); if (args[0] === 'rev-parse') return 'b'.repeat(40); return ''; }); await expect(run()).rejects.toThrow('changed during fetch'); expect(calledWithCommand('update-ref')).toHaveLength(1); expect(calledWithCommand('worktree')).toHaveLength(0); });
-  it.each(['registered', 'files', 'clean', 'list-failure', 'empty-error'])('preserves partial checkout data and cleans only safe refs after %s failures', async condition => {
+  it.each(['registered', 'files', 'clean', 'list-failure', 'empty-error', 'empty-string'])('preserves partial checkout data and cleans only safe refs after %s failures', async condition => {
     mock.raw.mockImplementation(async args => {
       if (args[0] === 'show-ref') throw new Error('missing'); if (args[0] === 'rev-parse') return head;
-      if (args.includes('add')) { if (condition === 'files') await fs.mkdir(directory); throw new Error(condition === 'empty-error' ? '' : 'checkout failed\nfilter failed'); }
+      if (args.includes('add')) { if (condition === 'files') await fs.mkdir(directory); if (condition === 'empty-string') throw ''; throw new Error(condition === 'empty-error' ? '' : 'checkout failed\nfilter failed'); }
       if (args[0] === 'worktree') { if (condition === 'list-failure') throw new Error('cannot list'); return condition === 'registered' ? `worktree ${directory}\0HEAD ${head}\0` : ''; }
       return '';
     });

@@ -55,7 +55,7 @@ export async function previewCommitSplit(repo: string, input: CommitSplitInput):
   const env = { GIT_INDEX_FILE: path.join(temporary, 'index'), ...(await metadata(repo, plan.hash)).env };
   let tip = plan.parent;
   const commits: CommitSplitPreview['commits'] = [];
-  try {
+  const buildPreview = async (): Promise<CommitSplitPreview> => {
     await gitCommand(repo, plan.parent ? ['read-tree', plan.parent] : ['read-tree', '--empty'], undefined, env);
     let lastTree = (await gitCommand(repo, ['write-tree'], undefined, env)).trim();
     for (const group of input.groups) {
@@ -81,8 +81,11 @@ export async function previewCommitSplit(repo: string, input: CommitSplitInput):
     await gitCommand(repo, ['update-ref', refFor(id), tip, '']);
     await fs.writeFile(path.join(directory, `${id}.json`), JSON.stringify(saved), { flag: 'wx' });
     return saved;
-  } catch (error) { await gitCommand(repo, ['update-ref', '-d', refFor(id)]).catch(() => {}); throw error; }
-  finally { await fs.rm(temporary, { recursive: true, force: true }); }
+  };
+  return buildPreview().catch(async (error: unknown) => {
+    await gitCommand(repo, ['update-ref', '-d', refFor(id)]).catch(() => {});
+    throw error;
+  }).finally(() => fs.rm(temporary, { recursive: true, force: true }));
 }
 
 export async function discardCommitSplit(repo: string, id: string) {

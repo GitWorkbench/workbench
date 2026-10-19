@@ -174,17 +174,16 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
             const trackRewrite = repo && (rewriteActions.has(channel) || channel === 'git:continue-operation' || channel === 'git:abort-operation');
             if (repo && rewriteActions.has(channel)) await beginRewrite(repo, channel, args);
             if (repo && writes.has(channel)) await captureResolutionMemory(repo).catch(() => {});
-            try {
+            const execute = async () => {
               const result = await fn(...args);
               const failure = result && typeof result === 'object' && 'ok' in result && result.ok === false;
               const session = trackRewrite && repo ? await finishRewrite(repo, { aborted: channel === 'git:abort-operation', error: failure ? String((result as { error?: string }).error || 'Operation did not complete.') : undefined }).catch(error => { console.warn('Rewrite comparison:', error.message); return null; }) : null;
               return session?.status === 'completed' && session.oldTip !== session.newTip && result && typeof result === 'object' ? { ...result, rewriteId: session.id } : result;
-            }
-            catch (error) {
+            };
+            return execute().catch(async (error: unknown) => {
               if (trackRewrite && repo) await finishRewrite(repo, { error: error instanceof Error ? error.message : String(error) }).catch(() => {});
               throw error;
-            }
-            finally { if (repo && writes.has(channel)) await captureResolutionMemory(repo).catch(() => {}); }
+            }).finally(async () => { if (repo && writes.has(channel)) await captureResolutionMemory(repo).catch(() => {}); });
           };
           if (!repo || !(writes.has(channel) || /^git:(restore-points|rerere|rewrite|pr-worktree|split|stack|lfs|sparse):/.test(channel))) return run();
           // Snapshot and its action share one write queue, including staging operations.
