@@ -66,3 +66,40 @@ it.each([true, false])('reports non-Error interactive-rebase failures with pause
   });
   expect(await executeInteractiveRebase(root, hash, [{ hash, shortHash: hash.slice(0, 7), action: 'pick', message: 'Commit', author: 'Author' }])).toEqual({ ok: false, ...(paused ? { hasConflicts: true } : {}), error: 'rebase refused' });
 });
+
+it('reads submodule conflicts without treating commit objects as blobs and refuses applying text', async () => {
+  const original = mock.exec.getMockImplementation()!;
+  mock.exec.mockImplementation(async (cmd, args, opts) => args[0] === 'ls-files'
+    ? { stdout: `160000 ${hash} 2\tfile.txt\0`, stderr: '' } : original(cmd, args, opts));
+  expect(await getConflictFile(root, 'file.txt')).toMatchObject({ kind: 'submodule', currentContent: null, incomingContent: null });
+  await expect(resolveConflictFile(root, 'file.txt', 'result')).rejects.toThrow('submodule conflict');
+  expect(mock.exec.mock.calls.some(([, args]) => args[0] === 'cat-file' || args[0] === 'add')).toBe(false);
+});
+it('uses the incoming line endings when the worktree and current version are empty', async () => {
+  fs.unlinkSync(file);
+  mock.exec.mockImplementation(async (_cmd, args) => ({ stdout: args[0] === 'ls-files'
+    ? `100644 ${hash} 3\tfile.txt\0` : args[0] === 'cat-file' ? Buffer.from('incoming\r\n') : '', stderr: '' }));
+  expect(await getConflictFile(root, 'file.txt')).toMatchObject({ currentLabel: 'Current', incomingLabel: 'Incoming', currentContent: null, incomingContent: 'incoming\r\n', lineEnding: '\r\n' });
+});
+it('handles an empty conflict with only a base stage without inventing side contents', async () => {
+  fs.unlinkSync(file);
+  mock.exec.mockImplementation(async (_cmd, args) => ({ stdout: args[0] === 'ls-files'
+    ? `100644 ${hash} 1\tfile.txt\0` : args[0] === 'cat-file' ? Buffer.alloc(0) : '', stderr: '' }));
+  expect(await getConflictFile(root, 'file.txt')).toMatchObject({ rawContent: '', currentContent: null, incomingContent: null, lineEnding: '\n' });
+  await resolveConflictFile(root, 'file.txt', 'reviewed base-only result\n');
+  expect(fs.readFileSync(file, 'utf8')).toBe('reviewed base-only result\n');
+});
+it('represents binary incoming versions without decoding them into editable text', async () => {
+  mock.exec.mockImplementation(async (_cmd, args) => ({ stdout: args[0] === 'ls-files'
+    ? `100644 ${hash} 3\tfile.txt\0` : args[0] === 'cat-file' ? Buffer.from([0, 1]) : 'main', stderr: '' }));
+  expect(await getConflictFile(root, 'file.txt')).toMatchObject({ kind: 'binary', rawContent: '', incomingContent: '' });
+});
+it.each(['100755', '100644'])('creates missing conflict directories and preserves incoming mode %s', async mode => {
+  const relative = 'missing/nested/file.txt';
+  mock.exec.mockImplementation(async (_cmd, args) => ({ stdout: args[0] === 'ls-files'
+    ? `${mode} ${hash} 3\t${relative}\0` : '', stderr: '' }));
+  const write = vi.spyOn(fs.promises, 'writeFile');
+  await resolveConflictFile(root, relative, 'reviewed\n');
+  expect(write).toHaveBeenCalledWith(expect.stringContaining('.git-workbench-merge-'), 'reviewed\n', expect.objectContaining({ mode: mode === '100755' ? 0o755 : 0o644 }));
+  expect(fs.readFileSync(path.join(root, relative), 'utf8')).toBe('reviewed\n');
+});
