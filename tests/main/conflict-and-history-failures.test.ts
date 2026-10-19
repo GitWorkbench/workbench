@@ -103,3 +103,10 @@ it.each(['100755', '100644'])('creates missing conflict directories and preserve
   expect(write).toHaveBeenCalledWith(expect.stringContaining('.git-workbench-merge-'), 'reviewed\n', expect.objectContaining({ mode: mode === '100755' ? 0o755 : 0o644 }));
   expect(fs.readFileSync(path.join(root, relative), 'utf8')).toBe('reviewed\n');
 });
+
+it('preserves NUL-delimited Unicode and tab paths without requiring the host filesystem to create them', async () => {
+  const original = mock.exec.getMockImplementation()!;
+  mock.exec.mockImplementation(async (cmd, args, opts) => args[0] === 'diff'
+    ? { stdout: '日本\tfile.txt\0from -> to.txt\0', stderr: '' } : original(cmd, args, opts));
+  expect((await getRepoOperationState(root)).conflictedFiles).toEqual(['日本\tfile.txt', 'from -> to.txt']);
+});

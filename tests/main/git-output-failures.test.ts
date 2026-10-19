@@ -75,3 +75,10 @@ describe('partial patch metadata boundaries', () => {
     expect(await getBlameLines('/repo', 'file')).toMatchObject([{ author: 'Unknown', content: 'content' }]);
   });
 });
+
+it.each(['from -> to.txt', '日本\tfile.txt', '*.txt', '[ab].txt'])('preserves literal status path %j without inventing a rename on any platform', async filePath => {
+  mock.status.mockResolvedValue({ current: 'main', ahead: 0, behind: 0, conflicted: [], files: [{ path: filePath, index: '?', working_dir: '?' }] });
+  expect(await getStatus('/repo')).toMatchObject({ staged: [], unstaged: [{ path: filePath, status: 'untracked', renamedFrom: undefined }] });
+  await discardFile('/repo', filePath);
+  expect(mock.raw).toHaveBeenLastCalledWith(['clean', '-f', '-d', '--', `:(literal)${filePath}`]);
+});

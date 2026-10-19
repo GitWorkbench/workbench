@@ -54,6 +54,8 @@ Renderer tests use jsdom and React Testing Library. Feature components normally 
 
 Provider, AI, updater, and process boundary tests use deterministic responses. They never sign in to a real account, use personal credentials, download an update, or contact a real Git remote. Git integration tests use real Git with temporary local repositories and local bare remotes.
 
+Filesystem fixtures must use names supported by the host. POSIX runs retain literal tabs, `>` and `*`; Windows runs use Unicode, spaces and bracket glob characters. Boundary tests exercise the exact tab, ASCII-arrow and wildcard strings on every platform without creating invalid Windows paths. Both fixture variants retain the same data-preservation assertions.
+
 ## Test isolation
 
 `tests/setup.ts` and the standalone harness share `scripts/test-git-environment.cjs`. It disables system/global Git configuration, credential prompts, hooks, and signing, and clears inherited repository/index/object paths so a test cannot accidentally target a developer's repository. Fixtures set their own Git identity. Repositories and test configuration are created under the OS temporary directory and removed by teardown. Avoid copying a developer's Git environment wholesale into a simple-git client; the bounded argument-only process adapter provides environment overrides for shadow indexes and worktrees.

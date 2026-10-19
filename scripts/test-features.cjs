@@ -32,7 +32,7 @@ async function changedIndices(repo, staged = false, hunk = 0) {
   return diff.hunks[hunk].lines.flatMap((line, i) => line.kind !== 'context' ? [i] : []);
 }
 test('comparison handles modified renames, tabs, Unicode, binary files, and swapped revisions', async t => {
-  const f = fixture(t); const renamed = 'renamed\t日本.txt';
+  const f = fixture(t); const renamed = process.platform === 'win32' ? 'renamed [日本].txt' : 'renamed\t日本.txt';
   git(f.repo, 'mv', 'file.txt', renamed);
   fs.writeFileSync(path.join(f.repo, renamed), f.content.replace('line 3', 'changed 3'));
   fs.writeFileSync(path.join(f.repo, 'binary.bin'), Buffer.from([0, 1, 2]));
@@ -255,7 +255,7 @@ test('root details are independent of current worktree and later commits', async
   assert.equal(detail.insertions, 35); assert.equal(detail.deletions, 0);
 });
 test('single commit and stash views preserve renamed paths and file diffs', async t => {
-  const f = fixture(t); const renamed = '日本\tnew.txt';
+  const f = fixture(t); const renamed = process.platform === 'win32' ? '日本 [new].txt' : '日本\tnew.txt';
   const { getCommitDetail } = require('../src/main/git/commit-detail.ts');
   const { getStashDetail, getStashFileDiff } = require('../src/main/git/branch-stash.ts');
   git(f.repo, 'mv', 'file.txt', renamed); fs.writeFileSync(path.join(f.repo, renamed), f.content.replace('line 3\n', 'changed\n'));
@@ -329,7 +329,7 @@ test('reword after resolving a conflict uses the correct custom message', async 
   assert.equal(git(f.repo, 'log', '-1', '--format=%s'), 'resolved second'); assert.equal(f.read(), 'two\n');
 });
 test('conflicted Unicode paths are returned as actual file names', async t => {
-  const f = fixture(t); const name = '日本\tfile.txt'; const { getRepoOperationState } = require('../src/main/git/conflicts-rebase.ts');
+  const f = fixture(t); const name = process.platform === 'win32' ? '日本 [file].txt' : '日本\tfile.txt'; const { getRepoOperationState } = require('../src/main/git/conflicts-rebase.ts');
   fs.writeFileSync(path.join(f.repo, name), 'base\n'); f.commit(); git(f.repo, 'checkout', '-b', 'side');
   fs.writeFileSync(path.join(f.repo, name), 'side\n'); f.commit(); git(f.repo, 'checkout', 'main');
   fs.writeFileSync(path.join(f.repo, name), 'main\n'); f.commit(); try { git(f.repo, 'merge', 'side'); } catch {}
@@ -355,7 +355,9 @@ test('discarding an untracked file leaves neighboring files intact', async t => 
 });
 test('filenames containing an arrow are not treated as renames', async t => {
   const f = fixture(t); const { getStatus } = require('../src/main/git/status-diff.ts');
-  const name = 'from -> to.txt'; fs.writeFileSync(path.join(f.repo, name), 'new');
+  // Win32 cannot create names containing >. The exact ASCII-arrow parser case
+  // is also covered at the Git status boundary on every operating system.
+  const name = process.platform === 'win32' ? 'from → to.txt' : 'from -> to.txt'; fs.writeFileSync(path.join(f.repo, name), 'new');
   assert.equal((await getStatus(f.repo)).unstaged[0].path, name);
 });
 test('zero-context Git configuration cannot break partial staging', async t => {
@@ -366,8 +368,12 @@ test('zero-context Git configuration cannot break partial staging', async t => {
 });
 test('discard treats wildcard characters in a filename literally', async t => {
   const f = fixture(t); const { discardFile } = require('../src/main/git/status-diff.ts');
-  fs.writeFileSync(path.join(f.repo, '*.txt'), 'remove'); fs.writeFileSync(path.join(f.repo, 'keep.txt'), 'keep');
-  await discardFile(f.repo, '*.txt');
-  assert.equal(fs.existsSync(path.join(f.repo, '*.txt')), false); assert.equal(fs.readFileSync(path.join(f.repo, 'keep.txt'), 'utf8'), 'keep');
+  // Brackets are Git glob metacharacters that are valid Windows filenames.
+  const name = process.platform === 'win32' ? '[ab].txt' : '*.txt';
+  fs.writeFileSync(path.join(f.repo, name), 'remove');
+  for (const file of ['a.txt', 'b.txt', 'keep.txt']) fs.writeFileSync(path.join(f.repo, file), 'keep');
+  await discardFile(f.repo, name);
+  assert.equal(fs.existsSync(path.join(f.repo, name)), false);
+  for (const file of ['a.txt', 'b.txt', 'keep.txt']) assert.equal(fs.readFileSync(path.join(f.repo, file), 'utf8'), 'keep');
   assert.equal(f.read(), f.content);
 });
