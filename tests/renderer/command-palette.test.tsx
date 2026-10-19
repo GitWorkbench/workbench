@@ -95,3 +95,23 @@ describe('built-in command actions', () => {
     selectText('Compare Two Commits…'); expect(mock.state.notify).toHaveBeenCalledWith('info', expect.stringContaining('Ctrl+Click'), 'Commit Comparison');
   });
 });
+
+it('shows local branches without upstream tracking metadata', () => {
+  mock.state.branches.local.push({ name: 'unpublished', fullName: 'unpublished', isCurrent: false });
+  render(<CommandPalette />); search('@unpublished');
+  expect(screen.getByText('Local branch')).toBeVisible();
+  fireEvent.click(screen.getByText('unpublished')); expect(mock.api.checkoutBranch).toHaveBeenCalledWith('unpublished');
+});
+it('keeps matching text readable if the regular-expression engine rejects highlighting', () => {
+  const NativeRegExp = RegExp;
+  vi.stubGlobal('RegExp', new Proxy(NativeRegExp, {
+    construct(target, args) {
+      if (String(args[0]).includes('routing')) throw new Error('Pattern could not be compiled');
+      return Reflect.construct(target, args);
+    }
+  }));
+  try {
+    render(<CommandPalette />); search('routing');
+    expect(screen.getByText('Improve routing')).toBeVisible();
+  } finally { vi.unstubAllGlobals(); }
+});

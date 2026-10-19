@@ -110,3 +110,21 @@ describe('commit hover preview', () => {
     expect(screen.getByRole('group')).toHaveStyle({ left: '584px', top: '592px', width: '500px' });
   });
 });
+
+it('caches an unavailable summary and does not request it again on reopening', async () => {
+  const commit = makeCommit(); mocks.detail.mockResolvedValue(null);
+  const first = show(commit); await load(); first.unmount();
+  show(commit); expect(screen.getByText('Change summary unavailable')).toBeVisible();
+  await load(); expect(mocks.detail).toHaveBeenCalledOnce();
+});
+it('repositions after height and width changes while keeping stable coordinates unchanged', () => {
+  const first = show(makeCommit(), [], { x: 100, y: 740 });
+  expect(screen.getByRole('group')).toHaveStyle({ left: '116px', top: '592px' });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 900 }); fireEvent.resize(window);
+  expect(screen.getByRole('group')).toHaveStyle({ left: '116px', top: '756px' }); first.unmount();
+  show(makeCommit(), [], { x: 0, y: 0 });
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 400 }); fireEvent.resize(window);
+  expect(screen.getByRole('group')).toHaveStyle({ left: '16px', top: '16px', width: '372px' });
+  fireEvent.resize(window);
+  expect(screen.getByRole('group')).toHaveStyle({ left: '16px', top: '16px', width: '372px' });
+});

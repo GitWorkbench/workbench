@@ -35,10 +35,8 @@ export function ResizableColumnHeader({
 }) {
   const drag = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null);
 
-  const widthAt = (clientX: number) => {
-    const current = drag.current;
-    return current ? clampWidth(column, current.startWidth + clientX - current.startX) : width;
-  };
+  const widthAt = (current: { startWidth: number; startX: number }, clientX: number) =>
+    clampWidth(column, current.startWidth + clientX - current.startX);
 
   return (
     <div className="relative flex h-full shrink-0 items-center px-2" style={{ width }}>
@@ -56,11 +54,13 @@ export function ResizableColumnHeader({
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerMove={(event) => {
-          if (drag.current?.pointerId === event.pointerId) onResize(column, widthAt(event.clientX));
+          const current = drag.current;
+          if (current?.pointerId === event.pointerId) onResize(column, widthAt(current, event.clientX));
         }}
         onPointerUp={(event) => {
-          if (drag.current?.pointerId !== event.pointerId) return;
-          const next = widthAt(event.clientX);
+          const current = drag.current;
+          if (current?.pointerId !== event.pointerId) return;
+          const next = widthAt(current, event.clientX);
           drag.current = null;
           event.currentTarget.releasePointerCapture(event.pointerId);
           onResize(column, next);

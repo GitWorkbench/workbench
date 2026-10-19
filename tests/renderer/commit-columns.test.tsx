@@ -113,3 +113,22 @@ describe('CommitColumnMenu', () => {
     expect(screen.getByRole('dialog')).toHaveStyle({ left: '380px', top: '274px' });
   });
 });
+
+it('tolerates a queued resize callback after the menu is unmounted', () => {
+  const listeners = vi.spyOn(window, 'addEventListener');
+  const { unmount } = render(<CommitColumnMenu visibility={{ author: true, date: false, sha: true }} onChange={vi.fn()} onResetWidths={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button'));
+  const listener = listeners.mock.calls.find(([name]) => name === 'resize')?.[1];
+  expect(typeof listener).toBe('function'); unmount();
+  if (typeof listener === 'function') expect(() => listener(new Event('resize'))).not.toThrow();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+it('uses a bounded menu height when geometry is unavailable', () => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    return (this as HTMLElement).tagName === 'BUTTON' ? { right: 600, bottom: 50, top: 30 } as DOMRect : {} as DOMRect;
+  });
+  render(<CommitColumnMenu visibility={{ author: true, date: false, sha: true }} onChange={vi.fn()} onResetWidths={vi.fn()} />);
+  fireEvent.click(screen.getByRole('button'));
+  expect(screen.getByRole('dialog')).toHaveStyle({ left: '380px', top: '56px' });
+});

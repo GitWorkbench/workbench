@@ -984,7 +984,7 @@ export function CommitDetailPanel() {
                     label="Copy full hash"
                     onClick={() => {
                       close();
-                      void navigator.clipboard.writeText(detail.files ? detail.hash : detail.hash);
+                      void navigator.clipboard.writeText(detail.hash);
                       notify('success', 'Hash copied');
                     }}
                   />
