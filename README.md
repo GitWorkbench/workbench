@@ -202,7 +202,7 @@ npm run test:coverage
 npm run test:coverage:report
 ```
 
-The suite covers UI interactions, main/preload IPC, provider adapters, and real Git workflows in temporary repositories. Coverage enforces 100% lines, statements, functions, and branches per source file. The target is still in progress; reports remain available when the strict gate fails. See [the testing guide](docs/testing.md) for focused commands, isolation, CI, and native platform checks.
+The suite covers UI interactions, main/preload IPC, provider adapters, and real Git workflows in temporary repositories. Coverage enforces 100% lines, statements, functions, and branches per source file. Reports remain available when the strict gate fails. See [the testing guide](docs/testing.md) for focused commands, isolation, CI, and native platform checks.
 
 ## 🧪 Manual Testing Playground
 

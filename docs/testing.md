@@ -28,7 +28,7 @@ For focused work:
 
 The target is **100% lines, statements, functions, and branches for every executable file in `src/`**. The gate includes files that have never been imported by a test. Only `.d.ts` declarations and `src/shared/types.ts`, which has no executable code, are excluded. Do not exclude a component, error handler, IPC route, or platform adapter to make the percentage pass.
 
-The target is not yet met. Run the coverage command to obtain the current measured result; a passing functional suite and a passing coverage gate are separate results. The command exits nonzero whenever any per-file metric is below 100%, and still writes these reports:
+Run the coverage command to obtain the current measured result; a passing functional suite and a passing coverage gate are separate results. The command exits nonzero whenever any per-file metric is below 100%, and still writes these reports:
 
 - `coverage/index.html`: source annotations and individual uncovered branches.
 - `coverage/coverage-summary.json`: machine-readable totals for every file.
@@ -64,6 +64,6 @@ Tests that simulate operating systems restore `process.platform` after each case
 
 ## Continuous integration
 
-`.github/workflows/tests.yml` runs tests and the production build for pushes to `main` and `codex/**`, pull requests, and manual dispatches. The separate Linux coverage job enforces all four 100% per-file thresholds and uploads the report even when the gate fails. Until the remaining coverage gaps are closed, that job is expected to be red; do not treat it as a green release gate.
+`.github/workflows/tests.yml` runs tests and the production build for pushes to `main` and `codex/**`, pull requests, and manual dispatches. The separate Linux coverage job enforces all four 100% per-file thresholds and uploads the report even when the gate fails. Both functional validation and the strict coverage job must pass before releasing.
 
 For a regression, add a failing test for the observed behavior, fix the implementation, rerun the affected suite, then run the complete suite and coverage report. Use a temporary repository for destructive Git scenarios. Never run a reset, clean, rebase, merge, or install against the working project as part of a test.

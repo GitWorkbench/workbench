@@ -5,9 +5,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView } from '@codemirror/view';
 import type { ConflictFileParsed } from '../../src/shared/types';
+import { setMergeRegions } from '../../src/renderer/components/ConflictResolver/mergeModel';
 import { parseConflictSections } from '../../src/shared/conflicts';
 
 const mocks = vi.hoisted(() => ({
+  editors: new Map<string, { onView: (view: EditorView | null) => void; onChoose?: (id: string, side: 'current' | 'incoming') => void; onSave?: () => void; onScroll?: (view: EditorView) => void }>(),
   state: {} as Record<string, any>, listeners: new Set<() => void>(), close: vi.fn(), open: vi.fn(), notify: vi.fn(), refresh: vi.fn(), run: vi.fn(),
   api: { getConflictFile: vi.fn(), getResolutionSuggestion: vi.fn(), forgetResolution: vi.fn(), resolveConflictFile: vi.fn(), getRepoOperationState: vi.fn(), continueOperation: vi.fn() }
 }));
@@ -22,6 +24,12 @@ vi.mock('../../src/renderer/store', async () => {
     setState: (update: Record<string, unknown>) => { mocks.state = { ...mocks.state, ...update }; for (const listener of mocks.listeners) listener(); }
   });
   return { useApp };
+});
+vi.mock('../../src/renderer/components/ConflictResolver/MergeEditor', async original => {
+  const module = await original<typeof import('../../src/renderer/components/ConflictResolver/MergeEditor')>();
+  return { ...module, MergeEditor: (props: React.ComponentProps<typeof module.MergeEditor>) => {
+    mocks.editors.set(props.side, props); return <module.MergeEditor {...props} />;
+  } };
 });
 import { ConflictResolverModal } from '../../src/renderer/components/ConflictResolver/ConflictResolverModal';
 
@@ -60,7 +68,7 @@ const click = (name: string | RegExp) => fireEvent.click(screen.getByRole('butto
 const applyButton = () => screen.getByRole('button', { name: /^Apply & Mark Resolved$/ });
 
 beforeEach(() => {
-  vi.resetAllMocks(); mocks.listeners.clear();
+  vi.resetAllMocks(); mocks.listeners.clear(); mocks.editors.clear();
   mocks.close.mockImplementation(() => setState({ conflictedFileToResolve: null }));
   mocks.open.mockImplementation(path => setState({ conflictedFileToResolve: path }));
   mocks.refresh.mockResolvedValue(undefined); mocks.run.mockImplementation(async fn => { await fn(); return true; });
@@ -80,6 +88,110 @@ beforeEach(() => {
   Object.defineProperty(Range.prototype, 'getBoundingClientRect', { configurable: true, value: () => new DOMRect(0, 0, 100, 20) });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+it('marks individual manual choices and advances to the next unresolved conflict', async () => {
+  await open(twoConflicts()); click('Mark resolved');
+  expect(screen.getByText('1 unresolved')).toBeVisible(); click('Mark resolved');
+  expect(screen.getByText('0 unresolved')).toBeVisible(); expect(applyButton()).toBeEnabled();
+});
+it('uses a deleted current side as an individual whole-file decision without markers', async () => {
+  mocks.state.operationState = null;
+  await open(conflict({ rawContent: 'theirs', sections: [], totalConflicts: 0, currentContent: null, incomingContent: 'theirs', baseContent: null }));
+  expect(screen.getByText('One side deleted this file. Keep that deletion, choose the remaining version, or edit the result.')).toBeVisible();
+  click(/^Current$/); expect(screen.getByText('This file will be deleted')).toBeVisible(); expect(applyButton()).toBeEnabled();
+});
+it('explains a markerless file and allows resizing the second pane divider', async () => {
+  await open(conflict({ rawContent: 'ours', sections: [], totalConflicts: 0 }));
+  expect(screen.getByText('The file has no conflict markers. Review your result, then mark it resolved.')).toBeVisible();
+  const divider = screen.getByRole('separator', { name: 'Resize result and incoming panes' });
+  Object.defineProperty(divider, 'setPointerCapture', { configurable: true, value: vi.fn() });
+  const container = divider.parentElement; if (!container) throw new Error('Pane container missing');
+  vi.spyOn(container, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1000, 500));
+  fireEvent.pointerDown(divider, { clientX: 100, pointerId: 1 }); fireEvent.pointerCancel(divider);
+});
+it('keeps queued editor actions safe while the result pane is detached', async () => {
+  await open(); const result = view();
+  act(() => result.dispatch({ changes: { from: 0, to: result.state.doc.length, insert: 'draft' } }));
+  const boundary = mocks.editors.get('result'); if (!boundary) throw new Error('Result editor missing');
+  boundary.onView(null);
+  click(/^Current$/); click('Reset result');
+  fireEvent.click(screen.getByTitle('Use the entire incoming file, including its non-conflicting content'));
+  act(() => boundary.onSave?.());
+  expect(result.state.doc.toString()).toBe('draft'); expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
+});
+it('removes drag listeners when the merge workspace unmounts during a resize', async () => {
+  const { unmount } = await open();
+  const divider = screen.getByRole('separator', { name: 'Resize current and result panes' });
+  const container = divider.parentElement; if (!container) throw new Error('Pane container missing');
+  Object.defineProperty(divider, 'setPointerCapture', { configurable: true, value: vi.fn() });
+  vi.spyOn(container, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1000, 500));
+  const removed = vi.spyOn(divider, 'removeEventListener');
+  fireEvent.pointerDown(divider, { clientX: 100, pointerId: 1 }); unmount();
+  for (const event of ['pointermove', 'pointerup', 'pointercancel']) expect(removed).toHaveBeenCalledWith(event, expect.any(Function));
+});
+it('ignores a queued choice for a conflict that no longer belongs to the result', async () => {
+  await open();
+  act(() => mocks.editors.get('current')?.onChoose?.('missing-conflict', 'current'));
+  expect(screen.getByText('1 unresolved')).toBeVisible(); expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
+});
+it('does not use a deletion action after its result pane has detached', async () => {
+  await open(conflict({ rawContent: 'theirs', sections: [], totalConflicts: 0, currentContent: null, incomingContent: 'theirs' }));
+  mocks.editors.get('result')?.onView(null); click('Keep deletion');
+  expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
+});
+it('ignores loading a remembered result after the destination pane detaches', async () => {
+  mocks.api.getResolutionSuggestion.mockResolvedValue({ enabled: true, snapshot: 'snapshot', content: 'remembered' });
+  await open(twoConflicts()); await screen.findByRole('button', { name: 'Preview remembered result' }); click('Preview remembered result');
+  mocks.editors.get('result')?.onView(null);
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Preview remembered resolution' })).getByRole('button', { name: 'Use reviewed result' }));
+  expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
+});
+it('loads a remembered result across several conflicts without losing region bounds', async () => {
+  mocks.api.getResolutionSuggestion.mockResolvedValue({ enabled: true, snapshot: 'snapshot', content: 'remembered' });
+  await open(twoConflicts()); await screen.findByRole('button', { name: 'Preview remembered result' }); click('Preview remembered result');
+  fireEvent.click(within(screen.getByRole('dialog', { name: 'Preview remembered resolution' })).getByRole('button', { name: 'Use reviewed result' }));
+  expect(view().state.doc.toString()).toBe('remembered'); expect(screen.getByText('0 unresolved')).toBeVisible();
+});
+it('ignores keyboard saves for unresolved content and duplicate saves before controls rerender', async () => {
+  const pending = deferred<{ ok: boolean }>(); mocks.api.resolveConflictFile.mockReturnValue(pending.promise);
+  await open(conflict({ rawContent: 'theirs', sections: [], totalConflicts: 0, currentContent: null, incomingContent: 'theirs' }));
+  const boundary = mocks.editors.get('result'); if (!boundary) throw new Error('Result pane missing');
+  act(() => boundary.onSave?.()); expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
+  click(/^Incoming$/);
+  const deletion = screen.getByRole('button', { name: 'Keep deletion' });
+  act(() => { boundary.onSave?.(); boundary.onSave?.(); fireEvent.click(deletion); });
+  expect(mocks.api.resolveConflictFile).toHaveBeenCalledOnce();
+  await act(async () => pending.resolve({ ok: true }));
+});
+it('tolerates an editor update that removes the selected conflict region', async () => {
+  await open();
+  act(() => view().dispatch({ effects: setMergeRegions.of([]) }));
+  expect(screen.getByText('0 unresolved')).toBeVisible();
+  expect(screen.queryByRole('button', { name: /^Conflict 1/ })).not.toBeInTheDocument();
+});
+it('cancels superseded scroll measurements and ignores queued measurements after unmount', async () => {
+  const { unmount } = await open();
+  await act(async () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))));
+  const source = view('Current file version, read only'), scroll = mocks.editors.get('current')?.onScroll;
+  if (!scroll) throw new Error('Scroll boundary missing');
+  const frames = vi.spyOn(globalThis, 'requestAnimationFrame'), cancel = vi.spyOn(globalThis, 'cancelAnimationFrame');
+  scroll(source); scroll(source);
+  const queued = frames.mock.calls.at(-1)?.[0]; expect(queued).toBeTypeOf('function');
+  expect(cancel).toHaveBeenCalled(); unmount();
+  expect(cancel.mock.calls.length).toBeGreaterThanOrEqual(2);
+  act(() => queued?.(0));
+  expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
+});
+it('aligns single-line panes and skips regions absent from a destination', async () => {
+  await open(conflict({ rawContent: 'a', sections: [], totalConflicts: 0, currentContent: 'a', incomingContent: 'b' }));
+  await act(async () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))));
+  const source = view('Current file version, read only'), result = view();
+  act(() => result.dispatch({ effects: setMergeRegions.of([]) }));
+  const measure = vi.spyOn(source, 'requestMeasure').mockImplementation(request => { if (request) { const value = request.read(source); request.write?.(value, source); } });
+  mocks.editors.get('current')?.onScroll?.(source);
+  await act(async () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  expect(measure).toHaveBeenCalled(); expect(result.scrollDOM.scrollTop).toBe(0);
+});
 
 it.each(['current', 'incoming'] as const)('chooses an individual conflict using the %s editor gutter widget', async side => {
   await open(); const editor = view(side === 'current' ? 'Current file version, read only' : 'Incoming file version, read only'); const accept = editor.dom.querySelector('.cm-merge-accept')!; expect(accept).not.toBeNull(); fireEvent.click(accept); expect(view().state.doc.toString()).toContain(side === 'current' ? 'ours' : 'theirs'); expect(applyButton()).toBeEnabled();

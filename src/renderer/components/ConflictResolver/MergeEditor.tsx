@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { basicSetup } from 'codemirror';
 import { Compartment, EditorState, Prec, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, GutterMarker, gutter, keymap, type ViewUpdate } from '@codemirror/view';
@@ -98,11 +98,11 @@ interface MergeEditorProps {
 }
 
 export function MergeEditor(props: MergeEditorProps) {
-  const parent = useRef<HTMLDivElement>(null);
+  const [parent, setParent] = useState<HTMLDivElement | null>(null);
   const callbacks = useRef(props);
   callbacks.current = props;
   useEffect(() => {
-    if (!parent.current) return;
+    if (!parent) return;
     const readOnly = props.side !== 'result';
     const language = new Compartment();
     const extensions: Extension[] = [basicSetup, mergeTheme, mergeHighlighting,
@@ -133,12 +133,12 @@ export function MergeEditor(props: MergeEditorProps) {
         lineMarkerChange: update => update.startState.field(mergeRegions) !== update.state.field(mergeRegions) || update.startState.field(activeMergeRegion) !== update.state.field(activeMergeRegion)
       }));
     }
-    const view = new EditorView({ parent: parent.current, state: EditorState.create({ doc: props.value, extensions }) });
+    const view = new EditorView({ parent, state: EditorState.create({ doc: props.value, extensions }) });
     callbacks.current.onView(view);
     let alive = true;
     const description = LanguageDescription.matchFilename(languages, props.filePath.split(/[\\/]/).pop() || props.filePath);
     description?.load().then(support => { if (alive) view.dispatch({ effects: language.reconfigure(support) }); }).catch(() => {});
     return () => { alive = false; callbacks.current.onView(null); view.destroy(); };
-  }, [props.filePath, props.value, props.side, props.initialRegions]);
-  return <div ref={parent} className="min-h-0 min-w-0 flex-1 overflow-hidden" />;
+  }, [parent, props.filePath, props.value, props.side, props.initialRegions]);
+  return <div ref={setParent} className="min-h-0 min-w-0 flex-1 overflow-hidden" />;
 }

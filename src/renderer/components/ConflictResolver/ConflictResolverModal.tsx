@@ -12,9 +12,10 @@ import { api } from '../../lib/api';
 import { useApp } from '../../store';
 import { MergeEditor, setActiveMergeRegion } from './MergeEditor';
 import {
-  choiceLabels, createMergeModel, mapRegion, mergeFileAction, mergeRegions, normalizeLines,
+  choiceLabels, createMergeModel, mapRegion, mergeChoiceText, mergeFileAction, mergeRegions, normalizeLines,
   setMergeFileAction, setMergeRegions, type MergeChoice, type MergeRegion
 } from './mergeModel';
+import { startPaneResize, type PaneWidths } from './paneResize';
 
 type Pane = 'current' | 'result' | 'incoming';
 const messageOf = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -64,7 +65,8 @@ function MergeWorkspace({ data, onReload }: { data: ConflictFileParsed; onReload
   }), [model]);
   const views = useRef<Partial<Record<Pane | 'base', EditorView>>>({});
   const [regions, setRegions] = useState(model.regions);
-  const [activeId, setActiveId] = useState(model.blocks[0]?.id ?? null);
+  // The model always contains a conflict or a whole-file decision.
+  const [activeId, setActiveId] = useState(model.blocks[0].id);
   const [dirty, setDirty] = useState(false);
   const [historyDepth, setHistoryDepth] = useState({ undo: 0, redo: 0 });
   const [fileAction, setFileAction] = useState<'result' | 'delete'>('result');
@@ -74,13 +76,14 @@ function MergeWorkspace({ data, onReload }: { data: ConflictFileParsed; onReload
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [hasMarkers, setHasMarkers] = useState(hasConflictMarkers(model.result));
-  const [widths, setWidths] = useState([31, 38, 31]);
+  const [widths, setWidths] = useState<PaneWidths>([31, 38, 31]);
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [suggestion, setSuggestion] = useState<string | null>(null);
   const [memoryError, setMemoryError] = useState('');
   const [previewSuggestion, setPreviewSuggestion] = useState(false);
   const paneContainer = useRef<HTMLDivElement>(null);
   const syncFrame = useRef<number | null>(null);
+  const resizeCleanup = useRef<(() => void) | null>(null);
   const syncing = useRef(false);
   const busy = useRef(false);
   const isText = data.kind === 'text';
@@ -91,7 +94,10 @@ function MergeWorkspace({ data, onReload }: { data: ConflictFileParsed; onReload
   const operationName = operation?.inRebase ? 'Rebase' : operation?.inCherryPick ? 'Cherry-Pick' : operation?.inMerge ? 'Merge' : null;
   const canApply = !saving && (isText ? remaining === 0 && (!hasMarkers || fileAction === 'delete') : !!wholeChoice && data.kind !== 'submodule');
 
-  useEffect(() => () => { if (syncFrame.current !== null) cancelAnimationFrame(syncFrame.current); }, []);
+  useEffect(() => () => {
+    if (syncFrame.current !== null) cancelAnimationFrame(syncFrame.current);
+    resizeCleanup.current?.();
+  }, []);
 
   useEffect(() => {
     if (!isText || memorySettingsOpen) return;
@@ -193,11 +199,7 @@ function MergeWorkspace({ data, onReload }: { data: ConflictFileParsed; onReload
     }
     const replacements = [...targets].sort((a, b) => a.from - b.from).map(region => {
       const block = model.blocks.find(item => item.id === region.id)!;
-      let insert: string;
-      if (choice === 'reset') insert = block.initial;
-      else if (choice === 'both') insert = joinBoth(block.current, block.incoming);
-      else if (choice === 'incoming-first') insert = joinBoth(block.incoming, block.current);
-      else insert = choice === 'base' ? block.base ?? block.initial : block[choice];
+      const insert = mergeChoiceText(block, choice);
       return { id: region.id, from: region.from, to: region.to, insert };
     });
     const changes = view.state.changes(replacements.map(({ id: _id, ...replacement }) => replacement));
@@ -256,7 +258,7 @@ function MergeWorkspace({ data, onReload }: { data: ConflictFileParsed; onReload
     if (busy.current) return;
     const result = views.current.result;
     if (isText && !result) return;
-    const action = isText ? result?.state.field(mergeFileAction) ?? 'result' : wholeChoice;
+    const action = isText && result ? result.state.field(mergeFileAction) : wholeChoice;
     const text = result?.state.doc.toString() ?? '';
     if (!action || (isText && (result?.state.field(mergeRegions).some(region => !region.choice) || (action !== 'delete' && hasConflictMarkers(text))))) return;
     busy.current = true;
@@ -328,26 +330,9 @@ function MergeWorkspace({ data, onReload }: { data: ConflictFileParsed; onReload
     });
   };
 
-  const resizePane = (event: React.PointerEvent<HTMLDivElement>, divider: number) => {
-    if (!paneContainer.current) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const start = event.clientX;
-    const width = paneContainer.current.getBoundingClientRect().width;
-    const original = [...widths];
-    const move = (moveEvent: PointerEvent) => {
-      const delta = (moveEvent.clientX - start) / width * 100;
-      const total = original[divider] + original[divider + 1];
-      const next = [...original];
-      next[divider] = Math.max(18, Math.min(total - 18, original[divider] + delta));
-      next[divider + 1] = total - next[divider];
-      setWidths(next);
-    };
-    const element = event.currentTarget;
-    const finish = () => { element.removeEventListener('pointermove', move); element.removeEventListener('pointerup', finish); element.removeEventListener('pointercancel', finish); };
-    element.addEventListener('pointermove', move);
-    element.addEventListener('pointerup', finish);
-    element.addEventListener('pointercancel', finish);
+  const resizePane = (event: React.PointerEvent<HTMLDivElement>, divider: 0 | 1) => {
+    resizeCleanup.current?.();
+    resizeCleanup.current = startPaneResize(event, paneContainer.current, divider, widths, setWidths);
   };
 
   const resetResult = () => {
@@ -450,7 +435,7 @@ function MergeWorkspace({ data, onReload }: { data: ConflictFileParsed; onReload
                   <div className={`min-h-0 flex-1 flex-col ${showBase ? 'hidden' : 'flex'}`}>
                     <MergeEditor filePath={data.filePath} value={model.result} label="Editable merge result" side="result" initialRegions={model.regions} onView={view => onView('result', view)} onUpdate={readResult} onScroll={syncScroll} onSave={() => void apply()} onNavigate={moveConflict} locked={saving} />
                   </div>
-                  {showBase && <MergeEditor filePath={data.filePath} value={normalizeLines(data.baseContent ?? '')} label="Common ancestor file, read only" side="base" initialRegions={initialSourceRegions.base} onView={view => onView('base', view)} />}
+                  {data.baseContent !== null && showBase && <MergeEditor filePath={data.filePath} value={normalizeLines(data.baseContent)} label="Common ancestor file, read only" side="base" initialRegions={initialSourceRegions.base} onView={view => onView('base', view)} />}
                   {!showBase && fileAction === 'delete' && <div className="absolute inset-x-0 bottom-0 top-14 flex flex-col items-center justify-center gap-3 bg-base/95 p-6 text-center"><Trash2 size={26} className="text-del" /><p className="text-sm font-medium">This file will be deleted</p><p className="text-xs text-dim">Apply to keep the deletion, or undo to restore your result.</p><button className="btn border border-edge" onClick={() => { const view = views.current.result; if (view) undo(view); }}><Undo2 size={13} />Undo deletion</button></div>}
                 </div>
                 <div role="separator" aria-label="Resize result and incoming panes" aria-orientation="vertical" className="cursor-col-resize bg-edge hover:bg-accent/50 touch-none" onPointerDown={event => resizePane(event, 1)} />
@@ -493,8 +478,4 @@ function PaneHeader({ label, subtitle, color, deleted, onUse, disabled }: {
   label: string; subtitle: string; color: string; deleted: boolean; onUse: () => void; disabled: boolean;
 }) {
   return <div className="flex h-14 shrink-0 items-center gap-2 border-b border-edge bg-panel2 px-3"><span className={`h-2 w-2 shrink-0 rounded-full ${color === 'text-accent' ? 'bg-accent' : 'bg-add'}`} /><div className="min-w-0 flex-1"><p className={`text-xs font-semibold ${color}`}>{label}{deleted && ' · deleted'}</p><p className="truncate text-[10px] text-dim" title={subtitle}>{subtitle}</p></div><button className="btn shrink-0 border border-edge text-[10px]" disabled={disabled} onClick={onUse} title={`Use the entire ${label.toLowerCase()} file, including its non-conflicting content`}>{deleted ? 'Use deletion' : 'Use file'}</button></div>;
-}
-
-function joinBoth(first: string, second: string): string {
-  return first && second && !first.endsWith('\n') ? `${first}\n${second}` : first + second;
 }

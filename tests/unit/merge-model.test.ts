@@ -1,3 +1,4 @@
+import { mergeChoiceText } from '../../src/renderer/components/ConflictResolver/mergeModel';
 import { describe, expect, it } from 'vitest';
 import { ChangeSet, EditorState } from '@codemirror/state';
 import { history, redo, undo } from '@codemirror/commands';
@@ -174,4 +175,9 @@ describe('merge editor state and undo', () => {
     expect(state.field(mergeRegions)[0].choice).toBe('manual');
     expect(state.field(mergeFileAction)).toBe('delete');
   });
+});
+
+it('retains the initial block when an ancestor choice has no base text', () => {
+  const model = createMergeModel(file('plain', { currentContent: 'ours', incomingContent: 'theirs', baseContent: null }));
+  expect(mergeChoiceText(model.blocks[0], 'base')).toBe(model.blocks[0].initial);
 });

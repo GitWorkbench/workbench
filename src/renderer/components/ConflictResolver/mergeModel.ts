@@ -148,3 +148,15 @@ export const choiceLabels: Record<MergeChoice, string> = {
   current: 'Current', incoming: 'Incoming', both: 'Both · current first', 'incoming-first': 'Both · incoming first',
   base: 'Base', manual: 'Manual'
 };
+
+/** Build a replacement for a reviewed conflict; an absent base retains its initial draft. */
+export function mergeChoiceText(block: MergeBlock, choice: Exclude<MergeChoice, 'manual'> | 'reset'): string {
+  if (choice === 'reset') return block.initial;
+  if (choice === 'base') return block.base ?? block.initial;
+  if (choice === 'both') return joinMergeSides(block.current, block.incoming);
+  if (choice === 'incoming-first') return joinMergeSides(block.incoming, block.current);
+  return block[choice];
+}
+function joinMergeSides(first: string, second: string): string {
+  return first && second && !first.endsWith('\n') ? `${first}\n${second}` : first + second;
+}
