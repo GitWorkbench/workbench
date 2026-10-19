@@ -28,6 +28,15 @@ async function showStack() { render(<BranchStackModal />); await screen.findByTe
 async function selectSession() { await showStack(); fireEvent.change(screen.getByLabelText('Saved restack preview'), { target: { value: 'session-1' } }); }
 async function loadRequest() { await showStack(); fireEvent.click(screen.getByRole('button', { name: 'Load open requests' })); await screen.findByLabelText('Request to retarget'); fireEvent.change(screen.getByLabelText('Request to retarget'), { target: { value: '12' } }); fireEvent.change(screen.getByLabelText('New target branch'), { target: { value: 'main' } }); }
 
+it.each(['linked', 'unlinked', 'empty'])('chooses an available stack root after refreshing an initially empty repository: %s', async kind => {
+  const next = kind === 'linked' ? stack() : { branches: kind === 'unlinked' ? ['feature'] : [], links: [], sessions: [] };
+  mock.api.getBranchStack.mockResolvedValueOnce({ branches: [], links: [], sessions: [] }).mockResolvedValue(next);
+  render(<BranchStackModal />); await screen.findByText('No linked branches yet.');
+  fireEvent.click(screen.getByTitle('Refresh stack'));
+  await waitFor(() => expect(mock.api.getBranchStack).toHaveBeenCalledTimes(3));
+  expect((screen.getByLabelText('Stack base branch') as HTMLSelectElement).value).toBe(kind === 'linked' ? 'main' : kind === 'unlinked' ? 'feature' : '');
+});
+
 describe('commit split workspace', () => {
   it.each(['closed', 'no-repo'])('stays hidden when %s', state => { if (state === 'closed') mock.state.commitSplitOpen = false; else mock.state.activeTab = null; expect(render(<CommitSplitModal />).container).toBeEmptyDOMElement(); });
   it('uses HEAD without a selected commit and closes explicitly', () => { mock.state.selectedCommit = null; render(<CommitSplitModal />); expect(screen.getByLabelText('Commit to split')).toHaveValue('HEAD'); expect(screen.getByRole('button', { name: 'Preview split' })).toBeDisabled(); fireEvent.click(screen.getByLabelText('Close')); expect(mock.setState).toHaveBeenCalledWith({ commitSplitOpen: false }); });

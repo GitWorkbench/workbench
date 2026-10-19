@@ -34,11 +34,51 @@ beforeEach(() => {
 const lfsReady = async () => screen.findByRole('heading', { name: /Repository setup/ });
 const sparseReady = async () => screen.findByText('Sparse folders enabled');
 
+it('removes a selected sparse folder and refreshes an unborn checkout without listing directories', async () => {
+  mocks.api.getSparseCheckout.mockResolvedValueOnce(sparse({ directories: ['src'] })).mockResolvedValue(sparse({ head: '' }));
+  render(<SparseCheckoutModal />); await sparseReady();
+  const directory = screen.getByRole('textbox', { name: 'Repository directory path' });
+  fireEvent.change(directory, { target: { value: 'src' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Add', exact: true }));
+  expect(screen.getByText('Selected folders · 1')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove src' }));
+  expect(screen.getByText('Selected folders · 0')).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Include src' })).not.toBeChecked();
+  mocks.api.getSparseDirectories.mockClear();
+  fireEvent.click(screen.getByTitle('Refresh layout'));
+  await screen.findByText('No tracked subfolders in this revision.');
+  expect(mocks.api.getSparseDirectories).not.toHaveBeenCalled();
+});
+
+it('shows empty full-checkout examples and asks for confirmation before applying', async () => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  mocks.api.previewSparseCheckout.mockResolvedValue(preview({ disable: true, addedExamples: [], removedExamples: [] }));
+  render(<SparseCheckoutModal />); await sparseReady();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview full checkout' }));
+  await screen.findByText('Full checkout preview');
+  expect(screen.getAllByText('None')).toHaveLength(2);
+  fireEvent.click(screen.getByRole('button', { name: 'Apply preview' }));
+  await waitFor(() => expect(confirm).toHaveBeenCalledWith(expect.stringContaining('Apply the full checkout?')));
+  expect(mocks.api.applySparseCheckout).not.toHaveBeenCalled();
+});
+
 it('reveals sparse folder choices in bounded batches', async () => {
   mocks.api.getSparseDirectories.mockImplementation(async prefix => prefix ? [] : Array.from({ length: 205 }, (_, i) => `folder-${i}`)); render(<SparseCheckoutModal />); await sparseReady(); await screen.findByRole('button', { name: 'Show 100 more (105 remaining)' }); expect(screen.queryByLabelText('Include folder-204')).not.toBeInTheDocument(); fireEvent.click(screen.getByRole('button', { name: 'Show 100 more (105 remaining)' })); fireEvent.click(screen.getByRole('button', { name: 'Show 100 more (5 remaining)' })); expect(screen.queryByRole('button', { name: /Show 100 more/ })).not.toBeInTheDocument();
 });
 
 describe('Git LFS manager', () => {
+  it('does not track twice when the form is submitted during an operation', async () => {
+    let finish!: (state: LfsState) => void;
+    mocks.api.setLfsTracking.mockImplementation(() => new Promise<LfsState>(resolve => { finish = resolve; }));
+    render(<LfsManagerModal />); await lfsReady();
+    const input = screen.getByRole('textbox', { name: 'LFS tracking pattern' });
+    fireEvent.change(input, { target: { value: '*.psd' } });
+    const form = input.closest('form'); if (!form) throw new Error('LFS tracking form missing');
+    fireEvent.submit(form); fireEvent.submit(form);
+    expect(mocks.api.setLfsTracking).toHaveBeenCalledOnce();
+    await act(async () => finish(lfs()));
+    expect(await screen.findByText('Tracking rule added. Review and commit .gitattributes.')).toBeVisible();
+  });
   it('is hidden without an open repository, subscribes to progress and cleans up after closing', async () => {
     mocks.app.activeTab = null; const { container, rerender, unmount } = render(<LfsManagerModal />); expect(container).toBeEmptyDOMElement();
     mocks.app.activeTab = '/repo'; mocks.app.lfsManagerOpen = false; rerender(<LfsManagerModal />); expect(container).toBeEmptyDOMElement();

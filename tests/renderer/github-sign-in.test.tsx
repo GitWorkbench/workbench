@@ -212,4 +212,6 @@ it('shows an expired sign-in message as an error and supports connected accounts
   await emit({ ...connected, installationUrl: undefined });
   expect(screen.queryByRole('link', { name: 'Choose repositories on GitHub' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Refresh access' })).toBeEnabled();
+  await emit({ ...idle, message: 'Sign-in cancelled', phase: 'cancelled' });
+  expect(screen.getByRole('status')).toHaveClass('text-dim');
 });

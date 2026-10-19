@@ -107,6 +107,8 @@ export function alignHunkLinesForSplit(hunk: DiffHunk): SplitRow[] {
       for (let k = 0; k < count; k++) {
         const delItem = delLines[k];
         const addItem = addLines[k];
+        // The longer dense block always supplies this row's original index.
+        const rowItem = delItem || addItem;
 
         let oldParts: InlineDiffPart[] | undefined;
         let newParts: InlineDiffPart[] | undefined;
@@ -118,7 +120,7 @@ export function alignHunkLinesForSplit(hunk: DiffHunk): SplitRow[] {
         }
 
         rows.push({
-          hunkLineIndex: delItem ? delItem.index : addItem ? addItem.index : i - 1,
+          hunkLineIndex: rowItem.index,
           left: delItem
             ? {
                 hunkLineIndex: delItem.index,

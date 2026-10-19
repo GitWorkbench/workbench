@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Folder, RefreshCw, X } from 'lucide-react';
 import type { SparseCheckoutState, SparsePreview } from '../../../shared/types';
 import { api } from '../../lib/api';
+import { useExclusiveTask } from '../../lib/useExclusiveTask';
 import { useApp } from '../../store';
 
 export function SparseCheckoutModal() {
@@ -13,10 +14,11 @@ function SparseCheckout() {
   const [roots, setRoots] = useState<string[]>([]), [selected, setSelected] = useState<string[]>([]);
   const [preview, setPreview] = useState<SparsePreview>();
   const [pathInput, setPathInput] = useState('');
-  const [busy, setBusy] = useState(false), [message, setMessage] = useState('');
+  const { busy, run: runExclusive } = useExclusiveTask();
+  const [message, setMessage] = useState('');
   const load = async () => { const state = await api.getSparseCheckout(); setData(state); setSelected(state.directories); setPreview(undefined); setRoots(state.head ? await api.getSparseDirectories('', state.head) : []); };
   useEffect(() => { let live = true; void api.getSparseCheckout().then(async state => { const dirs = state.head ? await api.getSparseDirectories('', state.head) : []; if (live) { setData(state); setSelected(state.directories); setRoots(dirs); } }).catch(e => { if (live) setMessage(String(e)); }); return () => { live = false; }; }, []);
-  const run = async (fn: () => Promise<unknown>) => { if (busy) return; setBusy(true); setMessage(''); try { await fn(); } catch (e) { setMessage(String(e)); } finally { setBusy(false); } };
+  const run = (fn: () => Promise<unknown>) => runExclusive(async () => { setMessage(''); try { await fn(); } catch (e) { setMessage(String(e)); } });
   const toggle = (directory: string, value: boolean) => {
     setPreview(undefined);
     setSelected(old => value ? [...old.filter(d => !d.startsWith(directory + '/') && d !== directory), directory].sort() : old.filter(d => d !== directory));

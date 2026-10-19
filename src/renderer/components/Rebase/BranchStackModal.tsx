@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { GitBranch, RefreshCw, X } from 'lucide-react';
 import type { BranchStackState, PullRequestContext, PullRequestProvider, StackRestackSession } from '../../../shared/types';
 import { api } from '../../lib/api';
+import { useExclusiveTask } from '../../lib/useExclusiveTask';
 import { useApp } from '../../store';
 
 export function BranchStackModal() {
@@ -12,7 +13,8 @@ function BranchStack() {
   const repository = useApp.getState().activeTab;
   const [data, setData] = useState<BranchStackState>({ links: [], branches: [], sessions: [] });
   const [branch, setBranch] = useState(''), [parent, setParent] = useState(''), [root, setRoot] = useState('');
-  const [reset, setReset] = useState(false), [busy, setBusy] = useState(false), [message, setMessage] = useState('');
+  const [reset, setReset] = useState(false), [message, setMessage] = useState('');
+  const { busy, run: runExclusive } = useExclusiveTask();
   const [selected, setSelected] = useState('');
   const [remote, setRemote] = useState('origin'), [provider, setProvider] = useState<PullRequestProvider | ''>('');
   const [context, setContext] = useState<PullRequestContext>(), [requestId, setRequestId] = useState(''), [newTarget, setNewTarget] = useState('');
@@ -20,7 +22,7 @@ function BranchStack() {
   const request = context?.pullRequests.find(pr => pr.id === requestId);
   const load = async () => { const next = await api.getBranchStack(); setData(next); setRoot(old => old || next.links.find(l => !next.links.some(p => p.branch === l.parent))?.parent || next.branches[0] || ''); };
   useEffect(() => { let live = true; void api.getBranchStack().then(next => { if (live) { setData(next); setRoot(next.links.find(l => !next.links.some(p => p.branch === l.parent))?.parent || next.branches[0] || ''); } }).catch(e => { if (live) setMessage(String(e)); }); return () => { live = false; }; }, []);
-  const run = async (fn: () => Promise<unknown>) => { if (busy) return; setBusy(true); setMessage(''); try { await fn(); await load(); } catch (e) { setMessage(String(e)); } finally { setBusy(false); } };
+  const run = (fn: () => Promise<unknown>) => runExclusive(async () => { setMessage(''); try { await fn(); await load(); } catch (e) { setMessage(String(e)); } });
   const preview = (s: StackRestackSession) => { setSelected(s.id); setMessage(s.error || (s.state === 'ready' ? 'Preview ready. Review every branch before applying.' : 'Preview paused.')); };
   const ordered: { branch: string; depth: number; parent?: string }[] = [];
   const visited = new Set<string>();

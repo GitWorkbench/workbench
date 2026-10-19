@@ -34,6 +34,17 @@ beforeEach(() => {
 });
 
 describe('RestorePointsModal', () => {
+  it('ignores another form submission while a restore point is being saved', async () => {
+    let finish!: (point: RestorePoint) => void;
+    mocks.api.createRestorePoint.mockImplementation(() => new Promise<RestorePoint>(resolve => { finish = resolve; }));
+    render(<RestorePointsModal />); await screen.findByRole('heading', { name: 'Before rewrite' });
+    const form = screen.getByPlaceholderText('Optional name for a manual restore point').closest('form');
+    if (!form) throw new Error('Restore point form missing');
+    fireEvent.submit(form); fireEvent.submit(form);
+    expect(mocks.api.createRestorePoint).toHaveBeenCalledOnce();
+    await act(async () => finish(point()));
+    expect(await screen.findByText('Restore point saved.')).toBeVisible();
+  });
   it('only renders for the active repository and closes on request', async () => {
     mocks.app.activeTab = null; const { container, rerender } = render(<RestorePointsModal />); expect(container).toBeEmptyDOMElement();
     mocks.app.activeTab = '/repo'; mocks.app.restorePointsOpen = false; rerender(<RestorePointsModal />); expect(container).toBeEmptyDOMElement();
@@ -97,6 +108,26 @@ describe('ResolutionMemoryModal', () => {
 });
 
 describe('RangeComparisonModal', () => {
+  it('bounds displayed patch and raw output without truncating clipboard data', async () => {
+    const patch = 'p'.repeat(200_001), raw = 'r'.repeat(300_001);
+    mocks.api.compareCommitRanges.mockResolvedValue(comparison({ entries: [{ before: 1, after: 1, kind: 'changed', oldHash: 'old', newHash: 'new', subject: 'Large patch', patch }], raw }));
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    render(<RangeComparisonModal />);
+    expect(await screen.findByText('Patch preview is truncated. Copy raw output for the full comparison.')).toBeVisible();
+    expect(screen.getByText('Raw preview truncated; Copy raw output includes everything.')).toBeInTheDocument();
+    expect(screen.queryByText(patch)).not.toBeInTheDocument();
+    expect(screen.queryByText(raw)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(raw));
+  });
+  it('ignores rewrite records delivered after the dialog has unmounted', async () => {
+    let finish!: (records: RewriteSession[]) => void;
+    mocks.api.listRewriteSessions.mockImplementation(() => new Promise<RewriteSession[]>(resolve => { finish = resolve; }));
+    const { unmount } = render(<RangeComparisonModal />); unmount();
+    await act(async () => finish([session()]));
+    expect(mocks.api.compareCommitRanges).not.toHaveBeenCalled();
+  });
   it('loads a saved completed rewrite automatically and filters patch matches', async () => {
     render(<RangeComparisonModal />);
     await screen.findByText('3 → 3 commits'); expect(mocks.api.compareCommitRanges).toHaveBeenCalledWith({ oldBase: 'old-base', oldTip: 'old-tip', newBase: 'new-base', newTip: 'new-tip' });

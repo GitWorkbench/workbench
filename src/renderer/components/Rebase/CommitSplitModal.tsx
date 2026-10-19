@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { CommitSplitPlan, CommitSplitPreview } from '../../../shared/types';
 import { api } from '../../lib/api';
+import { useExclusiveTask } from '../../lib/useExclusiveTask';
 import { useApp } from '../../store';
 
 export function CommitSplitModal() {
@@ -15,9 +16,10 @@ function CommitSplit() {
   const [assignments, setAssignments] = useState<Record<string, number>>({});
   const [preview, setPreview] = useState<CommitSplitPreview>();
   const [saved, setSaved] = useState<CommitSplitPreview[]>([]);
-  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const { busy, run: runExclusive } = useExclusiveTask();
+  const [error, setError] = useState('');
   useEffect(() => { let live = true; void api.listCommitSplitPreviews().then(rows => { if (live) setSaved(rows); }).catch(e => { if (live) setError(String(e)); }); return () => { live = false; }; }, []);
-  const run = async (fn: () => Promise<unknown>) => { if (busy) return; setBusy(true); setError(''); try { await fn(); } catch (e) { setError(String(e)); } finally { setBusy(false); } };
+  const run = (fn: () => Promise<unknown>) => runExclusive(async () => { setError(''); try { await fn(); } catch (e) { setError(String(e)); } });
   const load = () => run(async () => {
     const value = await api.getCommitSplit(hash); setPlan(value); setPreview(undefined);
     setMessages([value.message, `Split: ${value.message.split('\n')[0]}`]);
