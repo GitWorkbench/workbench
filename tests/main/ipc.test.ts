@@ -110,7 +110,21 @@ describe('main-process repository boundary', () => {
   });
   it('serializes concurrent writes and snapshots on the same repository', async () => {
     mock.repo = repo; fs.writeFileSync(path.join(repo, 'file.txt'), 'changed\n');
-    const results = await Promise.all([call('git:stage', ['file.txt']), call('git:unstage', ['file.txt']), call('git:stage-all')]);
+    const realpath = fs.promises.realpath.bind(fs.promises);
+    let release!: () => void, pathReads = 0;
+    const delayed = new Promise<void>(resolve => { release = resolve; });
+    vi.spyOn(fs.promises, 'realpath').mockImplementation(async value => {
+      if (String(value) === repo && ++pathReads === 1) await delayed;
+      return realpath(value);
+    });
+    const pending = [call('git:stage', ['file.txt']), call('git:unstage', ['file.txt']), call('git:stage-all')];
+    let admissionReads = 0;
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      admissionReads = pathReads;
+    } finally { release(); }
+    const results = await Promise.all(pending);
+    expect(admissionReads).toBe(1);
     expect(results.map(result => result.staged.length)).toEqual([1, 0, 1]);
     expect(git(repo, 'show', ':file.txt')).toBe('changed');
     expect((await call('git:status')).unstaged).toHaveLength(0);

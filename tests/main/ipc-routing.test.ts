@@ -260,3 +260,32 @@ it('explains macOS EPERM access denials without starting Git operations', async 
   vi.spyOn(fs, 'accessSync').mockImplementation(() => { throw Object.assign(new Error('denied'), { code: 'EPERM' }); });
   expect(await call('repo:open-path', root)).toMatchObject({ ok: false, error: expect.stringContaining('macOS denied') });
 });
+
+it('shares a canonical write queue across aliases while other repositories keep progressing', async () => {
+  const other = path.join(root, 'independent'); fs.mkdirSync(other, { recursive: true });
+  let release!: () => void;
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  mock.git.add.mockImplementation(async (paths: string[]) => { if (paths[0] === 'blocked') await blocked; });
+  const first = call('git:stage', ['blocked']);
+  await vi.waitFor(() => expect(mock.git.add).toHaveBeenCalledWith(['blocked']));
+  mock.repo = `${root}${path.sep}.`;
+  const alias = call('git:stage', ['alias']);
+  mock.repo = other;
+  try {
+    expect(await call('git:stage', ['independent'])).toEqual({ staged: [], unstaged: [] });
+    expect(mock.git.add).not.toHaveBeenCalledWith(['alias']);
+    expect(mock.functions.getStatus).toHaveBeenCalledWith(other);
+  } finally { release(); await Promise.all([first, alias]); }
+  expect(mock.git.add.mock.calls.map(([paths]) => paths[0])).toEqual(['blocked', 'independent', 'alias']);
+  expect(mock.functions.getStatus).toHaveBeenCalledWith(`${root}${path.sep}.`);
+});
+it('keeps write admission usable after a missing repository and after a failed mutation', async () => {
+  mock.repo = path.join(root, 'missing-repository');
+  expect(await call('git:stage', ['missing'])).toHaveProperty('__error');
+  mock.repo = root;
+  mock.git.add.mockRejectedValueOnce(new Error('index locked'));
+  const [failed, recovered] = await Promise.all([call('git:stage', ['first']), call('git:stage', ['second'])]);
+  expect(failed).toEqual({ __error: 'index locked' });
+  expect(recovered).toEqual({ staged: [], unstaged: [] });
+  expect(mock.git.add.mock.calls.map(([paths]) => paths[0])).toEqual(['first', 'second']);
+});

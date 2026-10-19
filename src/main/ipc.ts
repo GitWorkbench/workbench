@@ -162,6 +162,7 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
   };
   const writes = new Set(['git:stage', 'git:unstage', 'git:stage-all', 'git:unstage-all', 'git:commit', 'git:merge', 'git:checkout', 'git:checkout-commit', 'git:stash', 'git:stash-pop', 'git:stash-apply', 'git:stage-hunk', 'git:unstage-hunk', 'git:stage-lines', 'git:unstage-lines', 'git:resolve-conflict-file', 'git:abort-operation', 'git:continue-operation', 'git:cherry-pick', 'git:reflog-restore-head', 'git:revert-commit', 'git:apply-patch-commit', 'git:apply-patch', 'git:flow:init', 'git:flow:start', 'git:flow:finish', 'git:branch-create', 'git:branch-delete', 'git:branch-rename', ...Object.keys(protectedActions)]);
   const pendingWrites = new Map<string, Promise<unknown>>();
+  let writeAdmissions: Promise<unknown> = Promise.resolve();
   type Handler = (...args: any[]) => Promise<unknown>;
   const handle = (channel: string, fn: Handler) => {
     ipcMain.handle(channel, async (_e, ...args) => {
@@ -187,10 +188,18 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
           };
           if (!repo || !(writes.has(channel) || /^git:(restore-points|rerere|rewrite|pr-worktree|split|stack|lfs|sparse):/.test(channel))) return run();
           // Snapshot and its action share one write queue, including staging operations.
-          const lockKey = await fs.promises.realpath(repo);
-          const previous = pendingWrites.get(lockKey) || Promise.resolve();
-          const current = previous.catch(() => {}).then(run);
-          pendingWrites.set(lockKey, current);
+          // Reserve a place before resolving aliases: filesystem completions can
+          // arrive out of order. Only admission is global; independent repositories
+          // can still run their mutations concurrently.
+          const admission = writeAdmissions.catch(() => {}).then(async () => {
+            const lockKey = await fs.promises.realpath(repo);
+            const previous = pendingWrites.get(lockKey) || Promise.resolve();
+            const current = previous.catch(() => {}).then(run);
+            pendingWrites.set(lockKey, current);
+            return { lockKey, current };
+          });
+          writeAdmissions = admission;
+          const { lockKey, current } = await admission;
           try { return await current; }
           finally { if (pendingWrites.get(lockKey) === current) pendingWrites.delete(lockKey); }
         });
