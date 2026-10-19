@@ -17,6 +17,12 @@ async function start(type = 'Feature') { await show(); fireEvent.click(screen.ge
 async function beginFinish() { await show(); fireEvent.click(screen.getByRole('button', { name: /Finish Current/ })); }
 
 describe('Git Flow workspace', () => {
+  it('returns to branch actions from another workspace tab', async () => {
+    await show();
+    fireEvent.click(screen.getByRole('button', { name: 'Configuration' }));
+    fireEvent.click(screen.getByRole('button', { name: /Start.*Finish/ }));
+    expect(screen.getByRole('button', { name: 'Start Feature Branch' })).toBeVisible();
+  });
   it('initializes an unconfigured repository with explicit defaults', async () => {
     mock.api.getGitFlowConfig.mockResolvedValueOnce(null).mockResolvedValue(config()); render(<GitFlowModal onClose={mock.close} />); await screen.findByText('Git Flow is not initialized yet'); fireEvent.click(screen.getByRole('button', { name: 'Initialize Git Flow Now' }));
     const { initialized: _initialized, ...options } = config();

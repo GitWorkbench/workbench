@@ -28,6 +28,15 @@ describe('native renderer bridge', () => {
 });
 
 describe('browser preview API', () => {
+  it('loads a safe preview API when the renderer window is unavailable', async () => {
+    vi.stubGlobal('window', undefined);
+    try {
+      vi.resetModules();
+      const { api } = await import('../../src/renderer/lib/api');
+      expect(await api.getStatus()).toMatchObject({ currentBranch: 'main' });
+      expect(await api.generateAiCommitMessage()).toMatchObject({ ok: true });
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('exposes stable realistic repository data without requiring Electron', async () => {
     const { api } = client;
     expect(await api.openRepo('/preview/repository')).toMatchObject({ ok: true, repo: { name: 'repository' } });
@@ -61,6 +70,7 @@ describe('browser preview API', () => {
     expect(await api.stepBisect('good')).toMatchObject({ ok: true }); expect(await api.getBisectState()).toEqual({ active: false });
     expect(await api.generateChangelog('v1')).toMatchObject({ toRef: 'HEAD' }); expect(await api.generateChangelog('v1', 'v2')).toMatchObject({ toRef: 'v2' });
     expect((api as any).unknownMethod).toBeUndefined();
+    expect(Reflect.get(api, '__proto__')).toBe(Object.prototype);
   });
   it('simulates request credentials per provider and creates visible requests', async () => {
     const { api } = client;

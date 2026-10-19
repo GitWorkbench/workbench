@@ -105,7 +105,7 @@ describe('first-launch guide', () => {
   it('does not crash if storage becomes unavailable only after the prompt is scheduled', async () => {
     render(<App />); await settle(); await advance(2400);
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('denied'); });
-    await advance(450); expect(mock.app.openUsageGuide).toHaveBeenCalledOnce();
+    await advance(450); expect(mock.app.openUsageGuide).not.toHaveBeenCalled();
   });
 });
 

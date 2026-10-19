@@ -109,7 +109,6 @@ const createMockApi = (): Api & GitWorkbenchApi => {
     getGitConfig: async () => ({ name: 'Jane Developer', email: 'jane@example.com' }),
     setGitConfig: async () => ({ ok: true }),
     getStagedDiff: async () => ({ ok: true, diff: 'diff --git a/file.ts b/file.ts\n+console.log("hello");' }),
-    generateAiCommitMessage: async () => ({ ok: true, message: 'feat: add new functionality' }),
     setActiveRepo: () => {},
 
     getStatus: async () => ({

@@ -77,31 +77,27 @@ export function App() {
 
   // Show the guide on first launch, without covering an active workflow.
   useEffect(() => {
-    if (isReady) {
-      try {
-        const completed = readAppStorage('guide_completed');
-        if (completed === undefined) return;
-        if (completed !== 'true') {
-          const timer = setTimeout(() => {
-            const state = useApp.getState();
-            const activeDialogs = [
-              state.usageGuideOpen, state.conflictedFileToResolve, state.rebaseModalBaseCommit,
-              state.createRepoModalOpen, state.commandPaletteOpen, state.pullRequestsModalOpen,
-              state.commitSplitOpen, state.branchStackOpen, state.restorePointsOpen,
-              state.resolutionMemoryOpen, state.rangeComparisonOpen, state.lfsManagerOpen,
-              state.sparseCheckoutOpen, state.gitFlowModalOpen, state.bisectModalOpen,
-              state.reflogModalOpen, state.changelogModalOpen, state.worktreesModalOpen,
-              state.simulateMergeBranch, state.tagModalCommit, state.addRemoteModalOpen,
-              state.shortcutsModalOpen
-            ];
-            if (useSettings.getState().isSettingsOpen || state.isOpeningRepo || activeDialogs.some(Boolean)) return;
-            try { if (readAppStorage('guide_completed') === 'true') return; } catch {}
-            openUsageGuide();
-          }, 450);
-          return () => clearTimeout(timer);
-        }
-      } catch {}
-    }
+    if (!isReady) return;
+    const completed = readAppStorage('guide_completed');
+    if (completed === undefined || completed === 'true') return;
+    const timer = setTimeout(() => {
+      const state = useApp.getState();
+      const activeDialogs = [
+        state.usageGuideOpen, state.conflictedFileToResolve, state.rebaseModalBaseCommit,
+        state.createRepoModalOpen, state.commandPaletteOpen, state.pullRequestsModalOpen,
+        state.commitSplitOpen, state.branchStackOpen, state.restorePointsOpen,
+        state.resolutionMemoryOpen, state.rangeComparisonOpen, state.lfsManagerOpen,
+        state.sparseCheckoutOpen, state.gitFlowModalOpen, state.bisectModalOpen,
+        state.reflogModalOpen, state.changelogModalOpen, state.worktreesModalOpen,
+        state.simulateMergeBranch, state.tagModalCommit, state.addRemoteModalOpen,
+        state.shortcutsModalOpen
+      ];
+      if (useSettings.getState().isSettingsOpen || state.isOpeningRepo || activeDialogs.some(Boolean)) return;
+      const latest = readAppStorage('guide_completed');
+      if (latest === undefined || latest === 'true') return;
+      openUsageGuide();
+    }, 450);
+    return () => clearTimeout(timer);
   }, [isReady, openUsageGuide]);
 
   // Periodic and on-focus background git fetch to keep repository and ahead/behind status updated

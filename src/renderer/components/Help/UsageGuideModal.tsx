@@ -31,7 +31,7 @@ export function UsageGuideModal({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState(''), [unreadOnly, setUnreadOnly] = useState(false);
   const [quickStartMode, setQuickStartMode] = useState(false);
   const [browseNavigation, setBrowseNavigation] = useState(0);
-  const [hideOnStartup, setHideOnStartup] = useState(() => { try { return readAppStorage('guide_completed') !== 'false'; } catch { return true; } });
+  const [hideOnStartup, setHideOnStartup] = useState(() => readAppStorage('guide_completed') !== 'false');
   const dialogRef = useRef<HTMLDivElement>(null), contentRef = useRef<HTMLDivElement>(null), searchRef = useRef<HTMLInputElement>(null), articleTitleRef = useRef<HTMLHeadingElement>(null);
   const overviewTitleRef = useRef<HTMLHeadingElement>(null), focusOverview = useRef(false), openingTool = useRef(false);
   const activeRepo = useApp(state => state.activeTab), openingRepo = useApp(state => state.isOpeningRepo);
@@ -86,7 +86,10 @@ export function UsageGuideModal({ onClose }: { onClose: () => void }) {
   const browseCategory = (id: GuideCategoryId | 'all') => { focusOverview.current = true; setBrowseNavigation(value => value + 1); setCategory(id); setSelectedId(null); setQuickStartMode(false); };
   const clearFilters = () => { focusOverview.current = true; setBrowseNavigation(value => value + 1); setQuery(''); setCategory('all'); setUnreadOnly(false); setSelectedId(null); setQuickStartMode(false); };
   const toggleCompleted = (id: string) => setCompleted(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
-  const actionUnavailable = (id: GuideActionId) => repositoryActions.has(id) && (!activeRepo || openingRepo);
+  const actionUnavailable = (id: GuideActionId) => {
+    const current = useApp.getState();
+    return repositoryActions.has(id) && (!current.activeTab || current.isOpeningRepo);
+  };
   const launch = (id: GuideActionId) => {
     if (actionUnavailable(id)) return;
     openingTool.current = true;
