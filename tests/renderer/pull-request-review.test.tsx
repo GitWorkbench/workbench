@@ -29,7 +29,8 @@ describe('pull request review loading and navigation', () => {
     mocks.api.getPullReview.mockResolvedValue(detail({ files: [{ ...detail().files[0], patch: '@@ -1,4001 +1,4001 @@\n' + ' line\n'.repeat(4001) }], comments: [{ id: 'note', author: 'Alice', body: 'General note' }] }));
     render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />);
     expect(await screen.findByText('Showing the first 4,000 patch lines. Open the provider for the rest.')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Conversation (1)' }));
+    expect(screen.getAllByTitle('Comment on old line')).toHaveLength(4000);
+    fireEvent.click(within(screen.getByRole('navigation')).getByRole('button', { name: 'Conversation (1)' }));
     expect(screen.getByText('General note')).toBeVisible();
     expect(screen.queryByText('Resolved')).not.toBeInTheDocument(); expect(screen.queryByText('Unresolved')).not.toBeInTheDocument();
   });
