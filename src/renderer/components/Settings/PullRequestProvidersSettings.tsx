@@ -4,6 +4,7 @@ import type { PullRequestCredentialStatus, PullRequestProvider } from '../../../
 import { useApp } from '../../store';
 import { api } from '../../lib/api';
 import { GitHubSignInPanel } from './GitHubSignInPanel';
+import { GitLabConnectionsSettings } from './GitLabConnectionsSettings';
 
 const providers: Array<{
   id: PullRequestProvider;
@@ -17,11 +18,6 @@ const providers: Array<{
     id: 'github', name: 'GitHub', detail: 'GitHub.com pull requests', tokenName: 'Personal access token',
     tokenUrl: 'https://github.com/settings/personal-access-tokens/new',
     instructions: 'Create a fine-grained token with Pull requests read and write access for the repositories you use.'
-  },
-  {
-    id: 'gitlab', name: 'GitLab', detail: 'GitLab.com and self-managed GitLab merge requests', tokenName: 'Personal access token',
-    tokenUrl: 'https://gitlab.com/-/user_settings/personal_access_tokens?name=Git%20Workbench&scopes=api',
-    instructions: 'Create a token with the api scope. For a self-managed server, create the token on that GitLab instance.'
   },
   {
     id: 'bitbucket', name: 'Bitbucket Cloud', detail: 'Bitbucket Cloud pull requests', tokenName: 'API token',
@@ -223,6 +219,11 @@ export function PullRequestProvidersSettings() {
             </section>
           );
         })}
+        <GitLabConnectionsSettings
+          servers={credentialStatus.gitlabServers ?? (credentialStatus.gitlab ? ['https://gitlab.com'] : [])}
+          loading={loading}
+          onChanged={refreshStatus}
+        />
       </div>
     </div>
   );

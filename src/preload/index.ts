@@ -14,6 +14,7 @@ export type Api = import('../shared/types').AdvancedGitApi & {
   downloadAppUpdate(): Promise<import('../shared/types').AppUpdateState>;
   installAppUpdate(): Promise<boolean>;
   openAppReleasePage(): Promise<void>;
+  openExternal(url: string): Promise<void>;
   onAppUpdateState(cb: (state: import('../shared/types').AppUpdateState) => void): () => void;
   openRepo(path: string): Promise<{ ok: boolean; repo?: { path: string; name: string }; error?: string }>;
   openRepoDialog(): Promise<{ ok: boolean; repo?: { path: string; name: string }; error?: string }>;
@@ -92,7 +93,8 @@ export type Api = import('../shared/types').AdvancedGitApi & {
   getRemotes(): Promise<import('../shared/types').RemoteInfo[]>;
   getPullRequestCredentialStatus(): Promise<import('../shared/types').PullRequestCredentialStatus>;
   savePullRequestCredential(provider: import('../shared/types').PullRequestProvider, credential: import('../shared/types').PullRequestCredential): Promise<{ ok: boolean; error?: string }>;
-  removePullRequestCredential(provider: import('../shared/types').PullRequestProvider): Promise<{ ok: boolean; error?: string }>;
+  removePullRequestCredential(provider: import('../shared/types').PullRequestProvider, serverUrl?: string): Promise<{ ok: boolean; error?: string }>;
+  testGitLabConnection(serverUrl: string, token?: string): Promise<{ ok: boolean; username?: string; error?: string }>;
   getPullRequestContext(remoteName?: string, providerOverride?: import('../shared/types').PullRequestProvider): Promise<import('../shared/types').PullRequestContext>;
   createHostedPullRequest(params: { remoteName: string; title: string; description: string; targetBranch: string; providerOverride?: import('../shared/types').PullRequestProvider }): Promise<{ ok: boolean; pullRequest?: import('../shared/types').HostedPullRequest; error?: string }>;
   addRemote(name: string, url: string): Promise<{ ok: boolean; error?: string }>;
@@ -196,6 +198,7 @@ const api: Api = {
   downloadAppUpdate: () => call('app-update:download'),
   installAppUpdate: () => call('app-update:install'),
   openAppReleasePage: () => call('app-update:open-release-page'),
+  openExternal: (url) => call('app:open-external', url),
   onAppUpdateState: (cb) => {
     const handler = (_e: IpcRendererEvent, next: import('../shared/types').AppUpdateState) => cb(next);
     ipcRenderer.on('app-update:state', handler);
@@ -274,7 +277,8 @@ const api: Api = {
   getRemotes: () => call('git:get-remotes'),
   getPullRequestCredentialStatus: () => call('git:pull-requests:credentials'),
   savePullRequestCredential: (provider, credential) => call('git:pull-requests:save-credential', provider, credential),
-  removePullRequestCredential: (provider) => call('git:pull-requests:remove-credential', provider),
+  removePullRequestCredential: (provider, serverUrl) => call('git:pull-requests:remove-credential', provider, serverUrl),
+  testGitLabConnection: (serverUrl, token) => call('git:pull-requests:test-gitlab', serverUrl, token),
   getPullRequestContext: (remoteName, providerOverride) => call('git:pull-requests:context', remoteName, providerOverride),
   createHostedPullRequest: (params) => call('git:pull-requests:create', params),
   addRemote: (name, url) => call('git:add-remote', name, url),

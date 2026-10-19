@@ -70,6 +70,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 - Keep credentials and OAuth refresh logic in the main process using the existing secure-storage implementation. Never put tokens in renderer state, app preferences, browser storage, URLs, logs, fixtures, or commits.
 - `src/shared/github-app.json` contains public app metadata only. Private keys, client secrets, personal tokens, and downloaded `.pem` files must never be bundled or committed.
 - Preserve the distinct GitHub, GitLab, and Bitbucket adapters, permissions, pagination, error handling, and supported host boundaries. Do not treat an arbitrary remote host as a trusted provider endpoint.
+- GitLab connections are scoped to their normalized HTTPS instance URL, including port and base path. Pass the configured remote URL to the credential resolver for all hosted operations; never reuse another instance's token. Keep REST and GraphQL base paths consistent. See [GitLab connections](docs/gitlab-connections.md).
 - Validate external URLs and redirect destinations before forwarding credentials or opening them. Handle expired sessions, missing permissions, rate limits, offline state, and changed PR source revisions.
 - Repository pushes continue to use the user's configured Git authentication. Provider API sign-in does not replace SSH keys or credential helpers.
 
@@ -138,5 +139,6 @@ Follow the user's latest validation instructions. Do not add or run tests or typ
 - [Typography and settings scopes](docs/typography.md)
 - [Advanced workflows and recovery](docs/advanced-features.md)
 - [GitHub sign-in configuration](docs/github-sign-in.md)
+- [GitLab.com and self-hosted connections](docs/gitlab-connections.md)
 - [Application identity and data locations](docs/branding.md)
 - [Disposable demonstration repositories](docs/demo-repositories.md)

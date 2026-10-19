@@ -2,7 +2,7 @@ import type { PullReviewTarget, PullReviewDetail, PullReviewFile, PullReviewSubm
 import { apiPath, hostedReviewClient, requestJson } from './pull-requests';
 import { reviewDiffLines } from '../../shared/review-diff';
 
-type Credentials = (provider: PullRequestProvider) => PullRequestCredential | null;
+type Credentials = (provider: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null;
 type Row = Record<string, any>;
 
 async function client(repo: string, target: PullReviewTarget, credentials: Credentials) {
@@ -12,7 +12,7 @@ async function client(repo: string, target: PullReviewTarget, credentials: Crede
   const pr = `${root}/${target.provider === 'gitlab' ? 'merge_requests' : target.provider === 'github' ? 'pulls' : 'pullrequests'}/${target.requestId}`;
   return { root, pr, apiBase: config.apiBase, get: <T = Row>(path: string) => requestJson<T>(config, credential, path, 'GET'),
     graph: async (query: string, variables?: unknown) => {
-      const result = await requestJson<Row>({ ...config, apiBase: new URL(config.apiBase).origin }, credential, '/api/graphql', 'POST', { query, variables });
+      const result = await requestJson<Row>({ ...config, apiBase: config.apiBase.replace(/\/api\/v4$/, '') }, credential, '/api/graphql', 'POST', { query, variables });
       if (result.errors?.length) throw new Error(result.errors.map((e: Row) => e.message).join('; '));
       return result.data;
     },

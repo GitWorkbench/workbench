@@ -1,6 +1,7 @@
 import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
+import { matchGitLabServer, normalizeGitLabServer } from '../../shared/gitlab-server';
 import type {
   PullRequestCredential,
   PullRequestCredentialStatus,
@@ -18,7 +19,9 @@ export interface StoredProviderCredential extends PullRequestCredential {
     reauthRequired?: boolean;
   };
 }
-type CredentialMap = Partial<Record<PullRequestProvider, StoredProviderCredential>>;
+type CredentialMap = Partial<Record<PullRequestProvider, StoredProviderCredential>> & {
+  gitlabServers?: Record<string, StoredProviderCredential>;
+};
 
 const credentialFile = () => path.join(app.getPath('userData'), 'hosted-git-credentials.enc');
 
@@ -58,13 +61,24 @@ export function getPullRequestCredentialStatus(): PullRequestCredentialStatus {
   const saved = readCredentials();
   return {
     github: !!saved.github?.token,
-    gitlab: !!saved.gitlab?.token,
+    gitlab: !!saved.gitlab?.token || Object.values(saved.gitlabServers || {}).some(credential => !!credential.token),
+    gitlabServers: [...new Set([
+      ...(saved.gitlab?.token ? ['https://gitlab.com'] : []),
+      ...Object.keys(saved.gitlabServers || {}).filter(server => !!saved.gitlabServers?.[server]?.token)
+    ])].sort(),
     bitbucket: !!saved.bitbucket?.token && !!saved.bitbucket?.username
   };
 }
 
-export function getPullRequestCredential(provider: PullRequestProvider): StoredProviderCredential | null {
-  return readCredentials()[provider] ?? null;
+export function getPullRequestCredential(provider: PullRequestProvider, remoteUrl?: string): StoredProviderCredential | null {
+  const saved = readCredentials();
+  if (provider !== 'gitlab') return saved[provider] ?? null;
+  const connections = { ...saved.gitlabServers };
+  if (saved.gitlab?.token) connections['https://gitlab.com'] = { ...saved.gitlab, serverUrl: 'https://gitlab.com' };
+  const server = remoteUrl
+    ? matchGitLabServer(remoteUrl, Object.keys(connections))
+    : 'https://gitlab.com';
+  return server ? connections[server] ?? null : null;
 }
 
 /** Only main-process OAuth code can write this metadata; manual tokens replace it. */
@@ -76,18 +90,31 @@ export function saveGitHubOAuthCredential(credential: StoredProviderCredential):
 }
 
 export function savePullRequestCredential(provider: PullRequestProvider, credential: PullRequestCredential): void {
+  if (!credential || typeof credential.token !== 'string' || (credential.username !== undefined && typeof credential.username !== 'string')) throw new Error('Enter a valid provider credential.');
   const token = credential.token.trim();
   const username = credential.username?.trim();
   if (!token) throw new Error('Enter an access token before saving.');
+  if (/[\r\n\0]/.test(token)) throw new Error('The access token contains invalid characters.');
   if (provider === 'bitbucket' && !username) throw new Error('Enter the Atlassian account email used to create this Bitbucket API token.');
   const credentials = readCredentials();
-  credentials[provider] = { token, ...(provider === 'bitbucket' ? { username } : {}) };
+  if (provider === 'gitlab') {
+    const serverUrl = normalizeGitLabServer(credential.serverUrl ?? 'https://gitlab.com');
+    credentials.gitlabServers = { ...credentials.gitlabServers, [serverUrl]: { token, serverUrl } };
+    if (serverUrl === 'https://gitlab.com') delete credentials.gitlab;
+  } else credentials[provider] = { token, ...(provider === 'bitbucket' ? { username } : {}) };
   writeCredentials(credentials);
 }
 
-export function removePullRequestCredential(provider: PullRequestProvider): void {
+export function removePullRequestCredential(provider: PullRequestProvider, serverUrl?: string): void {
   const credentials = readCredentials();
-  delete credentials[provider];
+  if (provider === 'gitlab') {
+    const server = normalizeGitLabServer(serverUrl ?? 'https://gitlab.com');
+    if (server === 'https://gitlab.com') delete credentials.gitlab;
+    if (credentials.gitlabServers) {
+      delete credentials.gitlabServers[server];
+      if (!Object.keys(credentials.gitlabServers).length) delete credentials.gitlabServers;
+    }
+  } else delete credentials[provider];
   if (Object.keys(credentials).length === 0) {
     try { fs.unlinkSync(credentialFile()); } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;

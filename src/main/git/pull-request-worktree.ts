@@ -7,7 +7,7 @@ import { gitWithEnvironment } from './advanced-process';
 import { apiPath, hostedReviewClient, requestJson } from './pull-requests';
 import { getRemotes } from './objects-navigation';
 
-export async function openPullRequestWorktree(repo: string, input: PullReviewTarget & { head: string; directory: string; branch: string }, credentials: (p: PullRequestProvider) => PullRequestCredential | null) {
+export async function openPullRequestWorktree(repo: string, input: PullReviewTarget & { head: string; directory: string; branch: string }, credentials: (p: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null) {
   if (!input || !['github', 'gitlab', 'bitbucket'].includes(input.provider) || !/^\d+$/.test(input.requestId) || !/^[a-f0-9]{40,64}$/i.test(input.head)) throw new Error('Load the current PR revision before opening a worktree.');
   const git = gitWithEnvironment(repo, { GIT_LFS_SKIP_SMUDGE: '1' }, 120_000);
   if (!input.branch || input.branch.startsWith('-')) throw new Error('Enter a new local review branch name.');

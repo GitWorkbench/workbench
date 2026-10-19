@@ -184,7 +184,7 @@ export async function discardStackRestack(repo: string, id: string) {
   } finally { await release(); }
 }
 
-export async function retargetPullRequest(repo: string, input: PullReviewTarget & { head: string; previousTarget: string; newTarget: string }, credentials: (p: PullRequestProvider) => PullRequestCredential | null) {
+export async function retargetPullRequest(repo: string, input: PullReviewTarget & { head: string; previousTarget: string; newTarget: string }, credentials: (p: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null) {
   if (!input || !['github', 'gitlab', 'bitbucket'].includes(input.provider) || !/^\d+$/.test(input.requestId) || !/^[a-f0-9]{40,64}$/i.test(input.head)) throw new Error('Load the current request revision first.');
   await branchHash(repo, input.newTarget);
   const { config, credential } = await hostedReviewClient(repo, input.remoteName, input.provider, credentials);

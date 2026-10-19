@@ -102,7 +102,9 @@ import {
 import { startBisect, stepBisect, resetBisect, getBisectState } from './git/bisect';
 import { generateChangelog } from './git/changelog';
 import { getReflog, createRecoveryBranch, restoreHeadFromReflog } from './git/reflog';
-import { getPullRequestContext, createHostedPullRequest } from './git/pull-requests';
+import { getPullRequestContext, createHostedPullRequest, testGitLabConnection } from './git/pull-requests';
+import { normalizeGitLabServer } from '../shared/gitlab-server';
+import { externalWebUrl } from '../shared/external-url';
 import { getPullReview, submitPullReview } from './git/pull-request-review';
 import { pinnedRepositories, pinRepository, repositoryOverview } from './git/repository-dashboard';
 import { openPullRequestWorktree } from './git/pull-request-worktree';
@@ -220,6 +222,10 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
   handle('github-auth:open', async (id: string) => openGitHubSignInPage(id));
   handle('github-auth:copy', async (id: string) => copyGitHubSignInCode(id));
   handle('github-auth:refresh-account', async () => refreshGitHubAccount());
+
+  handle('app:open-external', async (url: unknown) => {
+    await shell.openExternal(externalWebUrl(url));
+  });
 
   handle('repo:open-dialog', async () => {
     const win = getWin();
@@ -787,10 +793,19 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
     return { ok: true };
   });
 
-  handle('git:pull-requests:remove-credential', async (provider: unknown) => {
+  handle('git:pull-requests:test-gitlab', async (serverUrl: string, token?: string) => {
+    const server = normalizeGitLabServer(serverUrl);
+    if (token !== undefined && typeof token !== 'string') throw new Error('Enter a valid GitLab access token.');
+    const credential = token !== undefined ? { token, serverUrl: server } : getPullRequestCredential('gitlab', `${server}/`);
+    if (!credential || (token === undefined && normalizeGitLabServer(credential.serverUrl ?? 'https://gitlab.com') !== server)) throw new Error('Connect this GitLab server first.');
+    const username = await testGitLabConnection(server, credential);
+    return { ok: true, username };
+  });
+
+  handle('git:pull-requests:remove-credential', async (provider: unknown, serverUrl?: string) => {
     if (!isPullRequestProvider(provider)) throw new Error('Choose GitHub, GitLab, or Bitbucket.');
     if (provider === 'github') cancelGitHubSignIn();
-    removePullRequestCredential(provider);
+    removePullRequestCredential(provider, serverUrl);
     if (provider === 'github') githubCredentialsChanged();
     return { ok: true };
   });

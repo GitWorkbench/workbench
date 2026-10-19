@@ -10,6 +10,7 @@
 
 .home-content { max-width: 1320px; margin: 0 auto; padding: 36px 36px 48px; }
 .home-page button { cursor: pointer; }
+.home-page button, .home-page input { font-size: inherit; }
 .home-page .btn-primary, .home-page .btn-secondary { font-size: var(--content-text-body); line-height: 1.4; }
 .home-page button:disabled { cursor: default; opacity: .45; }
 .home-page button:focus-visible, .home-page summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
@@ -73,7 +74,7 @@
 .home-card-open { flex: 1; min-width: 0; display: flex; align-items: center; text-align: left; gap: 11px; border-radius: 5px; }
 .home-repository-icon { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 10px; color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 8%, var(--color-panel2)); border: 1px solid color-mix(in srgb, var(--color-accent) 16%, var(--color-edge)); }
 .home-card-name, .home-recent-name { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.home-card-name strong { font-size: var(--content-text-subheading); font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.home-card-name strong { font-size: var(--content-text-body); line-height: 1.5; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .home-card-open:hover strong, .home-recent-open:hover strong { color: var(--color-accent); }
 .home-card-name > span { font-size: var(--content-text-caption); color: var(--color-dim); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .home-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 27px; height: 27px; border-radius: 6px; color: var(--color-dim); transition: color 150ms, background-color 150ms; }
@@ -138,14 +139,14 @@
 .home-recent-open { display: flex; flex: 1; min-width: 0; align-items: center; gap: 9px; text-align: left; border-radius: 5px; }
 .home-recent-icon { display: grid; place-items: center; width: 31px; height: 34px; flex-shrink: 0; color: var(--color-dim); }
 .home-recent-name { gap: 5px; }
-.home-recent-name strong { font-size: var(--content-text-subheading); font-weight: 500; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.home-recent-name strong { font-size: var(--content-text-body); line-height: 1.5; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .home-recent-name > span { color: var(--color-dim); font-size: var(--content-text-caption); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .home-recent-empty { padding: 25px 18px; font-size: var(--content-text-body); line-height: 1.7; color: var(--color-dim); }
 .home-recent-browse { display: flex; align-items: center; gap: 8px; width: 100%; border-top: 1px solid var(--color-edge); padding: 15px 18px; color: var(--color-dim); font-size: var(--content-text-body); line-height: 1.5; text-align: left; }
 .home-recent-browse svg:last-child { margin-left: auto; }
 .home-recent-browse:hover { background: var(--color-panel2); color: var(--color-fg); }
 .home-tools { padding: 0 2px; }
-.home-tools h2 { color: var(--color-dim); font-size: var(--content-text-caption); text-transform: uppercase; letter-spacing: .08em; font-weight: 500; padding: 0 11px 11px; }
+.home-tools h2 { color: var(--color-fg); font-size: var(--content-text-subheading); line-height: 1.4; font-weight: 600; padding: 0 11px 11px; }
 .home-tools > button { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; padding: 13px 9px; border-radius: 8px; transition: background 150ms; }
 .home-tools > button:hover { background: var(--color-panel); }
 .home-tool-icon { display: grid; place-items: center; width: 32px; height: 32px; color: var(--color-dim); background: var(--color-panel); border: 1px solid var(--color-edge); border-radius: 8px; }

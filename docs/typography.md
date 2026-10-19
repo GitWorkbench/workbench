@@ -23,6 +23,7 @@ Existing interface/code sizes are retained within supported ranges. On the first
 
 - The document keeps its 13px root scale for `rem` layout dimensions. Interface text uses `--font-size-ui` and the Tailwind text-size tokens, separately from layout dimensions.
 - Home and guide use `--font-size-home` and `--font-size-guide` through scoped content typography tokens.
+- Home uses one size for repository names and controls, one shared supporting size for paths/status labels, and one section-heading size across pinned, recent, and setup panels. Its title and counters use fixed offsets from the Home text setting, so larger preferences do not exaggerate the hierarchy. Supporting text stays at least 11px. These overrides do not change guide text or the interface setting.
 - `font-mono` selects a font family only. Code sizing is opt-in through `code-surface` or the merge editor’s explicit code size. Code line heights are unitless, so larger code remains readable without overlapping lines.
 - Font limits, defaults, migration and setters share one definition in the settings store. Typography values are validated on load, save and application to the document.
 

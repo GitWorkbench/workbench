@@ -2,6 +2,8 @@ import type { Api } from '../../preload/index';
 import type { GitWorkbenchApi, AiCommitConfig } from '../../shared/types';
 import { generateCommitMessage } from '../../shared/ai';
 import { APP_VERSION } from './appVersion';
+import { normalizeGitLabServer } from '../../shared/gitlab-server';
+import { externalWebUrl } from '../../shared/external-url';
 
 // In browser preview environments where Electron preload is not injected,
 // provide realistic mock data so UI development, testing, and screenshots work seamlessly.
@@ -13,6 +15,7 @@ const createMockApi = (): Api & GitWorkbenchApi => {
     gitlab: false,
     bitbucket: false
   };
+  const mockGitLabServers = new Set<string>();
   const mockPullRequests: import('../../shared/types').HostedPullRequest[] = [{
     id: '42', title: 'Add hosted pull request context', state: 'open', draft: false,
     author: 'jane-developer', sourceBranch: 'feature/conflict-ui', targetBranch: 'main',
@@ -99,6 +102,11 @@ const createMockApi = (): Api & GitWorkbenchApi => {
     }),
     installAppUpdate: async () => false,
     openAppReleasePage: async () => {},
+    openExternal: async (url: string) => {
+      const target = externalWebUrl(url);
+      if (typeof window === 'undefined') throw new Error('Opening a web link requires a browser or the desktop app.');
+      window.open(target, '_blank', 'noopener,noreferrer');
+    },
     onAppUpdateState: () => () => {},
     openRepo: async (p: string) => ({ ok: true, repo: { path: p, name: p.split('/').pop() || p } }),
     openRepoDialog: async () => ({ ok: true, repo: { path: activeRepo, name: 'git-workbench' } }),
@@ -222,13 +230,20 @@ const createMockApi = (): Api & GitWorkbenchApi => {
       { name: 'upstream', fetchUrl: 'git@github.com:core/upstream.git', pushUrl: 'git@github.com:core/upstream.git' }
     ],
 
-    getPullRequestCredentialStatus: async () => ({ ...mockProviderCredentials }),
-    savePullRequestCredential: async (provider: 'github' | 'gitlab' | 'bitbucket') => {
+    getPullRequestCredentialStatus: async () => ({ ...mockProviderCredentials, gitlabServers: [...mockGitLabServers] }),
+    testGitLabConnection: async (serverUrl: string, token?: string) => {
+      const server = normalizeGitLabServer(serverUrl);
+      if (!token?.trim() && !mockGitLabServers.has(server)) return { ok: false, error: 'Enter an access token for the browser preview.' };
+      return { ok: true, username: 'preview-user' };
+    },
+    savePullRequestCredential: async (provider: 'github' | 'gitlab' | 'bitbucket', credential: import('../../shared/types').PullRequestCredential) => {
+      if (provider === 'gitlab') mockGitLabServers.add(normalizeGitLabServer(credential.serverUrl ?? 'https://gitlab.com'));
       mockProviderCredentials[provider] = true;
       return { ok: true };
     },
-    removePullRequestCredential: async (provider: 'github' | 'gitlab' | 'bitbucket') => {
-      mockProviderCredentials[provider] = false;
+    removePullRequestCredential: async (provider: 'github' | 'gitlab' | 'bitbucket', serverUrl?: string) => {
+      if (provider === 'gitlab') mockGitLabServers.delete(normalizeGitLabServer(serverUrl ?? 'https://gitlab.com'));
+      mockProviderCredentials[provider] = provider === 'gitlab' && mockGitLabServers.size > 0;
       return { ok: true };
     },
     getPullRequestContext: async (remoteName?: string, providerOverride?: 'github' | 'gitlab' | 'bitbucket') => {

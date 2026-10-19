@@ -8,12 +8,14 @@ import type {
 import { gitFor } from './core';
 import { getRemotes } from './objects-navigation';
 import { githubRequestCredential, githubSessionRejected } from './github-auth';
+import { normalizeGitLabServer } from '../../shared/gitlab-server';
 
 interface HostedRepository {
   provider: PullRequestProvider;
   host: string;
   path: string;
   webUrl: string;
+  serverUrl?: string;
 }
 
 interface PullRequestApiConfig extends HostedRepository {
@@ -24,7 +26,7 @@ function normalizeRemoteUrl(rawUrl: string): URL | null {
   const value = rawUrl.trim();
   if (!value) return null;
   try {
-    const match = value.match(/^[^@\s]+@([^:\s]+):(.+)$/);
+    const match = value.match(/^[^@:/\s]+@([^:\s]+):(.+)$/);
     if (match) {
       return new URL(`https://${match[1]}/${match[2]}`);
     }
@@ -36,13 +38,21 @@ function normalizeRemoteUrl(rawUrl: string): URL | null {
   }
 }
 
-function parseHostedRepository(remote: RemoteInfo, providerOverride?: PullRequestProvider): HostedRepository | null {
+function parseHostedRepository(remote: RemoteInfo, providerOverride?: PullRequestProvider,
+  getCredential?: (provider: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null): HostedRepository | null {
   const parsed = normalizeRemoteUrl(remote.fetchUrl || remote.pushUrl);
   if (!parsed) return null;
   const host = parsed.hostname.toLowerCase();
+  const gitlabCredential = host !== 'github.com' && host !== 'bitbucket.org'
+    ? getCredential?.('gitlab', remote.fetchUrl || remote.pushUrl) : null;
+  const serverUrl = gitlabCredential?.serverUrl;
   let repositoryPath: string;
   try {
     repositoryPath = decodeURIComponent(parsed.pathname.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, ''));
+    if (serverUrl) {
+      const prefix = decodeURIComponent(new URL(serverUrl).pathname).replace(/^\/+|\/+$/g, '');
+      if (prefix) repositoryPath = repositoryPath.slice(prefix.length + 1);
+    }
   } catch {
     return null;
   }
@@ -53,7 +63,7 @@ function parseHostedRepository(remote: RemoteInfo, providerOverride?: PullReques
   if (!provider) {
     if (host === 'github.com') provider = 'github';
     else if (host === 'bitbucket.org') provider = 'bitbucket';
-    else if (host === 'gitlab.com' || host.includes('gitlab')) provider = 'gitlab';
+    else if (host === 'gitlab.com' || serverUrl) provider = 'gitlab';
   }
   if (!provider) return null;
   if (provider === 'github' && host !== 'github.com') return null;
@@ -62,8 +72,9 @@ function parseHostedRepository(remote: RemoteInfo, providerOverride?: PullReques
   if (provider === 'bitbucket' && parts.length !== 2) return null;
 
   const path = parts.join('/');
-  const webUrl = `https://${host}/${path}`;
-  return { provider, host, path, webUrl };
+  const instance = provider === 'gitlab' ? serverUrl || `https://${parsed.protocol === 'ssh:' ? host : parsed.host}` : undefined;
+  const webUrl = `${instance || `https://${host}`}/${parts.map(encodeURIComponent).join('/')}`;
+  return { provider, host, path, webUrl, ...(instance ? { serverUrl: instance } : {}) };
 }
 
 function apiConfig(repository: HostedRepository): PullRequestApiConfig {
@@ -71,7 +82,7 @@ function apiConfig(repository: HostedRepository): PullRequestApiConfig {
     case 'github':
       return { ...repository, apiBase: 'https://api.github.com' };
     case 'gitlab':
-      return { ...repository, apiBase: `https://${repository.host}/api/v4` };
+      return { ...repository, apiBase: `${repository.serverUrl}/api/v4` };
     case 'bitbucket':
       return { ...repository, apiBase: 'https://api.bitbucket.org/2.0' };
   }
@@ -123,6 +134,12 @@ export async function requestJson<T>(
   payload?: unknown,
   asText = false
 ): Promise<T> {
+  if (config.provider === 'gitlab') {
+    const server = normalizeGitLabServer(credential.serverUrl ?? 'https://gitlab.com');
+    if (config.apiBase !== `${server}/api/v4` && !(config.apiBase === server && path === '/api/graphql')) {
+      throw new Error('Connect this GitLab server in Settings → Pull Request Providers. Tokens are only sent to their configured server.');
+    }
+  }
   const activeCredential = config.provider === 'github' ? await githubRequestCredential(credential) : credential;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
@@ -138,7 +155,7 @@ export async function requestJson<T>(
       if (![301, 302, 307, 308].includes(response.status)) break;
       const location = response.headers.get('location');
       const next = location && new URL(location, url);
-      if (method !== 'GET' || redirects >= 3 || !next || next.origin !== new URL(config.apiBase).origin || !next.pathname.startsWith(new URL(config.apiBase).pathname.replace(/\/$/, '') + apiPath(config) + '/')) {
+      if (method !== 'GET' || redirects >= 3 || !next || next.username || next.password || next.origin !== new URL(config.apiBase).origin || !next.pathname.startsWith(new URL(config.apiBase).pathname.replace(/\/$/, '') + apiPath(config) + '/')) {
         throw new Error('The provider returned an unsupported redirect. Open the request on the provider.');
       }
       await response.body?.cancel();
@@ -151,6 +168,7 @@ export async function requestJson<T>(
         throw new Error('The GitHub session is invalid or expired. Reconnect in Settings → Pull Request Providers.');
       }
       if (config.provider === 'github' && response.status === 404) throw new Error('This repository was not found or GitHub cannot grant access. In Settings → Pull Request Providers, choose repositories on GitHub (or check your token permissions), then refresh.');
+      if (config.provider === 'gitlab' && path === '/user' && response.status === 404) throw new Error('The GitLab API was not found at this server URL. Enter the instance URL, including its port or base path if required.');
       throw errorForResponse(config.provider, response.status, body);
     }
     if (body.length > 12_000_000) throw new Error('The provider response is too large. Review this request on the provider.');
@@ -158,20 +176,32 @@ export async function requestJson<T>(
   };
   return readResponse().catch((error: unknown) => {
     if (error instanceof Error && error.name === 'AbortError') throw new Error('The provider API did not respond within 20 seconds. Check your connection and try again.');
-    if (error instanceof TypeError) throw new Error('Could not connect to the provider API. Check your internet connection and try again.');
+    if (error instanceof SyntaxError) throw new Error('The server did not return a valid API response. Check the provider URL and any proxy or SSO requirements.');
+    if (error instanceof TypeError) throw new Error('Could not connect to the provider API. Check the server URL, network or VPN, and that its HTTPS certificate is trusted.');
     throw error;
   }).finally(() => {
     clearTimeout(timer);
   });
 }
 
+export async function testGitLabConnection(serverUrl: string, credential: PullRequestCredential): Promise<string> {
+  const server = normalizeGitLabServer(serverUrl);
+  if (!credential || typeof credential.token !== 'string' || !credential.token.trim() || /[\r\n\0]/.test(credential.token)) throw new Error('Enter a valid GitLab access token.');
+  const user = await requestJson<{ username?: unknown }>({
+    provider: 'gitlab', host: new URL(server).hostname, serverUrl: server, path: '', webUrl: server, apiBase: `${server}/api/v4`
+  }, { token: credential.token.trim(), serverUrl: server }, '/user', 'GET');
+  if (!user || typeof user.username !== 'string' || !user.username) throw new Error('The server did not return a GitLab account. Check the instance URL and token.');
+  return user.username;
+}
+
 /** Resolve credentials only against a configured remote, never a renderer-provided API URL. */
 export async function hostedReviewClient(repoPath: string, remoteName: string, provider: PullRequestProvider,
-  getCredential: (provider: PullRequestProvider) => PullRequestCredential | null) {
+  getCredential: (provider: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null) {
   const remote = (await getRemotes(repoPath)).find(item => item.name === remoteName);
-  const hosted = remote && parseHostedRepository(remote, provider);
+  if (!remote) throw new Error('Select a supported remote for this review.');
+  const hosted = parseHostedRepository(remote, provider, getCredential);
   if (!hosted) throw new Error('Select a supported remote for this review.');
-  const credential = getCredential(provider);
+  const credential = getCredential(provider, remote.fetchUrl || remote.pushUrl);
   if (!credential?.token) throw new Error('Connect this provider in Settings → Pull Request Providers.');
   return { config: apiConfig(hosted), credential };
 }
@@ -261,7 +291,7 @@ async function resolvePullRequestContext(
   repoPath: string,
   remoteName?: string,
   providerOverride?: PullRequestProvider,
-  getCredential?: (provider: PullRequestProvider) => PullRequestCredential | null
+  getCredential?: (provider: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null
 ): Promise<ResolvedPullRequestContext> {
   const git = gitFor(repoPath);
   const currentBranch = (await git.raw(['branch', '--show-current'])).trim();
@@ -274,16 +304,16 @@ async function resolvePullRequestContext(
     return { ok: false, context: { provider: null, remoteName: null, currentBranch, defaultBranch: '', credentialConfigured: false, pullRequests: [], error: 'This repository has no Git remote. Add a GitHub, GitLab, or Bitbucket remote first.' } };
   }
 
-  const hosted = parseHostedRepository(selected, providerOverride);
+  const hosted = parseHostedRepository(selected, providerOverride, getCredential);
   if (!hosted) {
     return { ok: false, context: {
       provider: null, remoteName: selected.name, remoteUrl: selected.fetchUrl || selected.pushUrl, currentBranch,
       defaultBranch: '', credentialConfigured: false, pullRequests: [],
-      error: 'This remote is not a supported GitHub.com, GitLab, or Bitbucket Cloud repository. For a self-managed GitLab host, choose GitLab in the provider selector.'
+      error: 'This remote is not a recognized provider. For self-hosted GitLab, add its server URL and token in Settings → Pull Request Providers.'
     } };
   }
 
-  const credential = getCredential?.(hosted.provider) ?? null;
+  const credential = getCredential?.(hosted.provider, selected.fetchUrl || selected.pushUrl) ?? null;
   const context: PullRequestContext = {
     provider: hosted.provider,
     remoteName: selected.name,
@@ -317,7 +347,7 @@ export async function getPullRequestContext(
   repoPath: string,
   remoteName?: string,
   providerOverride?: PullRequestProvider,
-  getCredential?: (provider: PullRequestProvider) => PullRequestCredential | null
+  getCredential?: (provider: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null
 ): Promise<PullRequestContext> {
   return (await resolvePullRequestContext(repoPath, remoteName, providerOverride, getCredential)).context;
 }
@@ -329,7 +359,7 @@ export async function createHostedPullRequest(
   description: string,
   targetBranch: string,
   providerOverride: PullRequestProvider | undefined,
-  getCredential: (provider: PullRequestProvider) => PullRequestCredential | null
+  getCredential: (provider: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null
 ): Promise<HostedPullRequest> {
   const resolved = await resolvePullRequestContext(repoPath, remoteName, providerOverride, getCredential);
   if (!resolved.ok) throw new Error(resolved.context.error);
@@ -341,7 +371,7 @@ export async function createHostedPullRequest(
   if (!destination) throw new Error('Choose a target branch.');
   if (sourceBranch === destination) throw new Error('The source and target branches must be different.');
   if (!title.trim()) throw new Error('Enter a title for the request.');
-  const credential = getCredential(hosted.provider);
+  const credential = getCredential(hosted.provider, context.remoteUrl);
   if (!credential) throw new Error(`Connect your ${providerLabel(hosted.provider)} account before creating a request.`);
 
   // Push first so the hosted provider can resolve the source branch. If API creation

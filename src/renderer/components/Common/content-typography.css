@@ -16,3 +16,13 @@
   font-size: var(--content-text-body);
   line-height: 1.5;
 }
+
+/* Home uses a compact scale; repeated labels keep the same size in every panel. */
+.home-page {
+  --content-text-caption: max(11px, calc(var(--content-font-size) - 1px));
+  --content-text-small: var(--content-text-caption);
+  --content-text-subheading: calc(var(--content-font-size) + 1px);
+  --content-text-heading: calc(var(--content-font-size) + 5px);
+  --content-text-title: calc(var(--content-font-size) + 9px);
+  --content-text-metric: var(--content-text-heading);
+}

@@ -25,7 +25,7 @@ export async function pinRepository(configDirectory: string, repo: string, pinne
   return next;
 }
 
-export async function repositoryOverview(repo: string, hosted: boolean, getCredential: (provider: PullRequestProvider) => PullRequestCredential | null): Promise<RepositoryOverview> {
+export async function repositoryOverview(repo: string, hosted: boolean, getCredential: (provider: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null): Promise<RepositoryOverview> {
   const result: RepositoryOverview = { path: repo, branch: '', changed: 0, staged: 0, conflicts: 0, ahead: 0, behind: 0, checkedAt: new Date().toISOString() };
   try {
     const status = await withGit(repo, git => git.status(), { timeout: { block: 15_000 } });

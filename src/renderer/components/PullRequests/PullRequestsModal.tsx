@@ -66,7 +66,7 @@ export function PullRequestsModal() {
     context?.pullRequests.find((request) => request.sourceBranch === context.currentBranch && request.state === 'open') || null,
   [context]);
   const selectedRequest = context?.pullRequests.find((request) => request.id === selectedRequestId) || currentBranchRequest;
-  const configured = activeProvider ? !!credentialStatus?.[activeProvider] : false;
+  const configured = context ? context.credentialConfigured : activeProvider ? !!credentialStatus?.[activeProvider] : false;
 
   const loadContext = useCallback(async (remoteName?: string, override?: PullRequestProvider, currentRemotes?: RemoteInfo[]) => {
     const requestId = ++loadId.current;
@@ -256,7 +256,8 @@ export function PullRequestsModal() {
             {providerNeedsChoosing ? (
               <div className="p-5 border-b border-edge bg-panel2/25 space-y-2">
                 <div className="text-xs font-medium text-fg">Choose the hosting service</div>
-                <p className="text-[11px] text-dim">Git Workbench could not identify this remote. This also works with self-managed GitLab servers.</p>
+                <p className="text-[11px] text-dim">For a self-hosted GitLab remote, connect its instance URL in provider settings, then reopen this workspace.</p>
+                <button className="btn-secondary text-xs" onClick={openProviderSettings}>Configure GitLab server</button>
                 <select className="input max-w-xs text-xs" value={providerOverride || ''} onChange={(event) => selectProvider(event.target.value as PullRequestProvider | '')}>
                   <option value="">Select provider…</option>
                   <option value="gitlab">GitLab (including self-managed)</option>
