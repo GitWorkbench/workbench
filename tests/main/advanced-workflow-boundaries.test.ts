@@ -8,8 +8,8 @@ vi.mock('../../src/main/git/restore-points', () => ({ createRestorePoint: mock.r
 vi.mock('../../src/main/git/rewrite-comparison', () => ({ recordCompletedRewrite: mock.record }));
 vi.mock('../../src/main/git/conflicts-rebase', () => ({ getRepoOperationState: mock.operation }));
 vi.mock('../../src/main/git/pull-requests', () => ({ apiPath: () => '/api/repo', hostedReviewClient: mock.client, requestJson: mock.request }));
-import { retargetPullRequest, resumeStackRestack, applyStackRestack, discardStackRestack } from '../../src/main/git/branch-stacks';
-import { applyCommitSplit, getCommitSplit, previewCommitSplit } from '../../src/main/git/commit-split';
+import { retargetPullRequest, resumeStackRestack, applyStackRestack, discardStackRestack, getBranchStack, setStackParent, previewStackRestack } from '../../src/main/git/branch-stacks';
+import { applyCommitSplit, getCommitSplit, previewCommitSplit, listCommitSplitPreviews } from '../../src/main/git/commit-split';
 import { getSparseCheckout, previewSparseCheckout } from '../../src/main/git/sparse-checkout';
 let root: string;
 const old = 'a'.repeat(40), next = 'b'.repeat(40), base = 'c'.repeat(40), id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', stepId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -46,4 +46,130 @@ describe('split apply protection and error reporting', () => {
 describe('sparse rules output boundaries', () => {
   it('decodes quoted Git paths including UTF-8 octal and control escapes', async () => { const original = mock.git.getMockImplementation()!; mock.git.mockImplementation(async (repo, args) => args.includes('sparse-checkout') ? '"caf\\303\\251"\n"line\\nfeed"\n"slash\\\\quote\\\""\nplain\n' : original(repo, args)); expect((await getSparseCheckout(root)).directories).toEqual(['café', 'line\nfeed', 'slash\\quote"', 'plain']); });
   it('reports failed cone enumeration and refuses applying new folders until the layout is recovered', async () => { const original = mock.git.getMockImplementation()!; mock.git.mockImplementation(async (repo, args) => { if (args.includes('sparse-checkout')) throw new Error('bad patterns'); return original(repo, args); }); const state = await getSparseCheckout(root); expect(state.warning).toMatch(/could not list/); await expect(previewSparseCheckout(root, { head: state.head, fingerprint: state.fingerprint, directories: [], disable: false })).rejects.toThrow('could not list'); });
+});
+
+
+describe('stack registry and preview safety limits', () => {
+  it('rejects invalid session IDs and malformed registries', async () => {
+    await expect(resumeStackRestack(root, '../outside')).rejects.toThrow('Invalid stack session');
+    await savedStack();
+    await fs.writeFile(path.join(root, 'git-workbench-stacks', 'branches.json'), '{bad');
+    await expect(getBranchStack(root)).rejects.toThrow();
+  });
+  it('reports missing branches and skips corrupt saved sessions', async () => {
+    await savedStack();
+    await fs.writeFile(path.join(root, 'git-workbench-stacks', `${id}.json`), '{bad');
+    mock.resolve.mockRejectedValue(new Error('branch removed'));
+    const state = await getBranchStack(root);
+    expect(state.links[0].error).toContain('branch removed');
+    expect(state.sessions).toEqual([]);
+  });
+  it('preserves an existing parent boundary when it is not explicitly reset', async () => {
+    await savedStack();
+    await setStackParent(root, 'feature', 'main');
+    expect(mock.git.mock.calls.some(([, args]) => args[0] === 'merge-base' && args[1] !== '--is-ancestor')).toBe(false);
+    expect(mock.git).toHaveBeenCalledWith(root, ['update-ref', `refs/git-workbench/stacks/${stepId}/base`, base]);
+  });
+  it('uses the reviewed parent preview as the child rebase destination', async () => {
+    await savedStack({ steps: [
+      { id: stepId, branch: 'feature', parent: 'main', oldHead: old, base, commits: 1 },
+      { id, branch: 'child', parent: 'feature', oldHead: old, base, commits: 1 }
+    ] });
+    const state = await resumeStackRestack(root, id);
+    expect(state.state).toBe('ready');
+    expect(state.steps[1].onto).toBe(old);
+  });
+  it.each(['cycle', 'too-many', 'long-history', 'merge-history'])('refuses an unsafe saved stack: %s', async reason => {
+    await savedStack();
+    const links = reason === 'cycle'
+      ? [{ id: stepId, branch: 'feature', parent: 'main', base }, { id, branch: 'main', parent: 'feature', base }]
+      : reason === 'too-many'
+        ? Array.from({ length: 11 }, (_, index) => ({ id: stepId, branch: `child-${index}`, parent: index ? `child-${index - 1}` : 'main', base }))
+        : [{ id: stepId, branch: 'feature', parent: 'main', base }];
+    await fs.writeFile(path.join(root, 'git-workbench-stacks', 'branches.json'), JSON.stringify({ revision: 'revision', links }));
+    const original = mock.git.getMockImplementation()!;
+    mock.git.mockImplementation(async (repo, args) => args.includes('--count') && reason === 'long-history' ? '101' : args.includes('--min-parents=2') && reason === 'merge-history' ? old : original(repo, args));
+    await expect(previewStackRestack(root, 'main')).rejects.toThrow(reason === 'cycle' ? 'cyclic stack' : reason === 'too-many' ? '10 dependent' : 'linear stack');
+    expect(mock.git.mock.calls.some(([, args]) => args.includes('add') && args.includes('worktree'))).toBe(false);
+  });
+  it('protects the currently open preview from removal', async () => {
+    await savedStack({ path: root });
+    await expect(discardStackRestack(root, id)).rejects.toThrow('Switch away');
+    expect(mock.git.mock.calls.some(([, args]) => args.includes('remove'))).toBe(false);
+  });
+  it('retargets GitLab using diff_refs when a separate sha field is absent', async () => {
+    mock.request.mockResolvedValue({ state: 'opened', diff_refs: { head_sha: next }, target_branch: 'feature' });
+    expect(await retarget('gitlab')).toEqual({ ok: true });
+  });
+});
+
+describe('split shadow-index failure boundaries', () => {
+  const input = () => ({ hash: 'HEAD', head: old, groups: [{ message: 'One', units: ['0'] }, { message: 'Two', units: ['1'] }] });
+  function splitData(trees: string[]) {
+    const original = mock.git.getMockImplementation()!;
+    mock.git.mockImplementation(async (repo, args) => {
+      if (args[0] === 'diff') return args.includes('--name-only') ? 'one.txt\0two.txt\0' : `diff --git a/file b/file\nnew file mode 100644\n--- /dev/null\n+++ b/file\n@@ -0,0 +1 @@\n+content\n`;
+      if (args[0] === 'write-tree') return trees.shift() || 'final-tree';
+      if (args.includes('^{tree}') || (args[0] === 'rev-parse' && args.at(-1).endsWith('^{tree}'))) return 'expected-tree';
+      if (args.includes('commit-tree')) return next;
+      return original(repo, args);
+    });
+  }
+  it('refuses empty split commits and deletes only the temporary preview ref', async () => {
+    splitData(['same', 'same']);
+    await expect(previewCommitSplit(root, input())).rejects.toThrow('would be empty');
+    expect(mock.git).toHaveBeenCalledWith(root, ['update-ref', '-d', expect.stringContaining('refs/git-workbench/splits/')]);
+    expect(mock.git.mock.calls.some(([, args]) => args.includes(`refs/heads/main`))).toBe(false);
+  });
+  it('refuses a preview whose final tree does not reproduce the source commit', async () => {
+    splitData(['base-tree', 'one-tree', 'wrong-tree']);
+    await expect(previewCommitSplit(root, input())).rejects.toThrow('did not reproduce');
+    expect(mock.restore).not.toHaveBeenCalled();
+  });
+  it('filters corrupt and foreign split records', async () => {
+    const directory = path.join(root, 'git-workbench-splits'); await fs.mkdir(directory);
+    await fs.writeFile(path.join(directory, `${id}.json`), '{bad');
+    await fs.writeFile(path.join(directory, `${stepId}.json`), JSON.stringify({ worktree: '/other' }));
+    expect(await listCommitSplitPreviews(root)).toEqual([]);
+  });
+  it('rejects mismatched trees before saving a restore point or updating a branch', async () => {
+    const directory = path.join(root, 'git-workbench-splits'); await fs.mkdir(directory);
+    await fs.writeFile(path.join(directory, `${id}.json`), JSON.stringify({ id, worktree: await fs.realpath(root), branch: 'main', oldHead: old, newHead: next }));
+    const original = mock.git.getMockImplementation()!;
+    mock.git.mockImplementation(async (repo, args) => args[0] === 'rev-parse' && args.at(-1).endsWith('^{tree}') ? args.at(-1) : original(repo, args));
+    await expect(applyCommitSplit(root, id)).rejects.toThrow('preview tree differs');
+    expect(mock.restore).not.toHaveBeenCalled();
+  });
+});
+
+
+it.each(['bytes', 'pieces'])('bounds a split by %s even when all hunks belong to one file', async limit => {
+  const original = mock.git.getMockImplementation()!;
+  mock.git.mockImplementation(async (repo, args) => args[0] === 'diff'
+    ? args.includes('--name-only') ? 'file.txt\0' : limit === 'bytes' ? 'x'.repeat(8_000_001) : 'diff --git a/file b/file\n' + '@@ -1 +1 @@\n-old\n+new\n'.repeat(1001)
+    : original(repo, args));
+  await expect(getCommitSplit(root, 'HEAD')).rejects.toThrow('too large for visual splitting');
+  expect(mock.restore).not.toHaveBeenCalled();
+});
+
+it('keeps submodule changes indivisible in split plans', async () => {
+  const original = mock.git.getMockImplementation()!;
+  mock.git.mockImplementation(async (repo, args) => args[0] === 'diff'
+    ? args.includes('--name-only') ? 'module\0file.txt\0' : 'diff --git a/module b/module\nindex old..new 160000\n@@ -1 +1 @@\n-old\n+new\n'
+    : original(repo, args));
+  const plan = await getCommitSplit(root, 'HEAD');
+  expect(plan.units).toHaveLength(2);
+  expect(plan.units.every(unit => unit.label.includes('Whole file'))).toBe(true);
+});
+
+
+it('preserves the original split failure if temporary ref cleanup also fails', async () => {
+  const original = mock.git.getMockImplementation()!;
+  mock.git.mockImplementation(async (repo, args) => {
+    if (args[0] === 'diff') return args.includes('--name-only') ? 'one\0two\0' : 'diff --git a/file b/file\nnew file mode 100644\n';
+    if (args[0] === 'write-tree') return 'same-tree';
+    if (args[0] === 'update-ref' && args[1] === '-d') throw new Error('cleanup refused');
+    return original(repo, args);
+  });
+  await expect(previewCommitSplit(root, { hash: 'HEAD', head: old, groups: [{ message: 'One', units: ['0'] }, { message: 'Two', units: ['1'] }] })).rejects.toThrow('would be empty');
 });

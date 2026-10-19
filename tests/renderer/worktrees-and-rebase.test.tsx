@@ -113,3 +113,14 @@ describe('InteractiveRebaseModal', () => {
     await act(async () => resolve({ ok: true }));
   });
 });
+
+it('displays a root worktree path when there is no branch or final path component', () => {
+  mocks.app.worktrees = [{ path: '/', branch: '', hash: 'hash' }]; render(<WorktreesModal />);
+  expect(screen.getAllByText('/')).toHaveLength(2);
+  expect(screen.queryByTitle('Remove worktree')).not.toBeInTheDocument();
+});
+it('renders an unknown rebase action with the safe default action label', async () => {
+  mocks.api.getCommitsForRebase.mockResolvedValue([{ ...steps[0], action: 'unknown-action' }]);
+  render(<InteractiveRebaseModal />); await screen.findByText('First');
+  expect(screen.getByRole('combobox')).toHaveClass('text-sky-400');
+});

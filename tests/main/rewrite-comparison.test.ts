@@ -28,3 +28,10 @@ describe('rewrite capture and comparison boundaries', () => {
   it('bounds range comparisons and gives useful subprocess failure messages', async () => { const original = mock.raw.getMockImplementation()!; mock.raw.mockImplementation(async args => args[0] === 'rev-list' ? Array.from({ length: 501 }, (_, i) => String(i)).join('\n') : original(args)); await expect(compareCommitRanges(root, compareInput)).rejects.toThrow('at most 500'); mock.raw.mockImplementation(original); mock.exec.mockRejectedValueOnce(new Error('range failed\nmore details')); await expect(compareCommitRanges(root, compareInput)).rejects.toThrow('range failed'); mock.exec.mockRejectedValueOnce('unknown'); await expect(compareCommitRanges(root, compareInput)).rejects.toThrow('Git 2.19+'); });
   it('parses unchanged, changed, removed and added entries and retains patch details', async () => { const original = mock.raw.getMockImplementation()!; mock.raw.mockImplementation(async args => args[0] === 'rev-list' ? `${old}\n${next}\n` : original(args)); mock.exec.mockResolvedValue({ stdout: `range header\n1: aaaaaaa = 1: aaaaaaa Same\n2: bbbbbbb ! 2: bbbbbbb Changed\n    @@ patch\n3: aaaaaaa < -: ------- Removed\n-: ------- > 3: bbbbbbb Added\n` }); const result = await compareCommitRanges(root, compareInput); expect(result.entries).toEqual([expect.objectContaining({ kind: 'unchanged', before: 1, after: 1, oldHash: old, newHash: old }), expect.objectContaining({ kind: 'changed', patch: '    @@ patch\n', oldHash: next }), expect.objectContaining({ kind: 'removed', after: null, newHash: undefined }), expect.objectContaining({ kind: 'added', before: null, oldHash: undefined })]); });
 });
+
+
+it('captures the grandparent baseline before moving a commit down', async () => {
+  const session = await beginRewrite(root, 'git:move-commit-down', ['revision']);
+  expect(session?.oldBase).toBe(base);
+  expect(mock.raw).toHaveBeenCalledWith(['rev-parse', '--verify', '--end-of-options', `${base}^^^{commit}`]);
+});

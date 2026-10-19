@@ -118,6 +118,24 @@ describe('commit splitting and rewrite comparisons', () => {
     expect((await listRewriteSessions(fixture.repo))[0]).toMatchObject({ operation: 'split-commit', status: 'completed', oldTip: oldHead });
   });
 
+  it('groups multiple hunks from the same file without changing the final tree', async () => {
+    const lines = Array.from({ length: 80 }, (_, index) => `line ${index}`);
+    await fixture.write('hunks.txt', lines.join('\n') + '\n'); await fixture.commitAll('Add long file');
+    for (const index of [1, 30, 70]) lines[index] += ' changed';
+    await fixture.write('hunks.txt', lines.join('\n') + '\n'); const hash = await fixture.commitAll('Three separated changes');
+    const plan = await getCommitSplit(fixture.repo, hash);
+    expect(plan.units).toHaveLength(3);
+    const tree = (await fixture.git('rev-parse', 'HEAD^{tree}')).trim();
+    const preview = await previewCommitSplit(fixture.repo, { hash, head: hash, groups: [
+      { message: 'First two changes', units: plan.units.slice(0, 2).map(unit => unit.id) },
+      { message: 'Last change', units: [plan.units[2].id] }
+    ] });
+    expect(preview.commits[0].files).toEqual(['hunks.txt']);
+    await applyCommitSplit(fixture.repo, preview.id);
+    expect((await fixture.git('rev-parse', 'HEAD^{tree}')).trim()).toBe(tree);
+    expect(await fixture.read('hunks.txt')).toBe(lines.join('\n') + '\n');
+  });
+
   it('rejects insufficient units, duplicate assignments, empty groups and stale previews', async () => {
     await expect(getCommitSplit(fixture.repo, 'HEAD')).rejects.toThrow('fewer than two');
     const plan = await splitPlan();

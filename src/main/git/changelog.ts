@@ -78,13 +78,6 @@ export async function generateChangelog(
         }
       }
 
-      // Any remaining categories
-      for (const [title, items] of categoryMap.entries()) {
-        if (!order.includes(title)) {
-          categories.push({ title, items });
-        }
-      }
-
       // Build markdown
       let markdown = `# Release Notes (${fromRef || 'Start'} → ${targetRef})\n\n`;
       for (const cat of categories) {

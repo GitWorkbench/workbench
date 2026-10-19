@@ -58,3 +58,16 @@ describe('graph process boundary and lane properties', () => {
     for (let run = 0; run < 600; run++) { const size = 8 + Math.floor(random() * 18); const commits = Array.from({ length: size }, (_, index) => ({ hash: `c${index}`, parents: Array.from({ length: index === size - 1 ? 0 : Math.floor(random() * 4) }, () => `c${index + 1 + Math.floor(random() * (size - index - 1))}`) })); const lanes = assignLanes(commits as any); expect(lanes).toHaveLength(size); lanes.forEach((value, i) => { expect(Number.isInteger(value.lane) && value.lane >= 0).toBe(true); expect(value.lanes).toHaveLength(commits[i].parents.length); expect(value.lanes.every(l => Number.isInteger(l) && l >= 0)).toBe(true); }); }
   });
 });
+
+
+it('accepts the documented ambiguous-skip exit without stderr', async () => {
+  active(); mock.exec.mockRejectedValue({ code: 2, stdout: 'first bad commit could be any of the following' });
+  expect(await stepBisect(root, 'skip')).toMatchObject({ ok: true });
+});
+
+
+it('falls back to commit time when a reflog selector has no embedded date', async () => {
+  mock.raw.mockResolvedValue([hash, 'HEAD', 'commit', 'Subject', '1761000000'].join('\0'));
+  const entries = await getReflog(root);
+  expect(entries[0]).toMatchObject({ hash, ref: 'HEAD' });
+});

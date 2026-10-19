@@ -7,8 +7,8 @@ vi.mock('node:child_process', () => { const execFile = () => {}; Object.definePr
 vi.mock('../../src/main/git/resolution-memory', () => ({ captureResolutionMemory: mock.memory }));
 vi.mock('../../src/main/git/core', () => ({ withGit: async (_repo: string, run: any) => run({ raw: mock.raw, deleteLocalBranch: mock.deleteLocalBranch }), errorMessage: String }));
 import { getConflictFile, resolveConflictFile } from '../../src/main/git/conflict-files';
-import { continueOperation, simulateMerge } from '../../src/main/git/conflicts-rebase';
-import { dropCommit, deleteBranchEx } from '../../src/main/git/history';
+import { continueOperation, simulateMerge, getRepoOperationState, getCommitsForRebase, cherryPick, executeInteractiveRebase } from '../../src/main/git/conflicts-rebase';
+import { dropCommit, deleteBranchEx, createWorktree } from '../../src/main/git/history';
 let root: string, file: string;
 const hash = 'a'.repeat(40);
 beforeEach(() => {
@@ -32,4 +32,37 @@ describe('Git operation and history failure boundaries', () => {
   it('parses generic conflict messages and handles failed merge simulation without output', async () => { mock.exec.mockRejectedValueOnce({ stdout: 'CONFLICT (modify/delete): file.txt deleted\nCONFLICT (unknown):    \n', stderr: '' }); expect(await simulateMerge(root, 'feature')).toMatchObject({ clean: false, conflicts: ['file.txt'], message: expect.stringContaining('1 file') }); mock.exec.mockRejectedValueOnce('unsupported Git'); expect(await simulateMerge(root, 'feature')).toEqual({ clean: false, conflicts: [], message: 'Merge with feature will encounter conflicts.' }); });
   it.each([new Error('nothing to do'), 'nothing to do', new Error('other rebase failure')])('reports the only-commit drop refusal or original failure: %s', async error => { const original = mock.exec.getMockImplementation()!; mock.exec.mockImplementation(async (cmd, args, opts) => { if (args[0] === 'rebase' && args[1] === '-i') throw error; return original(cmd, args, opts); }); await expect(dropCommit(root, hash)).rejects.toThrow(String(error).includes('nothing to do') ? 'only commit in its history range' : 'other rebase failure'); expect(mock.exec).toHaveBeenCalledWith('git', ['rebase', '--abort'], { cwd: root }); });
   it('explains unmerged branch deletion and propagates unrelated or forced deletion failures', async () => { mock.deleteLocalBranch.mockRejectedValue(new Error('not fully merged')); await expect(deleteBranchEx(root, 'feature', { local: true })).rejects.toThrow('Use "force delete"'); await expect(deleteBranchEx(root, 'feature', { local: true, force: true })).rejects.toThrow('not fully merged'); mock.deleteLocalBranch.mockRejectedValue(new Error('branch checked out')); await expect(deleteBranchEx(root, 'feature', { local: true })).rejects.toThrow('branch checked out'); });
+});
+
+
+it('resolves relative worktree destinations inside the selected repository', async () => {
+  await createWorktree(root, 'review', hash);
+  expect(mock.raw).toHaveBeenCalledWith(['worktree', 'add', path.join(root, 'review'), hash]);
+});
+it('retains operation markers when conflict enumeration fails', async () => {
+  fs.writeFileSync(path.join(root, 'MERGE_HEAD'), hash);
+  const original = mock.exec.getMockImplementation()!;
+  mock.exec.mockImplementation(async (cmd, args, opts) => { if (args[0] === 'diff') throw new Error('index locked'); return original(cmd, args, opts); });
+  expect(await getRepoOperationState(root)).toMatchObject({ inMerge: true, conflictedFiles: [] });
+});
+it('handles incomplete interactive-rebase metadata without losing row order', async () => {
+  mock.exec.mockResolvedValue({ stdout: '\tshort\t\t\nhash\n', stderr: '' });
+  expect(await getCommitsForRebase(root, hash)).toEqual([
+    { hash: '', shortHash: 'short', action: 'pick', message: '', author: 'Unknown' },
+    { hash: 'hash', shortHash: '', action: 'pick', message: '', author: 'Unknown' }
+  ]);
+});
+it('reports non-Error cherry-pick failures without inventing a conflict', async () => {
+  const original = mock.exec.getMockImplementation()!;
+  mock.exec.mockImplementation(async (cmd, args, opts) => { if (args[0] === 'cherry-pick') throw 'checkout unavailable'; return original(cmd, args, opts); });
+  expect(await cherryPick(root, hash)).toEqual({ ok: false, error: 'checkout unavailable' });
+});
+it.each([true, false])('reports non-Error interactive-rebase failures with paused state %s', async paused => {
+  const original = mock.exec.getMockImplementation()!;
+  mock.exec.mockImplementation(async (cmd, args, opts) => {
+    if (args[0] === 'rebase' && args[1] === '-i') { if (paused) fs.mkdirSync(path.join(root, 'rebase-merge')); throw 'rebase refused'; }
+    if (args[0] === 'rebase' && args[1] === '--abort') throw new Error('nothing to abort');
+    return original(cmd, args, opts);
+  });
+  expect(await executeInteractiveRebase(root, hash, [{ hash, shortHash: hash.slice(0, 7), action: 'pick', message: 'Commit', author: 'Author' }])).toEqual({ ok: false, ...(paused ? { hasConflicts: true } : {}), error: 'rebase refused' });
 });

@@ -26,11 +26,12 @@ export async function getCommitSplit(repo: string, revision: string): Promise<Co
   for (const file of files) {
     const patch = await gitCommand(repo, ['diff', '--no-ext-diff', '--no-textconv', '--no-color', '--no-renames', '--src-prefix=a/', '--dst-prefix=b/', '--binary', '--full-index', '--unified=3', base, hash, '--', `:(literal)${file}`]);
     total += patch.length;
-    if (total > 8_000_000 || units.length > 1000) throw new Error('This commit is too large for visual splitting (8 MB / 1,000 pieces).');
-    const parts = patch.split(/(?=^@@ )/m), header = parts.shift() || '';
+    if (total > 8_000_000) throw new Error('This commit is too large for visual splitting (8 MB / 1,000 pieces).');
+    const [header, ...parts] = patch.split(/(?=^@@ )/m);
     const whole = !parts.length || /^(new file|deleted file|old mode|new mode) /m.test(header) || /160000/.test(header);
     if (whole) units.push({ id: `${units.length}`, file, label: 'Whole file (binary, add/delete, or mode change)', patch });
     else for (const hunk of parts) units.push({ id: `${units.length}`, file, label: hunk.split('\n')[0], patch: header + hunk });
+    if (units.length > 1000) throw new Error('This commit is too large for visual splitting (8 MB / 1,000 pieces).');
   }
   if (units.length < 2) throw new Error('This commit has fewer than two independent files or hunks to split.');
   return { hash, head, branch, parent, units, message: (await gitCommand(repo, ['show', '-s', '--format=%B', hash])).trimEnd(), descendantCount: descendants.length };

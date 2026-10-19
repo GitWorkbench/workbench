@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import fs from 'node:fs/promises';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -158,4 +159,69 @@ describe('Git LFS subprocess adapter', () => {
     stopLfsTransfers(); child.emit('close', 0);
     expect(await promise).toMatchObject({ state: 'cancelled' });
   });
+
+  it('accepts empty optional JSON collections and reports no prior transfer', async () => {
+    mocks.gitCommand.mockImplementation(async (_repo, args) => args[1] === 'ls-files' || args[1] === 'track' ? '{}' : args[0] === 'remote' ? '' : 'git-lfs');
+    expect(await getLfsState(repo)).toMatchObject({ files: [], patterns: [], totalFiles: 0 });
+    expect(await getLfsTransfer(repo)).toBeNull();
+  });
+
+  it('refuses non-file attribute entries before saving a snapshot', async () => {
+    await fs.mkdir(path.join(repo, '.gitattributes'));
+    await expect(setLfsTracking(repo, '*.png', true)).rejects.toThrow('regular file');
+    expect(mocks.createRestorePoint).not.toHaveBeenCalled();
+  });
+
+  it('retains sanitized nonfatal stderr in successful transfer results', async () => {
+    const promise = runLfsTransfer(repo, { kind: 'fetch', remote: 'origin', head }, vi.fn());
+    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+    expect(await getLfsTransfer(repo)).toMatchObject({ state: 'running' });
+    child.stderr.write('Warning: https://secret@host.invalid/file?token=private'); child.emit('close', 0);
+    const result = await promise;
+    expect(result.message).toContain('Warning: https://[credentials]@host.invalid/file?token=[redacted]');
+  });
+
+  it('uses a useful exit-code error when Git LFS fails without stderr', async () => {
+    const promise = runLfsTransfer(repo, { kind: 'fetch', remote: 'origin', head }, vi.fn());
+    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+    child.emit('close', 9);
+    expect(await promise).toMatchObject({ state: 'failed', message: expect.stringContaining('code 9') });
+  });
+
+  it.each(['win32', 'linux', 'no-pid'])('bounds cancellation and escalates only its process tree: %s', async platform => {
+    const originalPlatform = process.platform;
+    const killer = new EventEmitter();
+    Object.defineProperty(process, 'platform', { value: platform === 'no-pid' ? 'linux' : platform });
+    if (platform === 'no-pid') child.pid = 0;
+    mocks.spawn.mockImplementation((command: string) => command === 'taskkill' ? killer : child);
+    vi.mocked(process.kill).mockImplementation(() => { throw new Error('process group unavailable'); });
+    vi.useFakeTimers();
+    try {
+      const events: LfsTransfer[] = [];
+      const promise = runLfsTransfer(repo, { kind: 'fetch', remote: 'origin', head }, state => events.push(state));
+      await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+      const id = events[0].id;
+      await cancelLfsTransfer(repo, id); await cancelLfsTransfer(repo, id);
+      await vi.advanceTimersByTimeAsync(2500);
+      if (platform === 'win32') {
+        expect(mocks.spawn).toHaveBeenCalledWith('taskkill', ['/PID', String(child.pid), '/T'], { windowsHide: true, stdio: 'ignore' });
+        expect(mocks.spawn).toHaveBeenCalledWith('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+        killer.emit('error', new Error('taskkill unavailable')); expect(child.kill).toHaveBeenCalled();
+      } else if (platform === 'linux') {
+        expect(process.kill).toHaveBeenCalledWith(-child.pid, 'SIGKILL');
+        expect(child.kill).toHaveBeenCalledTimes(2);
+      } else expect(process.kill).not.toHaveBeenCalled();
+      child.emit('error', new Error('stopped during cancellation'));
+      expect(await promise).toMatchObject({ state: 'cancelled' });
+    } finally { Object.defineProperty(process, 'platform', { value: originalPlatform }); }
+  });
+
+  it('keeps completion authoritative when progress cannot be read', async () => {
+    const promise = runLfsTransfer(repo, { kind: 'checkout', remote: '', head }, vi.fn());
+    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+    const file = mocks.spawn.mock.calls[0][2].env.GIT_LFS_PROGRESS;
+    await fs.unlink(file); child.emit('close', 0);
+    expect(await promise).toMatchObject({ state: 'completed', message: 'LFS operation completed.' });
+  });
+
 });

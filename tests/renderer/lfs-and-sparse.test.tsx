@@ -201,3 +201,25 @@ describe('Sparse checkout folder editor', () => {
     expect(screen.getByRole('button', { name: 'Preview selected folders' })).toBeEnabled();
   });
 });
+
+it('explains an unborn LFS checkout without remotes and bounds asset rendering at 500 rows', async () => {
+  mocks.api.getLfsState.mockResolvedValue(lfs({ head: '', remotes: [], totalFiles: 501, files: Array.from({ length: 501 }, (_, index) => ({ name: `asset-${index}.psd`, oid: `oid-${index}`, size: 1, downloaded: false, checkout: false })) }));
+  render(<LfsManagerModal />); await lfsReady();
+  expect(screen.getByText(/Transfer assets · No commits yet/)).toBeVisible();
+  expect(screen.getByText('Showing 500 matches. Narrow the filter to see more paths.')).toBeVisible();
+  expect(screen.queryByText('asset-500.psd')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Fetch to cache' })).toBeDisabled();
+});
+
+it('does not enumerate folders before the first commit and describes every saved layout type', async () => {
+  mocks.api.getSparseCheckout.mockResolvedValue(sparse({ head: '', backups: [
+    { id: 'one', createdAt: '2026-10-19', head: '', enabled: true, cone: true, directories: [], rawPatterns: '' },
+    { id: 'two', createdAt: '2026-10-19', head: '', enabled: true, cone: false, directories: [], rawPatterns: '/*' },
+    { id: 'three', createdAt: '2026-10-19', head: '', enabled: false, cone: false, directories: [], rawPatterns: '' }
+  ] }));
+  render(<SparseCheckoutModal />); await sparseReady();
+  expect(mocks.api.getSparseDirectories).not.toHaveBeenCalled();
+  expect(screen.getByText(/0 folders/)).toBeInTheDocument();
+  expect(screen.getByText(/Custom patterns/)).toBeInTheDocument();
+  expect(screen.getByText(/Full checkout/)).toBeInTheDocument();
+});

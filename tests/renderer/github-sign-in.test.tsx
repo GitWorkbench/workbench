@@ -204,3 +204,12 @@ describe('GitHub manual credentials and disconnect', () => {
     expect(screen.getByRole('button', { name: 'Switch GitHub account' })).toBeEnabled();
   });
 });
+
+it('shows an expired sign-in message as an error and supports connected accounts without an installation URL', async () => {
+  mocks.api.getGitHubSignInState.mockResolvedValue({ ...idle, phase: 'expired', message: 'Request a fresh code' });
+  render(<GitHubSignInPanel />); await ready();
+  expect(screen.getByRole('status')).toHaveClass('text-del');
+  await emit({ ...connected, installationUrl: undefined });
+  expect(screen.queryByRole('link', { name: 'Choose repositories on GitHub' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Refresh access' })).toBeEnabled();
+});

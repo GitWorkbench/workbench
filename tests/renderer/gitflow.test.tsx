@@ -57,3 +57,19 @@ describe('Git Flow workspace', () => {
   it('shows inline errors when finishing a listed branch', async () => { mock.api.finishGitFlowBranch.mockResolvedValue({ ok: false, error: 'list finish failed' }); await show(); fireEvent.click(screen.getByRole('button', { name: /Active Flow Branches/ })); fireEvent.click(screen.getAllByRole('button', { name: 'Finish', exact: true })[0]); fireEvent.click(screen.getByRole('button', { name: 'Confirm Finish & Merge' })); await screen.findByText('list finish failed'); });
   it('offers branch creation for an empty flow branch list and handles absent status', async () => { mock.state.status = null; mock.state.branches.local = [{ name: 'main' }]; render(<GitFlowModal onClose={mock.close} />); await act(async () => {}); fireEvent.click(screen.getByRole('button', { name: /Active Flow Branches/ })); expect(screen.getByText('No active feature, release, or hotfix branches.')).toBeVisible(); fireEvent.click(screen.getByRole('button', { name: 'Start a new Git Flow branch →' })); expect(screen.getByPlaceholderText('my-task')).toBeVisible(); });
 });
+
+it('explains an initialization exception without a provider error message', async () => {
+  mock.api.getGitFlowConfig.mockResolvedValue(null); mock.api.initGitFlow.mockRejectedValue(new Error(''));
+  render(<GitFlowModal onClose={mock.close} />); await screen.findByText('Git Flow is not initialized yet');
+  fireEvent.click(screen.getByRole('button', { name: 'Initialize Git Flow Now' }));
+  await waitFor(() => expect(mock.state.notify).toHaveBeenCalledWith('error', 'Initialization failed'));
+});
+it('explains a branch start exception without a provider error message', async () => {
+  mock.api.startGitFlowBranch.mockRejectedValue(new Error('')); await start();
+  expect(await screen.findByText('Error creating Git Flow branch')).toBeVisible();
+});
+it('explains a finish exception without a provider error message', async () => {
+  mock.api.finishGitFlowBranch.mockRejectedValue(new Error('')); await beginFinish();
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm & Finish feature/login' }));
+  expect(await screen.findByText('Merge conflict or error during branch finish')).toBeVisible();
+});

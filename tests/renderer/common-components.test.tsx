@@ -173,3 +173,18 @@ describe('Dropdown', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 });
+
+
+describe('AppLogo', () => {
+  it('keeps square sizing and enables the pulse only when explicitly requested', async () => {
+    const { AppLogo } = await import('../../src/renderer/components/Common/AppLogo');
+    const { container, rerender } = render(<AppLogo size={48} className="brand" animated />);
+    expect(container.querySelector('svg')).toHaveAttribute('width', '48');
+    expect(container.querySelector('svg')).toHaveAttribute('height', '48');
+    expect(container.querySelector('svg')).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+    expect(container.querySelector('.animate-pulse')).not.toBeNull();
+    rerender(<AppLogo />);
+    expect(container.querySelector('svg')).toHaveAttribute('width', '24');
+    expect(container.querySelector('.animate-pulse')).toBeNull();
+  });
+});

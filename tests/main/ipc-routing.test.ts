@@ -216,3 +216,47 @@ describe('mutation safety and process boundaries', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true }); const marker = path.join(root, '.git'); vi.spyOn(fs, 'statSync').mockImplementation(p => { if (String(p) === marker) { if (kind === 'missing') throw Object.assign(new Error('missing'), { code: 'ENOENT' }); return { isDirectory: () => kind === 'directory' } as fs.Stats; } return { isDirectory: () => true } as fs.Stats; }); const access = vi.spyOn(fs, 'accessSync').mockImplementation(() => { if (kind === 'denied') throw Object.assign(new Error('denied'), { code: 'EACCES' }); }); const result = await call('repo:open-path', root); if (kind === 'denied') expect(result).toMatchObject({ ok: false, error: expect.stringContaining('macOS denied') }); else { expect(result).toMatchObject({ ok: true, repo: { path: root } }); expect(access).toHaveBeenCalledWith(marker, fs.constants.R_OK | (kind === 'directory' ? fs.constants.X_OK : 0)); }
   });
 });
+
+it('preserves a non-Error rewrite failure when comparison cleanup also fails', async () => {
+  mock.functions.editCommitMessage.mockRejectedValue('rewrite refused');
+  mock.functions.finishRewrite.mockRejectedValue(new Error('comparison unavailable'));
+  expect(await call('git:edit-commit-message', 'hash', 'message')).toEqual({ __error: 'rewrite refused' });
+  expect(mock.functions.finishRewrite).toHaveBeenCalledWith(root, { error: 'rewrite refused' });
+});
+
+it('creates an empty repository without implicit scaffolding or an initial commit', async () => {
+  const destination = path.join(root, 'empty-init');
+  expect(await call('repo:init', { path: destination, createReadme: false })).toMatchObject({ ok: true });
+  expect(mock.git.add).not.toHaveBeenCalled();
+  expect(mock.git.commit).not.toHaveBeenCalled();
+});
+
+it('keeps initialization available if the optional scaffold commit fails', async () => {
+  mock.git.commit.mockRejectedValue(new Error('identity missing'));
+  expect(await call('repo:init', { path: path.join(root, 'scaffold-failure'), createReadme: true, initialCommitMessage: ' custom first commit ' })).toMatchObject({ ok: true });
+  expect(mock.git.commit).toHaveBeenCalledWith('custom first commit');
+});
+
+it('reports empty global Git identity values as empty fields', async () => {
+  mock.git.getConfig.mockResolvedValue({ value: null });
+  expect(await call('git:config-get', 'global')).toEqual({ name: '', email: '' });
+});
+
+it('generates commit messages from the worktree when the staged diff is empty', async () => {
+  mock.git.diff.mockResolvedValueOnce('   ').mockResolvedValueOnce('working patch');
+  await call('ai:generate-commit');
+  expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ diff: 'working patch' });
+});
+
+it.each(['git:pull', 'git:push'])('does not invent an upstream branch for detached HEAD during %s', async channel => {
+  mock.git.status.mockResolvedValue({ current: null });
+  mock.git[channel === 'git:pull' ? 'pull' : 'push'].mockRejectedValue(new Error('no upstream branch'));
+  expect(await call(channel)).toEqual({ __error: 'no upstream branch' });
+  expect(mock.git[channel === 'git:pull' ? 'pull' : 'push']).toHaveBeenCalledExactlyOnceWith();
+});
+
+it('explains macOS EPERM access denials without starting Git operations', async () => {
+  Object.defineProperty(process, 'platform', { value: 'darwin' });
+  vi.spyOn(fs, 'accessSync').mockImplementation(() => { throw Object.assign(new Error('denied'), { code: 'EPERM' }); });
+  expect(await call('repo:open-path', root)).toMatchObject({ ok: false, error: expect.stringContaining('macOS denied') });
+});

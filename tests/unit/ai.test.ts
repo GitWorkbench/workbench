@@ -185,3 +185,10 @@ describe('explainCodeChanges', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).messages[1].content).toBe(`Git diff (truncated):\n${'x'.repeat(60000)}`);
   });
 });
+
+
+it('handles truncated Git diff headers and dotfile names without invalid commit subjects', () => {
+  expect(generateLocalCommitMessage('diff --git a/feature.ts')).toContain('feature');
+  expect(generateLocalCommitMessage('diff --git')).toBe('chore: update repository files');
+  expect(generateLocalCommitMessage('diff --git a/.settings b/.settings\nnew file mode 100644')).toContain('add component implementation');
+});

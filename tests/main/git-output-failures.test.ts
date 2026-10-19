@@ -5,7 +5,7 @@ const mock = vi.hoisted(() => ({ exec: vi.fn(), spawn: vi.fn(), raw: vi.fn(), di
 vi.mock('node:child_process', () => { const execFile = () => {}; Object.defineProperty(execFile, Symbol.for('nodejs.util.promisify.custom'), { value: mock.exec }); return { execFile, spawn: mock.spawn }; });
 vi.mock('../../src/main/git/core', () => ({ withGit: async (_repo: string, fn: any) => fn({ raw: mock.raw, diff: mock.diff, status: mock.status }), errorMessage: String }));
 import { getStatus, getWorkingDiffText, parseUnifiedDiff, unstageFiles, discardFile } from '../../src/main/git/status-diff';
-import { applyHunkPatch, getBlameLines, getFileHistory } from '../../src/main/git/hunk-actions';
+import { applyHunkPatch, getBlameLines, getFileHistory, stageLines, unstageLines } from '../../src/main/git/hunk-actions';
 import { getTags, getRemotes, getSubmodules, getWorktrees, removeWorktree } from '../../src/main/git/objects-navigation';
 beforeEach(() => { mock.exec.mockReset().mockResolvedValue({ stdout: '' }); mock.spawn.mockReset(); mock.raw.mockReset().mockResolvedValue(''); mock.diff.mockReset().mockResolvedValue(''); mock.status.mockReset().mockResolvedValue({ current: null, ahead: 0, behind: 0, conflicted: [], files: [] }); });
 describe('status and patch fallback behavior', () => {
@@ -32,4 +32,46 @@ describe('patch subprocess and metadata failures', () => {
   it('maps uninitialized, dirty and out-of-sync submodules, including incomplete output', async () => { mock.exec.mockResolvedValue({ stdout: '-hash one\nUhash two\n+hash three\n \n-\n' }); expect(await getSubmodules('/repo')).toEqual([expect.objectContaining({ path: 'one', isInitialized: false }), expect.objectContaining({ path: 'two', isDirty: true }), expect.objectContaining({ path: 'three', isOutOfSync: true }), expect.objectContaining({ hash: '', name: '', path: '', isInitialized: false })]); });
   it.each([getTags, getRemotes, getSubmodules, getWorktrees])('returns an empty metadata collection on process failure %#', async read => { mock.exec.mockRejectedValue(new Error('Git unavailable')); expect(await read('/repo')).toEqual([]); });
   it('ignores incomplete worktree blocks and identifies bare, detached and locked checkouts', async () => { mock.exec.mockResolvedValue({ stdout: 'HEAD missing-path\n\nworktree /bare\nbare\n\nworktree /detached\nHEAD hash\nlocked why\n' }); expect(await getWorktrees('/repo')).toEqual([{ path: '/bare', hash: '', branch: '(detached)', isBare: true, isLocked: false }, { path: '/detached', hash: 'hash', branch: '(detached)', isBare: false, isLocked: true }]); await removeWorktree('/repo', '/detached', true); expect(mock.exec).toHaveBeenLastCalledWith('git', ['worktree', 'remove', '--force', '/detached'], { cwd: '/repo' }); });
+});
+
+
+describe('partial patch metadata boundaries', () => {
+  function captureApply() {
+    let patch = '';
+    const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough() });
+    child.stdin.on('data', chunk => { patch += chunk.toString(); });
+    mock.spawn.mockImplementation(() => { queueMicrotask(() => child.emit('close', 0)); return child; });
+    return () => patch;
+  }
+  it('preserves no-newline annotations only for included lines and handles complete removal', async () => {
+    mock.diff.mockResolvedValue('diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1 +1 @@\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n');
+    const patch = captureApply(); await stageLines('/repo', 'file', 0, [0]);
+    expect(patch()).toContain('@@ -1,1 +0,0 @@');
+    expect(patch().match(/No newline at end of file/g)).toHaveLength(1);
+    expect(patch()).not.toContain('+new');
+  });
+  it('keeps a partially deleted file present and updates the null destination header', async () => {
+    mock.diff.mockResolvedValue('diff --git a/file b/file\ndeleted file mode 100644\n--- a/file\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-one\n-two\n');
+    const patch = captureApply(); await stageLines('/repo', 'file', 0, [0]);
+    expect(patch()).not.toContain('deleted file mode');
+    expect(patch()).toContain('+++ "b/file"'); expect(patch()).toContain(' two');
+  });
+  it('keeps unselected additions in a new file when partially unstaging it', async () => {
+    mock.diff.mockResolvedValue('diff --git a/file b/file\nnew file mode 100644\n--- /dev/null\n+++ b/file\n@@ -0,0 +1,2 @@\n+one\n+two\n');
+    const patch = captureApply(); await unstageLines('/repo', 'file', 0, [0]);
+    expect(patch()).not.toContain('new file mode');
+    expect(patch()).toContain('--- "a/file"'); expect(patch()).toContain(' two');
+  });
+  it('rejects malformed hunk coordinates before running a Git mutation', async () => {
+    mock.diff.mockResolvedValue('diff --git a/file b/file\n@@ malformed @@\n+new\n');
+    await expect(stageLines('/repo', 'file', 0, [0])).rejects.toThrow('Invalid hunk header');
+    expect(mock.spawn).not.toHaveBeenCalled();
+  });
+  it('ignores a following file header instead of consuming it as current-file text', () => {
+    expect(parseUnifiedDiff('@@ -1 +1 @@\n-old\n+new\ndiff --git a/next b/next\n+unrelated\n', 'file')).toMatchObject({ insertions: 1, deletions: 1 });
+  });
+  it('uses an unknown author label when porcelain blame metadata is truncated', async () => {
+    mock.raw.mockResolvedValue(`${'a'.repeat(40)} 1 1\n\tcontent\n`);
+    expect(await getBlameLines('/repo', 'file')).toMatchObject([{ author: 'Unknown', content: 'content' }]);
+  });
 });

@@ -138,8 +138,9 @@ export async function stepBisect(
     } catch (err) {
       const failure = err as { code?: number; stdout?: string; stderr?: string };
       // Git exits 2 when skips prevent choosing a unique culprit; this is a result.
-      if (failure.code !== 2 || !/first ['"]?bad['"]? commit could be any of/.test(failure.stdout || '')) throw err;
-      stdout = failure.stdout || '';
+      const output = failure.stdout || '';
+      if (failure.code !== 2 || !/first ['"]?bad['"]? commit could be any of/.test(output)) throw err;
+      stdout = output;
       stderr = failure.stderr || '';
     }
     const output = `${stdout}\n${stderr}`;

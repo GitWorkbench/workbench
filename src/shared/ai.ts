@@ -43,8 +43,11 @@ export function generateLocalCommitMessage(
     }
   }
 
+  if (!filesChanged.length) return 'chore: update repository files';
+
   // Determine type
-  let type = 'feat';
+  type CommitType = 'feat' | 'fix' | 'docs' | 'style' | 'refactor' | 'test' | 'chore';
+  let type: CommitType = 'feat';
   let scope = '';
   let description = '';
 
@@ -101,7 +104,7 @@ export function generateLocalCommitMessage(
 
   // Format by style
   if (style === 'gitmoji') {
-    const emojiMap: Record<string, string> = {
+    const emojiMap: Record<CommitType, string> = {
       feat: '✨',
       fix: '🐛',
       docs: '📝',
@@ -110,7 +113,7 @@ export function generateLocalCommitMessage(
       test: '✅',
       chore: '🔧'
     };
-    const emoji = emojiMap[type] || '✨';
+    const emoji = emojiMap[type];
     return `${emoji} ${type}${scope ? `(${scope})` : ''}: ${description}`;
   }
 
@@ -165,8 +168,7 @@ Rules:
   }
 }
 
-function cleanCommitText(text?: string | null): string {
-  if (!text) return '';
+function cleanCommitText(text: string): string {
   let cleaned = text.trim();
   // Strip code block fences if present
   if (cleaned.startsWith('```')) {
