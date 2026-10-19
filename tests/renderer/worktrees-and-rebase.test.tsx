@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => {
 vi.mock('../../src/renderer/store', () => ({ useApp: mocks.useApp }));
 vi.mock('../../src/renderer/lib/api', () => ({ api: mocks.api }));
 import { WorktreesModal } from '../../src/renderer/components/Worktrees/WorktreesModal';
-import { InteractiveRebaseModal } from '../../src/renderer/components/Rebase/InteractiveRebaseModal';
+import { InteractiveRebaseModal, moveRebaseStep } from '../../src/renderer/components/Rebase/InteractiveRebaseModal';
 
 const steps = [{ hash: 'commit-1', shortHash: 'c1', author: 'Alice', message: 'First', action: 'pick' }, { hash: 'commit-2', shortHash: 'c2', author: 'Bob', message: 'Second', action: 'pick' }, { hash: 'commit-3', shortHash: 'c3', author: 'Carol', message: 'Third', action: 'pick' }];
 beforeEach(() => {
@@ -123,4 +123,25 @@ it('renders an unknown rebase action with the safe default action label', async 
   mocks.api.getCommitsForRebase.mockResolvedValue([{ ...steps[0], action: 'unknown-action' }]);
   render(<InteractiveRebaseModal />); await screen.findByText('First');
   expect(screen.getByRole('combobox')).toHaveClass('text-sky-400');
+});
+
+it.each(['main', 'current', 'locked', 'removed'])('revalidates a worktree that became %s before a stale removal control was clicked', async reason => {
+  const confirm = vi.spyOn(window, 'confirm'); render(<WorktreesModal />);
+  if (reason === 'main') mocks.app.worktrees = [mocks.app.worktrees[1], mocks.app.worktrees[0]];
+  if (reason === 'current') mocks.app.activeTab = '/review';
+  if (reason === 'locked') mocks.app.worktrees[1].isLocked = true;
+  if (reason === 'removed') mocks.app.worktrees = [mocks.app.worktrees[0]];
+  fireEvent.click(screen.getByTitle('Remove worktree'));
+  await waitFor(() => expect(mocks.app.notify).toHaveBeenCalledWith('warn', expect.any(String)));
+  expect(mocks.api.removeWorktree).not.toHaveBeenCalled(); expect(confirm).not.toHaveBeenCalled();
+});
+
+
+it('bounds rebase moves and preserves the original plan when the selected row is stale', () => {
+  const plan = [{ hash: 'one', shortHash: 'one', author: 'Author', message: 'First', action: 'pick' as const }, { hash: 'two', shortHash: 'two', author: 'Author', message: 'Second', action: 'pick' as const }];
+  for (const index of [-1, 2, NaN, 0.5]) expect(moveRebaseStep(plan, index, 'up')).toBe(plan);
+  expect(moveRebaseStep(plan, 0, 'up')).toBe(plan); expect(moveRebaseStep(plan, 1, 'down')).toBe(plan);
+  expect(moveRebaseStep(plan, 0, 'down')).toEqual([plan[1], plan[0]]);
+  expect(moveRebaseStep(plan, 1, 'up')).toEqual([plan[1], plan[0]]);
+  expect(plan.map(step => step.hash)).toEqual(['one', 'two']);
 });

@@ -24,6 +24,15 @@ const ACTIONS: { kind: RebaseActionKind; label: string; desc: string; color: str
   { kind: 'drop', label: 'Drop', desc: 'Remove commit entirely', color: 'text-del bg-del/10 border-del/30' }
 ];
 
+export function moveRebaseStep(steps: RebaseStep[], index: number, direction: 'up' | 'down'): RebaseStep[] {
+  if (index < 0 || index >= steps.length || !Number.isInteger(index)) return steps;
+  const target = direction === 'up' ? index - 1 : index + 1;
+  if (target < 0 || target >= steps.length) return steps;
+  const next = [...steps];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 export function InteractiveRebaseModal() {
   const baseCommit = useApp((s) => s.rebaseModalBaseCommit);
   const close = useApp((s) => s.closeRebaseModal);
@@ -54,13 +63,7 @@ export function InteractiveRebaseModal() {
   if (!baseCommit) return null;
 
   const moveStep = (index: number, direction: 'up' | 'down') => {
-    const target = direction === 'up' ? index - 1 : index + 1;
-    if (target < 0 || target >= steps.length) return;
-    const next = [...steps];
-    const item = next[index];
-    next[index] = next[target];
-    next[target] = item;
-    setSteps(next);
+    setSteps(current => moveRebaseStep(current, index, direction));
   };
 
   const updateAction = (index: number, action: RebaseActionKind) => {

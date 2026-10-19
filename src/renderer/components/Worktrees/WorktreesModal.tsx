@@ -48,9 +48,19 @@ export function WorktreesModal() {
     }
   };
 
-  const handleRemove = async (worktreePath: string, isMain: boolean) => {
-    if (isMain) {
+  const handleRemove = async (worktreePath: string) => {
+    const latest = useApp.getState();
+    const target = latest.worktrees.find(worktree => worktree.path === worktreePath);
+    if (!target) {
+      notify('warn', 'This worktree is no longer listed. Refresh before removing it.');
+      return;
+    }
+    if (latest.worktrees[0] === target) {
       notify('warn', 'Cannot remove main worktree checkout');
+      return;
+    }
+    if (latest.activeTab === worktreePath || target.isLocked) {
+      notify('warn', 'Switch away from this worktree and unlock it before removing it.');
       return;
     }
     if (!window.confirm(`Remove worktree at "${worktreePath}"? Git will refuse removal if it has uncommitted changes.`)) {
@@ -141,7 +151,7 @@ export function WorktreesModal() {
                     {!isMain && !isCurrent && !wt.isLocked && (
                       <button
                         className="btn-icon !w-7 !h-7 hover:!text-del text-dim"
-                        onClick={() => void handleRemove(wt.path, isMain)}
+                        onClick={() => void handleRemove(wt.path)}
                         title="Remove worktree"
                       >
                         <Trash2 size={13} />
