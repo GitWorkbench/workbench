@@ -37,6 +37,7 @@ import {
   Copy
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
+import { AiHistoryDialog } from './AiHistoryDialog';
 
 const DOT_R = 5;
 const MESSAGE_MIN_W = 250;
@@ -566,6 +567,8 @@ function CommitRow({
 }
 
 export function CommitGraph() {
+  const activeRepo = useApp(s => s.activeTab);
+  const [aiAction, setAiAction] = useState<{ kind: 'reword' | 'explain'; commit: Commit; repo: string } | null>(null);
   const log = useApp((s) => s.log);
   const filter = useApp((s) => s.filter);
   const status = useApp((s) => s.status);
@@ -720,8 +723,6 @@ export function CommitGraph() {
 
   const topSpacerHeight = startIndex * rowH;
   const bottomSpacerHeight = Math.max(0, (commits.length - 1 - endIndex) * rowH);
-
-  const previewStub = (feature: string) => notify('info', `${feature} is a preview feature — coming soon`);
 
   const refMenuItems = (ref: CommitRef): ContextMenuItem[] => {
     const name = ref.label;
@@ -920,9 +921,9 @@ export function CommitGraph() {
       onClick: () => void runAndRefresh(() => api.revertCommit(commit.hash), `Reverted ${commit.shortHash}`)
     },
     {
-      label: 'Recompose commit with AI (Preview)',
+      label: 'Recompose commit message with AI…',
       icon: <Sparkles size={13} />,
-      onClick: () => previewStub('Recompose commit with AI')
+      onClick: () => { if (activeRepo) setAiAction({ kind: 'reword', commit, repo: activeRepo }); }
     },
     {
       label: 'Drop commit',
@@ -942,9 +943,9 @@ export function CommitGraph() {
       onClick: () => useApp.getState().openPullRequestsModal({ remoteName: 'origin', mode: 'create' })
     },
     {
-      label: 'Explain Branch Changes (Preview)',
+      label: 'Explain branch changes…',
       icon: <Rocket size={13} />,
-      onClick: () => previewStub('Explain Branch Changes')
+      onClick: () => { if (activeRepo) setAiAction({ kind: 'explain', commit, repo: activeRepo }); }
     },
     {
       label: 'Apply patch to current branch',
@@ -1201,6 +1202,7 @@ export function CommitGraph() {
       {refMenu && (
         <ContextMenu x={refMenu.x} y={refMenu.y} items={refMenuItems(refMenu.ref)} onClose={() => setRefMenu(null)} />
       )}
+      {aiAction && <AiHistoryDialog key={`${aiAction.repo}:${aiAction.kind}:${aiAction.commit.hash}`} {...aiAction} onClose={() => setAiAction(null)} />}
     </div>
   );
 }

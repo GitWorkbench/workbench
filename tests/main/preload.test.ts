@@ -97,7 +97,9 @@ renameBranch git:branch-rename 2
 checkoutCommit git:checkout-commit 1
 createWorktree git:worktree-create 2
 resetBranchTo git:reset-branch 2
-editCommitMessage git:edit-commit-message 2
+editCommitMessage git:edit-commit-message 3
+recomposeCommitMessage ai:recompose-commit 2
+explainBranchChanges ai:explain-branch 3
 revertCommit git:revert-commit 1
 dropCommit git:drop-commit 1
 applyPatchCommit git:apply-patch-commit 1
@@ -223,4 +225,10 @@ describe('typed preload routes', () => {
     mock.invoke.mockRejectedValue(new Error('IPC disconnected'));
     await expect(api.getStatus()).rejects.toThrow('IPC disconnected');
   });
+});
+
+
+it('keeps the optional manual reword call narrow when no generated snapshot is supplied', async () => {
+  await api.editCommitMessage('hash', 'Manual message');
+  expect(mock.invoke).toHaveBeenCalledExactlyOnceWith('git:edit-commit-message', 'hash', 'Manual message');
 });

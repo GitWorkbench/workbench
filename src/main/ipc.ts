@@ -106,6 +106,7 @@ import { getPullRequestContext, createHostedPullRequest, testGitLabConnection, t
 import { normalizeGitLabServer } from '../shared/gitlab-server';
 import { normalizeHostingServer, pullRequestProviders } from '../shared/hosting-provider';
 import { externalWebUrl } from '../shared/external-url';
+import { recomposeCommitMessage, explainBranchChanges, applyAiReword } from './git/ai-history';
 import { getPullReview, submitPullReview } from './git/pull-request-review';
 import { pinnedRepositories, pinRepository, repositoryOverview } from './git/repository-dashboard';
 import { openPullRequestWorktree } from './git/pull-request-worktree';
@@ -599,8 +600,9 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
     ok: true,
     ...(await restoreHeadFromReflog(requireRepo(), hash))
   }));
-  handle('git:edit-commit-message', async (hash: string, message: string) => {
-    await editCommitMessage(requireRepo(), hash, message);
+  handle('git:edit-commit-message', async (hash: string, message: string, expected?: import('../shared/types').CommitRewordSnapshot) => {
+    if (expected !== undefined) await applyAiReword(requireRepo(), hash, message, expected);
+    else await editCommitMessage(requireRepo(), hash, message);
     return { ok: true };
   });
   handle('git:revert-commit', async (hash: string) => {
@@ -997,6 +999,8 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
   });
 
   // AI Code Review & Explainer
+  handle('ai:recompose-commit', async (hash: string, config?: Partial<import('../shared/types').AiCommitConfig>) => recomposeCommitMessage(requireRepo(), hash, config));
+  handle('ai:explain-branch', async (base: string, tip: string, config?: Partial<import('../shared/types').AiCommitConfig>) => explainBranchChanges(requireRepo(), base, tip, config));
   handle('ai:explain-changes', async (params: { diffText?: string; commitHash?: string; config?: Partial<import('../shared/types').AiCommitConfig> }) => {
     try {
       let diff = params.diffText;

@@ -70,6 +70,8 @@ See [Advanced Git workflows](docs/advanced-features.md) for usage, recovery inst
 - **Full Stash Suite**: Stash staged/unstaged changes with optional descriptions; inspect, pop, apply, or drop stashes on demand.
 
 ### 🛠️ Commit History Actions
+- **AI message recomposition**: right-click a commit → **Recompose commit message with AI…** to generate, edit, and explicitly apply a draft. A clean local branch and at most 500 linear commits are required; a restore point protects the old history. File trees and author metadata are preserved; rewritten hashes and signatures change. Nothing is pushed.
+- **Branch explanations**: right-click → **Explain branch changes…**, choose base/tip revisions, and generate an explanation of the diff from their common ancestor. Requires an AI provider (including local Ollama); reports resolved revisions, commit/file counts, and large-diff truncation.
 - **Actions → Rebase & Rewrite Comparison** compares two commit ranges using `git range-diff`, with filters for unchanged, changed, removed, and added commits, patch details, old/new commit inspection, and raw output copying.
 - In-app branch/interactive rebases, reword/drop/reorder actions, and pulls configured to rebase retain their before/after revisions. Completed rewrites open the comparison automatically; conflict-paused sessions are completed after Continue. Records survive app restarts and can be deleted explicitly. Custom base/tip ranges are supported. Requires Git 2.19+; matching is heuristic, merge commits are excluded, and each range is limited to 500 non-merge commits.
 - **Interactive Mutations**: Soft, mixed, or hard reset to any historical commit.

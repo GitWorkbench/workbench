@@ -90,7 +90,7 @@ describe('browser preview API', () => {
     expect(await (client.api as any)[name]()).toMatchObject({ status: 'unsupported', canInstallInApp: false });
   });
   it('does not fake desktop-only advanced features as successful', async () => {
-    const desktopOnly = ['getPullReview', 'submitPullReview', 'startGitHubSignIn', 'cancelGitHubSignIn', 'openGitHubSignInPage', 'copyGitHubSignInCode', 'refreshGitHubAccount',
+    const desktopOnly = ['getPullReview', 'submitPullReview', 'recomposeCommitMessage', 'explainBranchChanges', 'startGitHubSignIn', 'cancelGitHubSignIn', 'openGitHubSignInPage', 'copyGitHubSignInCode', 'refreshGitHubAccount',
       'getSparseCheckout', 'getSparseDirectories', 'previewSparseCheckout', 'applySparseCheckout', 'restoreSparseLayout', 'configureLfs', 'setLfsTracking', 'runLfsTransfer', 'cancelLfsTransfer',
       'setStackParent', 'previewStackRestack', 'resumeStackRestack', 'applyStackRestack', 'discardStackRestack', 'retargetPullRequest', 'getCommitSplit', 'previewCommitSplit', 'applyCommitSplit', 'discardCommitSplit',
       'openPullRequestWorktree', 'pinRepository', 'getRepositoryOverview', 'compareCommitRanges', 'deleteRewriteSession', 'setResolutionMemory', 'forgetResolution', 'createRestorePoint', 'restorePoint', 'deleteRestorePoint'];

@@ -371,6 +371,8 @@ const createMockApi = (): Api & GitWorkbenchApi => {
     createWorktree: async () => ({ ok: true }),
     resetBranchTo: async () => ({ ok: true }),
     editCommitMessage: async () => ({ ok: true }),
+    recomposeCommitMessage: async () => { throw new Error('Commit recomposition requires the desktop app.'); },
+    explainBranchChanges: async () => { throw new Error('Branch explanations require the desktop app and an AI provider.'); },
     revertCommit: async () => ({ ok: true }),
     dropCommit: async () => ({ ok: true }),
     applyPatchCommit: async () => ({ ok: true }),

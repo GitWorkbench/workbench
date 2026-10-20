@@ -12,6 +12,7 @@ const modules: Record<string, string> = {
   'status-diff': 'getStatus unstageFiles discardFile',
   'commit-detail': 'getCommitDetail getFileDiff getCommitDiffText compareCommits getComparisonFileDiff',
   'branch-stash': 'getBranches getStashes checkoutBranch createBranch deleteBranch renameBranch stash stashPop stashApply stashDrop revertHunk mergeBranch getStashDetail getStashFileDiff applyStashFile',
+  'ai-history': 'recomposeCommitMessage explainBranchChanges applyAiReword validateAiReword',
   'history': 'checkoutCommit createBranchAt createWorktree resetBranchTo editCommitMessage revertCommit dropCommit applyPatchCommit moveCommitDown setUpstream pushSetUpstream deleteBranchEx',
   'hunk-actions': 'stageHunk unstageHunk discardHunk stageLines unstageLines discardLines getBlameLines getFileHistory exportPatch applyPatchFile',
   'conflicts-rebase': 'getRepoOperationState getConflictFile resolveConflictFile abortOperation continueOperation cherryPick getCommitsForRebase executeInteractiveRebase simulateMerge',
@@ -328,6 +329,13 @@ it('validates external web links before invoking the native shell', async () => 
   expect(mock.external).toHaveBeenCalledExactlyOnceWith('https://example.com/project');
   expect(await call('app:open-external', 'file:///secret')).toHaveProperty('__error', expect.stringContaining('HTTP or HTTPS'));
   expect(mock.external).toHaveBeenCalledTimes(1);
+});
+it('routes generated message application through the protected rewrite handler and forwards only its snapshot', async () => {
+  const expected = { head: 'a'.repeat(40), branch: 'main' };
+  expect(await call('git:edit-commit-message', 'hash', 'Message', expected)).toEqual({ ok: true });
+  expect(mock.functions.applyAiReword).toHaveBeenCalledWith(root, 'hash', 'Message', expected);
+  expect(mock.functions.editCommitMessage).not.toHaveBeenCalled();
+  expect(mock.functions.createRestorePoint).toHaveBeenCalled();
 });
 it.each(['gitlab', 'gitea'])('refuses a missing saved %s token at the native boundary', async provider => {
   mock.functions.getPullRequestCredential.mockReturnValue(null);

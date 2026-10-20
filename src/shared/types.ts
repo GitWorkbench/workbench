@@ -564,6 +564,21 @@ export interface AiCommitConfig {
 }
 
 export type DiffViewMode = 'unified' | 'split';
+export interface CommitRewordSnapshot { head: string; branch: string }
+export interface AiCommitDraft extends CommitRewordSnapshot {
+  commitHash: string;
+  originalMessage: string;
+  message: string;
+  inputTruncated: boolean;
+}
+export interface BranchChangesExplanation {
+  baseHash: string;
+  tipHash: string;
+  mergeBase: string;
+  commitCount: number;
+  filesChanged: number;
+  explanation: string;
+}
 export interface PullRequestIntent { remoteName?: string; requestId?: string; mode?: 'create' | 'review' }
 export type DiffActiveTab = 'diff' | 'blame' | 'history';
 
@@ -669,7 +684,9 @@ export interface GitWorkbenchApi extends AdvancedGitApi {
   checkoutCommit(hash: string): Promise<{ ok: boolean; error?: string }>;
   createWorktree(hash: string, worktreePath: string): Promise<{ ok: boolean; error?: string }>;
   resetBranchTo(hash: string, mode: 'soft' | 'mixed' | 'hard'): Promise<{ ok: boolean; error?: string }>;
-  editCommitMessage(hash: string, message: string): Promise<{ ok: boolean; error?: string }>;
+  editCommitMessage(hash: string, message: string, expected?: CommitRewordSnapshot): Promise<{ ok: boolean; error?: string }>;
+  recomposeCommitMessage(hash: string, config?: Partial<AiCommitConfig>): Promise<AiCommitDraft>;
+  explainBranchChanges(base: string, tip: string, config?: Partial<AiCommitConfig>): Promise<BranchChangesExplanation>;
   revertCommit(hash: string): Promise<{ ok: boolean; error?: string }>;
   dropCommit(hash: string): Promise<{ ok: boolean; error?: string }>;
   applyPatchCommit(hash: string): Promise<{ ok: boolean; error?: string }>;

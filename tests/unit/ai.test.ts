@@ -84,7 +84,7 @@ describe('generateCommitMessage transport', () => {
     ['gemini', 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'gemini-2.5-flash'],
     ['pollinations', 'https://gen.pollinations.ai/v1/chat/completions', 'openai'],
     ['ollama', 'http://127.0.0.1:11434/v1/chat/completions', 'llama3']
-  ] as const)('uses %s defaults and sends bounded staged diff', async (provider, endpoint, model) => {
+  ] as const)('uses %s defaults and sends a bounded committed or staged diff', async (provider, endpoint, model) => {
     const fetchMock = mockAnswer();
     expect(await generateCommitMessage({ provider, diff: 'x'.repeat(9000), apiKey: ' key ' })).toEqual({ ok: true, message: 'feat: ship change' });
     const [url, request] = fetchMock.mock.calls[0];
@@ -96,7 +96,7 @@ describe('generateCommitMessage transport', () => {
     expect(body.model).toBe(model);
     expect(body.stream).toBe(false);
     expect(body.messages[0].content).toContain('Format as Conventional Commit');
-    expect(body.messages[1]).toEqual({ role: 'user', content: `Staged diff:\n${'x'.repeat(8000)}` });
+    expect(body.messages[1]).toEqual({ role: 'user', content: `Git diff:\n${'x'.repeat(8000)}` });
   });
   it.each([
     ['ollama', 'http://localhost:11434/api/generate/', 'http://localhost:11434/v1/chat/completions'],

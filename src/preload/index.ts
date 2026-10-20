@@ -57,7 +57,9 @@ export type Api = import('../shared/types').AdvancedGitApi & {
   checkoutCommit(hash: string): Promise<{ ok: boolean }>;
   createWorktree(hash: string, worktreePath: string): Promise<{ ok: boolean; error?: string }>;
   resetBranchTo(hash: string, mode: 'soft' | 'mixed' | 'hard'): Promise<{ ok: boolean }>;
-  editCommitMessage(hash: string, message: string): Promise<{ ok: boolean }>;
+  editCommitMessage(hash: string, message: string, expected?: import('../shared/types').CommitRewordSnapshot): Promise<{ ok: boolean; error?: string }>;
+  recomposeCommitMessage(hash: string, config?: Partial<import('../shared/types').AiCommitConfig>): Promise<import('../shared/types').AiCommitDraft>;
+  explainBranchChanges(base: string, tip: string, config?: Partial<import('../shared/types').AiCommitConfig>): Promise<import('../shared/types').BranchChangesExplanation>;
   revertCommit(hash: string): Promise<{ ok: boolean }>;
   dropCommit(hash: string): Promise<{ ok: boolean }>;
   applyPatchCommit(hash: string): Promise<{ ok: boolean }>;
@@ -242,7 +244,9 @@ const api: Api = {
   checkoutCommit: (hash) => call('git:checkout-commit', hash),
   createWorktree: (hash, worktreePath) => call('git:worktree-create', hash, worktreePath),
   resetBranchTo: (hash, mode) => call('git:reset-branch', hash, mode),
-  editCommitMessage: (hash, message) => call('git:edit-commit-message', hash, message),
+  editCommitMessage: (hash, message, expected) => call('git:edit-commit-message', hash, message, ...(expected ? [expected] : [])),
+  recomposeCommitMessage: (hash, config) => call('ai:recompose-commit', hash, config),
+  explainBranchChanges: (base, tip, config) => call('ai:explain-branch', base, tip, config),
   revertCommit: (hash) => call('git:revert-commit', hash),
   dropCommit: (hash) => call('git:drop-commit', hash),
   applyPatchCommit: (hash) => call('git:apply-patch-commit', hash),
