@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import './setup';
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const app: Record<string, any> = {};
   return { app, clipboard: vi.fn(), checkout: null as null | { onClose: () => void; onConfirmCheckout: () => void; onMoreActions?: () => void }, useApp: Object.assign((selector: (state: any) => any) => selector(app), { getState: () => app, setState: vi.fn((patch: any) => Object.assign(app, patch)) }),
-    api: Object.fromEntries(['checkoutBranch', 'createBranch', 'renameBranch', 'mergeBranch', 'rebaseBranch', 'pushSetUpstream', 'setUpstream', 'deleteBranch', 'pull', 'pushTag', 'deleteTag', 'fetch', 'pruneRemote', 'setRemoteUrl', 'renameRemote', 'removeRemote', 'updateSubmodules', 'removeWorktree', 'stashPop', 'stashApply', 'stashDrop', 'stash'].map(name => [name, vi.fn()])) };
+    api: Object.fromEntries(['checkoutBranch', 'createBranch', 'renameBranch', 'mergeBranch', 'rebaseBranch', 'pushSetUpstream', 'setUpstream', 'deleteBranch', 'pull', 'pushTag', 'deleteTag', 'fetch', 'pruneRemote', 'setRemoteUrl', 'renameRemote', 'removeRemote', 'updateSubmodules', 'removeWorktree', 'stashPop', 'stashApply', 'stashDrop', 'stash', 'getPullRequestContext'].map(name => [name, vi.fn()])) };
 });
 vi.mock('../../src/renderer/store', () => ({ useApp: mocks.useApp }));
 vi.mock('../../src/renderer/lib/api', () => ({ api: mocks.api }));
@@ -28,11 +28,12 @@ beforeEach(() => {
     worktrees: [{ path: '/repo', branch: 'main', hash: 'main-hash' }, { path: '/review', branch: '', hash: 'review-hash' }],
     stashes: [{ index: 0, message: 'Pending changes' }], selectedStashIndex: null,
     log: { commits: [{ hash: 'main-tip', refs: [{ label: 'main' }] }, { hash: 'feature-tip', refs: [{ label: 'feature' }] }, { hash: 'remote-tip', refs: [{ label: 'origin/remote-feature' }] }] } });
-  for (const name of ['notify', 'setFilter', 'setSidebarWidth', 'openCreateTagModal', 'openAddRemoteModal', 'openWorktreesModal', 'openSimulateMerge', 'openRepo', 'selectCommit', 'inspectStash']) mocks.app[name] = vi.fn();
+  for (const name of ['notify', 'setFilter', 'setSidebarWidth', 'openCreateTagModal', 'openAddRemoteModal', 'openWorktreesModal', 'openSimulateMerge', 'openRepo', 'selectCommit', 'inspectStash', 'openPullRequestsModal']) mocks.app[name] = vi.fn();
   mocks.app.runAndRefresh = vi.fn(async (operation: () => any) => operation());
   mocks.useApp.setState.mockClear(); mocks.clipboard.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: mocks.clipboard } });
   for (const method of Object.values(mocks.api)) method.mockReset().mockResolvedValue({ ok: true });
+  mocks.api.getPullRequestContext.mockResolvedValue({ provider: 'gitea', remoteName: 'origin', currentBranch: 'main', defaultBranch: 'main', credentialConfigured: true, pullRequests: [{ id: '12', title: 'Improve request navigation', author: 'Alice', sourceBranch: 'feature', targetBranch: 'main', draft: true, state: 'open' }] });
 });
 const branchButton = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s*✓)?$`) });
 function context(kind: 'local' | 'remoteBranch' | 'tag' | 'remote' | 'submodule' | 'worktree' | 'stash') {
@@ -77,10 +78,10 @@ describe('Sidebar navigation, sizing and selection', () => {
     expect(screen.getAllByPlaceholderText('Remote name (e.g. origin)').map(input => (input as HTMLInputElement).value)).toEqual(['origin', 'origin']);
   });
   it('shows the tracking reference of a non-current local branch', () => { mocks.app.branches.local[1].tracking = 'upstream/feature'; render(<Sidebar />); expect(screen.getByTitle('feature → upstream/feature (Double-click to checkout, right-click for actions)')).toBeVisible(); });
-  it('collapses, expands, resizes without leaving listeners and exposes the placeholder Agent action', () => {
+  it('collapses, expands, resizes without leaving listeners and omits the Agents tab', () => {
     const { container, rerender } = render(<Sidebar />);
     expect(container.firstChild).toHaveStyle({ width: '288px' });
-    fireEvent.click(screen.getByRole('button', { name: 'Agents' })); expect(mocks.app.notify).toHaveBeenCalledWith('info', 'Agents is a placeholder for a future feature');
+    expect(screen.queryByRole('button', { name: 'Agents' })).not.toBeInTheDocument();
     const handle = container.querySelector('.cursor-col-resize')!;
     fireEvent.mouseDown(handle, { clientX: 100 }); fireEvent.mouseMove(window, { clientX: 140 });
     expect(mocks.app.setSidebarWidth).toHaveBeenCalledWith(328); fireEvent.mouseUp(window); fireEvent.mouseMove(window, { clientX: 180 }); expect(mocks.app.setSidebarWidth).toHaveBeenCalledOnce();
@@ -210,4 +211,91 @@ describe('remote, worktree, submodule and stash context actions', () => {
   });
   it.each([['Pop Stash #0', 'stashPop'], ['Apply Stash #0', 'stashApply'], ['Drop Stash #0', 'stashDrop']])('executes stash action %s', (label, method) => { render(<Sidebar />); context('stash'); fireEvent.click(screen.getByRole('button', { name: label })); expect(mocks.api[method]).toHaveBeenCalledWith(0); });
   it('copies stash messages', () => { render(<Sidebar />); context('stash'); fireEvent.click(screen.getByRole('button', { name: 'Copy Stash Message' })); expect(mocks.clipboard).toHaveBeenCalledWith('Pending changes'); });
+});
+
+
+describe('dedicated request sidebar view', () => {
+  beforeEach(() => vi.useFakeTimers());
+  it('keeps requests separate from repository objects and removes Agents', async () => {
+    render(<Sidebar />);
+    expect(screen.getByRole('button', { name: /^LOCAL/ })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Agents' })).not.toBeInTheDocument();
+    expect(mocks.api.getPullRequestContext).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Requests', exact: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(screen.getByRole('button', { name: 'Requests', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByRole('button', { name: /^LOCAL/ })).not.toBeInTheDocument();
+    const row = screen.getByRole('button', { name: /Improve request navigation/ });
+    fireEvent.click(row);
+    expect(mocks.app.openPullRequestsModal).toHaveBeenCalledWith({ remoteName: 'origin', requestId: '12', mode: 'review' });
+    expect(mocks.app.runAndRefresh).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Create pull request' }));
+    expect(mocks.app.openPullRequestsModal).toHaveBeenLastCalledWith({ remoteName: 'origin', mode: 'create' });
+    fireEvent.click(screen.getByRole('button', { name: 'List', exact: true }));
+    expect(screen.getByRole('button', { name: /^LOCAL/ })).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Pull Requests' })).not.toBeInTheDocument();
+  });
+  it.each(['github', 'gitlab', 'bitbucket', 'gitea'])('uses %s terminology in its request section', async provider => {
+    mocks.api.getPullRequestContext.mockResolvedValue({ provider, remoteName: 'origin', credentialConfigured: true, currentBranch: 'main', pullRequests: [] });
+    render(<Sidebar />); fireEvent.click(screen.getByRole('button', { name: 'Requests', exact: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    const region = screen.getByRole('region', { name: provider === 'gitlab' ? 'Merge Requests' : 'Pull Requests' });
+    expect(within(region).getByText(`No open ${provider === 'gitlab' ? 'merge' : 'pull'} requests.`)).toBeVisible();
+  });
+  it('keeps repository and request filters independent', async () => {
+    mocks.app.filter = 'feature';
+    render(<Sidebar />); expect(screen.getByRole('textbox', { name: 'Filter repository' })).toHaveValue('feature');
+    fireEvent.click(screen.getByRole('button', { name: 'Requests', exact: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    screen.getByRole('button', { name: /Improve request navigation/ });
+    const filter = screen.getByRole('textbox', { name: 'Filter requests' }); expect(filter).toHaveValue('');
+    fireEvent.change(filter, { target: { value: 'unmatched' } }); expect(screen.getByText('No matching pull requests.')).toBeVisible();
+    fireEvent.click(screen.getByTitle('Clear filter')); expect(filter).toHaveValue('');
+    expect(mocks.app.setFilter).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'List', exact: true }));
+    expect(screen.getByRole('textbox', { name: 'Filter repository' })).toHaveValue('feature');
+  });
+  it('shows inline offline errors and retries without startup notifications', async () => {
+    mocks.api.getPullRequestContext.mockRejectedValueOnce(new Error('Provider offline'));
+    render(<Sidebar />); fireEvent.click(screen.getByRole('button', { name: 'Requests', exact: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(screen.getByRole('status')).toHaveTextContent('Provider offline');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(screen.getByRole('button', { name: /Improve request navigation/ })).toBeVisible();
+    expect(mocks.app.notify).not.toHaveBeenCalled();
+  });
+  it('rejects stale repository responses after switching repositories', async () => {
+    let finish: ((value: unknown) => void) | undefined;
+    mocks.api.getPullRequestContext.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const { rerender } = render(<Sidebar />); fireEvent.click(screen.getByRole('button', { name: 'Requests', exact: true }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(mocks.api.getPullRequestContext).toHaveBeenCalledTimes(1);
+    mocks.app.activeTab = '/other';
+    mocks.api.getPullRequestContext.mockResolvedValue({ provider: 'gitlab', remoteName: 'origin', credentialConfigured: true, pullRequests: [] });
+    rerender(<Sidebar />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    screen.getByRole('region', { name: 'Merge Requests' });
+    await act(async () => { finish?.({ provider: 'github', credentialConfigured: true, pullRequests: [{ id: '99', state: 'open', title: 'STALE request' }] }); });
+    expect(screen.queryByText('STALE request')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Merge Requests' })).toBeVisible();
+  });
+});
+
+it('preserves repository expansion and pauses request checks while List is selected', async () => {
+  vi.useFakeTimers();
+  const { rerender } = render(<Sidebar />);
+  fireEvent.click(screen.getByRole('button', { name: /^LOCAL/ }));
+  expect(screen.queryByRole('button', { name: /^main/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Requests', exact: true }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+  screen.getByRole('button', { name: /Improve request navigation/ });
+  fireEvent.click(screen.getByRole('button', { name: 'List', exact: true }));
+  mocks.api.getPullRequestContext.mockClear();
+  mocks.app.status = { currentBranch: 'feature' }; rerender(<Sidebar />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(220); });
+  expect(mocks.api.getPullRequestContext).not.toHaveBeenCalled();
+  expect(screen.queryByRole('button', { name: /^main/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /^LOCAL/ }));
+  expect(screen.getByRole('button', { name: /^main/ })).toBeVisible();
 });

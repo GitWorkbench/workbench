@@ -1,8 +1,9 @@
 import type { Api } from '../../preload/index';
-import type { GitWorkbenchApi, AiCommitConfig } from '../../shared/types';
+import type { GitWorkbenchApi, AiCommitConfig, PullRequestProvider } from '../../shared/types';
 import { generateCommitMessage } from '../../shared/ai';
 import { APP_VERSION } from './appVersion';
 import { normalizeGitLabServer } from '../../shared/gitlab-server';
+import { normalizeHostingServer } from '../../shared/hosting-provider';
 import { externalWebUrl } from '../../shared/external-url';
 
 // In browser preview environments where Electron preload is not injected,
@@ -10,11 +11,13 @@ import { externalWebUrl } from '../../shared/external-url';
 const createMockApi = (): Api & GitWorkbenchApi => {
   const activeRepo = '/var/www/git-gui';
   const recent = ['/var/www/git-gui', '/home/projects/web-platform', '/home/projects/mobile-core'];
-  const mockProviderCredentials: Record<'github' | 'gitlab' | 'bitbucket', boolean> = {
+  const mockProviderCredentials: Record<PullRequestProvider, boolean> = {
     github: false,
     gitlab: false,
-    bitbucket: false
+    bitbucket: false,
+    gitea: false
   };
+  const mockGiteaServers = new Set<string>();
   const mockGitLabServers = new Set<string>();
   const mockPullRequests: import('../../shared/types').HostedPullRequest[] = [{
     id: '42', title: 'Add hosted pull request context', state: 'open', draft: false,
@@ -230,34 +233,44 @@ const createMockApi = (): Api & GitWorkbenchApi => {
       { name: 'upstream', fetchUrl: 'git@github.com:core/upstream.git', pushUrl: 'git@github.com:core/upstream.git' }
     ],
 
-    getPullRequestCredentialStatus: async () => ({ ...mockProviderCredentials, gitlabServers: [...mockGitLabServers] }),
+    getPullRequestCredentialStatus: async () => ({ ...mockProviderCredentials, gitlabServers: [...mockGitLabServers], giteaServers: [...mockGiteaServers] }),
     testGitLabConnection: async (serverUrl: string, token?: string) => {
       const server = normalizeGitLabServer(serverUrl);
       if (!token?.trim() && !mockGitLabServers.has(server)) return { ok: false, error: 'Enter an access token for the browser preview.' };
       return { ok: true, username: 'preview-user' };
     },
-    savePullRequestCredential: async (provider: 'github' | 'gitlab' | 'bitbucket', credential: import('../../shared/types').PullRequestCredential) => {
+    testGiteaConnection: async (serverUrl: string, token?: string) => {
+      const server = normalizeHostingServer(serverUrl, 'Gitea');
+      if (!token?.trim() && !mockGiteaServers.has(server)) return { ok: false, error: 'Enter an access token for the browser preview.' };
+      return { ok: true, username: 'preview-user' };
+    },
+    savePullRequestCredential: async (provider: PullRequestProvider, credential: import('../../shared/types').PullRequestCredential) => {
       if (provider === 'gitlab') mockGitLabServers.add(normalizeGitLabServer(credential.serverUrl ?? 'https://gitlab.com'));
+      if (provider === 'gitea') mockGiteaServers.add(normalizeHostingServer(credential.serverUrl ?? '', 'Gitea'));
       mockProviderCredentials[provider] = true;
       return { ok: true };
     },
-    removePullRequestCredential: async (provider: 'github' | 'gitlab' | 'bitbucket', serverUrl?: string) => {
+    removePullRequestCredential: async (provider: PullRequestProvider, serverUrl?: string) => {
       if (provider === 'gitlab') mockGitLabServers.delete(normalizeGitLabServer(serverUrl ?? 'https://gitlab.com'));
-      mockProviderCredentials[provider] = provider === 'gitlab' && mockGitLabServers.size > 0;
+      if (provider === 'gitea') mockGiteaServers.delete(normalizeHostingServer(serverUrl ?? '', 'Gitea'));
+      mockProviderCredentials[provider] = provider === 'gitlab' ? mockGitLabServers.size > 0 : provider === 'gitea' ? mockGiteaServers.size > 0 : false;
       return { ok: true };
     },
-    getPullRequestContext: async (remoteName?: string, providerOverride?: 'github' | 'gitlab' | 'bitbucket') => {
+    getPullRequestContext: async (remoteName?: string, providerOverride?: PullRequestProvider) => {
       const provider = providerOverride || 'github';
+      const server = provider === 'gitea' ? [...mockGiteaServers][0] || 'https://gitea.example.com' : provider === 'gitlab' ? [...mockGitLabServers][0] || 'https://gitlab.com' : provider === 'bitbucket' ? 'https://bitbucket.org' : 'https://github.com';
+      const repositoryUrl = `${server}/GitWorkbench/workbench`;
+      const requestPath = provider === 'gitlab' ? '-/merge_requests' : provider === 'gitea' ? 'pulls' : provider === 'bitbucket' ? 'pull-requests' : 'pull';
       return {
         provider,
         remoteName: remoteName || 'origin',
-        remoteUrl: 'https://github.com/GitWorkbench/workbench.git',
+        remoteUrl: `${repositoryUrl}.git`,
         repository: 'GitWorkbench/workbench',
-        repositoryUrl: 'https://github.com/GitWorkbench/workbench',
+        repositoryUrl,
         currentBranch: 'feature/conflict-ui',
         defaultBranch: mockProviderCredentials[provider] ? 'main' : '',
         credentialConfigured: mockProviderCredentials[provider],
-        pullRequests: mockProviderCredentials[provider] ? mockPullRequests : []
+        pullRequests: mockProviderCredentials[provider] ? mockPullRequests.map(request => ({ ...request, url: `${repositoryUrl}/${requestPath}/${request.id}` })) : []
       };
     },
     createHostedPullRequest: async (params: { title: string; targetBranch: string }) => {

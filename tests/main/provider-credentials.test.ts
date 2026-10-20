@@ -24,7 +24,7 @@ afterEach(() => fs.rmSync(mock.directory, { recursive: true, force: true }));
 
 describe('encrypted provider credentials', () => {
   it('returns an empty status without creating a file', () => {
-    expect(credentials.getPullRequestCredentialStatus()).toEqual({ github: false, gitlab: false, bitbucket: false });
+    expect(credentials.getPullRequestCredentialStatus()).toEqual({ github: false, gitlab: false, bitbucket: false, gitea: false, gitlabServers: [], giteaServers: [] });
     expect(credentials.getPullRequestCredential('github')).toBeNull();
     expect(fs.existsSync(filename())).toBe(false);
   });
@@ -40,10 +40,10 @@ describe('encrypted provider credentials', () => {
     credentials.savePullRequestCredential('github', { token: 'github' });
     credentials.savePullRequestCredential('gitlab', { token: 'gitlab' });
     credentials.savePullRequestCredential('bitbucket', { token: ' bb ', username: ' user@example.invalid ' });
-    expect(credentials.getPullRequestCredentialStatus()).toEqual({ github: true, gitlab: true, bitbucket: true });
+    expect(credentials.getPullRequestCredentialStatus()).toEqual({ github: true, gitlab: true, bitbucket: true, gitea: false, gitlabServers: ['https://gitlab.com'], giteaServers: [] });
     expect(credentials.getPullRequestCredential('bitbucket')).toEqual({ token: 'bb', username: 'user@example.invalid' });
     credentials.removePullRequestCredential('gitlab');
-    expect(credentials.getPullRequestCredentialStatus()).toEqual({ github: true, gitlab: false, bitbucket: true });
+    expect(credentials.getPullRequestCredentialStatus()).toEqual({ github: true, gitlab: false, bitbucket: true, gitea: false, gitlabServers: [], giteaServers: [] });
     credentials.removePullRequestCredential('github'); credentials.removePullRequestCredential('bitbucket');
     expect(fs.existsSync(filename())).toBe(false);
     expect(() => credentials.removePullRequestCredential('github')).not.toThrow();
@@ -81,7 +81,7 @@ describe('encrypted provider credentials', () => {
   });
   it.each(['null', 'false', '1', '"string"'])('treats decoded non-object data %s as empty', decoded => {
     fs.writeFileSync(filename(), `encrypted:${decoded}`);
-    expect(credentials.getPullRequestCredentialStatus()).toEqual({ github: false, gitlab: false, bitbucket: false });
+    expect(credentials.getPullRequestCredentialStatus()).toEqual({ github: false, gitlab: false, bitbucket: false, gitea: false, gitlabServers: [], giteaServers: [] });
   });
   it('does not report Bitbucket connected without a username', () => {
     fs.writeFileSync(filename(), 'encrypted:{"bitbucket":{"token":"token"}}');
@@ -94,4 +94,68 @@ describe('encrypted provider credentials', () => {
     vi.spyOn(fs, 'unlinkSync').mockImplementation(() => { throw Object.assign(new Error('permission denied'), { code: 'EACCES' }); });
     expect(() => credentials.removePullRequestCredential('github')).toThrow('permission denied');
   });
+});
+
+
+describe('Gitea instance credentials', () => {
+  it('isolates multiple instances, web ports, and providers without returning secrets in status', () => {
+    credentials.savePullRequestCredential('gitea', { serverUrl: 'https://code.example:8443/forge/', token: ' gitea-token ' });
+    credentials.savePullRequestCredential('gitea', { serverUrl: 'https://second.example', token: 'second-token' });
+    credentials.savePullRequestCredential('gitlab', { serverUrl: 'https://gitlab.example', token: 'gitlab-token' });
+    expect(credentials.getPullRequestCredential('gitea', 'ssh://git@code.example:2222/forge/team/repo.git')).toEqual({ token: 'gitea-token', serverUrl: 'https://code.example:8443/forge' });
+    expect(credentials.getPullRequestCredential('gitea', 'https://second.example/team/repo.git')?.token).toBe('second-token');
+    expect(credentials.getPullRequestCredential('gitea', 'https://code.example/forge/team/repo.git')).toBeNull();
+    expect(credentials.getPullRequestCredential('gitea', 'https://gitlab.example/team/repo.git')).toBeNull();
+    expect(credentials.getPullRequestCredential('gitlab', 'https://second.example/team/repo.git')).toBeNull();
+    expect(credentials.getPullRequestCredential('gitea')).toBeNull();
+    const status = credentials.getPullRequestCredentialStatus();
+    expect(status.gitea).toBe(true);
+    expect(status.giteaServers).toEqual(['https://code.example:8443/forge', 'https://second.example']);
+    expect(JSON.stringify(status)).not.toContain('token');
+    credentials.removePullRequestCredential('gitea', 'https://second.example');
+    expect(credentials.getPullRequestCredentialStatus().giteaServers).toEqual(['https://code.example:8443/forge']);
+    expect(credentials.getPullRequestCredentialStatus().gitlab).toBe(true);
+    credentials.removePullRequestCredential('gitea', 'https://code.example:8443/forge');
+    expect(credentials.getPullRequestCredentialStatus().gitea).toBe(false);
+    expect(credentials.getPullRequestCredential('gitlab', 'git@gitlab.example:team/repo.git')?.token).toBe('gitlab-token');
+  });
+  it('rejects cross-provider instance collisions and invalid token/URL values without overwriting credentials', () => {
+    credentials.savePullRequestCredential('gitea', { serverUrl: 'https://code.example', token: 'original' });
+    expect(() => credentials.savePullRequestCredential('gitlab', { serverUrl: 'https://code.example', token: 'wrong' })).toThrow('already connected as Gitea');
+    credentials.savePullRequestCredential('gitlab', { serverUrl: 'https://gitlab.example', token: 'gitlab' });
+    expect(() => credentials.savePullRequestCredential('gitea', { serverUrl: 'https://gitlab.example', token: 'wrong' })).toThrow('already connected as GitLab');
+    expect(() => credentials.savePullRequestCredential('gitea', { token: 'secret' })).toThrow('server URL');
+    expect(() => credentials.savePullRequestCredential('gitea', { serverUrl: 'http://code.example', token: 'secret' })).toThrow('HTTPS');
+    expect(() => credentials.savePullRequestCredential('gitea', { serverUrl: 'https://code.example', token: 'bad\r\nvalue' })).toThrow('invalid characters');
+    expect(credentials.getPullRequestCredential('gitea', 'git@code.example:owner/repo.git')?.token).toBe('original');
+  });
+  it('removes the credential file when the final Gitea server is disconnected', () => {
+    credentials.savePullRequestCredential('gitea', { serverUrl: 'https://code.example', token: 'secret' });
+    credentials.removePullRequestCredential('gitea', 'https://code.example/');
+    expect(fs.existsSync(filename())).toBe(false);
+  });
+});
+
+
+it('reads the cloud GitLab credential format, replaces it per instance, and refuses a provider collision', () => {
+  fs.writeFileSync(filename(), 'encrypted:{"gitlab":{"token":"cloud-token"}}');
+  expect(credentials.getPullRequestCredentialStatus()).toMatchObject({ gitlab: true, gitlabServers: ['https://gitlab.com'] });
+  expect(credentials.getPullRequestCredential('gitlab')).toEqual({ token: 'cloud-token', serverUrl: 'https://gitlab.com' });
+  expect(() => credentials.savePullRequestCredential('gitea', { serverUrl: 'https://gitlab.com', token: 'wrong' })).toThrow('already connected as GitLab');
+  credentials.savePullRequestCredential('gitlab', { token: 'replacement' });
+  expect(credentials.getPullRequestCredential('gitlab', 'git@gitlab.com:org/repo.git')?.token).toBe('replacement');
+  credentials.removePullRequestCredential('gitlab');
+  expect(credentials.getPullRequestCredential('gitlab')).toBeNull();
+});
+it('does not invent a Gitea token before configuration and rejects malformed credential objects', () => {
+  expect(credentials.getPullRequestCredential('gitea', 'https://unknown.example/team/repo.git')).toBeNull();
+  for (const value of [null, { token: 3 }, { token: 'test', username: 3 }]) {
+    expect(() => Reflect.apply(credentials.savePullRequestCredential, undefined, ['gitea', value])).toThrow('valid provider credential');
+  }
+  expect(() => credentials.removePullRequestCredential('gitea')).toThrow('server URL');
+});
+
+it('returns no credential for an empty entry in the encrypted Gitea server map', () => {
+  fs.writeFileSync(filename(), 'encrypted:' + JSON.stringify({ giteaServers: { 'https://code.example': null } }));
+  expect(credentials.getPullRequestCredential('gitea', 'https://code.example/team/repo.git')).toBeNull();
 });

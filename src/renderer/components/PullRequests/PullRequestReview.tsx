@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, RefreshCw, Loader2, ExternalLink, MessageSquare, X } from 'lucide-react';
 import type { HostedPullRequest, PullReviewDetail, PullReviewSubmission, PullReviewTarget } from '../../../shared/types';
+import { requestLabel } from '../../../shared/hosting-provider';
 import { reviewDiffLines } from '../../../shared/review-diff';
 import { api } from '../../lib/api';
 import { useApp } from '../../store';
@@ -72,9 +73,9 @@ export function PullRequestReview({ request, target, onClose }: { request: Hoste
     finally { if (mounted.current) setSaving(false); }
   };
   return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-    <div role="dialog" aria-modal="true" aria-label="Review pull request" className="flex h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-edge bg-panel shadow-2xl">
+    <div role="dialog" aria-modal="true" aria-label={`Review ${requestLabel(target.provider, false).toLowerCase()}`} className="flex h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl border border-edge bg-panel shadow-2xl">
       <header className="flex items-center gap-3 border-b border-edge p-4">
-        <button className="btn-secondary text-xs" onClick={() => { if (!body.trim() || window.confirm('Discard your unpublished review message?')) onClose(); }} disabled={saving}><ArrowLeft size={13} /> Requests</button>
+        <button className="btn-secondary text-xs" onClick={() => { if (!body.trim() || window.confirm('Discard your unpublished review message?')) onClose(); }} disabled={saving}><ArrowLeft size={13} /> {requestLabel(target.provider)}</button>
         <div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">#{request.id} {request.title}</h2><p className="text-xs text-dim">{request.sourceBranch} → {request.targetBranch} · {data?.head.slice(0, 8) || 'Loading…'}</p></div>
         <a className="btn-secondary text-xs" href={safeUrl(request.url)} target="_blank" rel="noreferrer"><ExternalLink size={13} /> Provider</a>
         <button className="btn text-xs" disabled={!data || loading || saving} onClick={() => setWorktreeForm(!worktreeForm)}>Open in worktree…</button>
@@ -82,7 +83,7 @@ export function PullRequestReview({ request, target, onClose }: { request: Hoste
       </header>
       {worktreeForm && <div className="border-b border-edge bg-panel2 p-3 space-y-2 text-xs">
         <p>Create a new folder and local review branch at {data?.head.slice(0, 8)}. Your current files stay in place. Dependencies and project scripts are not run.</p>
-        <div className="flex gap-2 items-center flex-wrap"><button className="btn" disabled={saving || !!createdWorktree} onClick={() => void api.selectDirectory('Choose a parent folder for the PR worktree').then(result => { if (result.ok && result.path) setParentDirectory(result.path); }).catch(e => setMessage(String(e)))}>Choose parent folder…</button><span className="text-dim break-all">{parentDirectory || 'No folder selected'}</span></div>
+        <div className="flex gap-2 items-center flex-wrap"><button className="btn" disabled={saving || !!createdWorktree} onClick={() => void api.selectDirectory('Choose a parent folder for the review worktree').then(result => { if (result.ok && result.path) setParentDirectory(result.path); }).catch(e => setMessage(String(e)))}>Choose parent folder…</button><span className="text-dim break-all">{parentDirectory || 'No folder selected'}</span></div>
         <div className="flex gap-2 flex-wrap"><label className="flex flex-col gap-1">New folder<input value={folder} disabled={saving || !!createdWorktree} onChange={e => setFolder(e.target.value)} /></label><label className="flex flex-col gap-1">New local branch<input value={reviewBranch} disabled={saving || !!createdWorktree} onChange={e => setReviewBranch(e.target.value)} /></label><button className="btn self-end" disabled={!parentDirectory || !data || loading || saving || !!createdWorktree} onClick={() => void createWorktree()}>{saving ? 'Creating…' : 'Create worktree'}</button>{createdWorktree && <button className="btn self-end" onClick={() => { if (body.trim() && !window.confirm('Discard your unpublished review message and open the worktree?')) return; onClose(); useApp.getState().closePullRequestsModal(); void useApp.getState().openRepo(createdWorktree); }}>Open review workspace</button>}</div>
         {createdWorktree && <p className="text-add break-all">{createdWorktree}</p>}
       </div>}
@@ -103,7 +104,7 @@ export function PullRequestReview({ request, target, onClose }: { request: Hoste
           </div>
         </div> : tab === 'checks' ? <div className="space-y-2 p-4">{!data.checks.length && <p className="text-xs text-dim">No CI results were returned for this revision. Check the warnings for missing permissions.</p>}{data.checks.map((check, i) => <div key={i} className="flex items-center gap-3 rounded border border-edge p-3 text-xs"><span className="flex-1">{check.name}</span><span className={/^(success|successful|passed)$/i.test(check.state) ? 'text-add' : /fail|error|cancel/i.test(check.state) ? 'text-del' : 'text-dim'}>{check.state}</span>{safeUrl(check.url) && <a href={safeUrl(check.url)} target="_blank" rel="noreferrer" className="text-accent"><ExternalLink size={13} /></a>}</div>)}</div> : <div className="space-y-3 p-4 selectable">
           {data.description && <pre className="whitespace-pre-wrap rounded border border-edge p-3 text-xs">{data.description}</pre>}
-          {data.comments.map(c => <article key={c.id} className="rounded-lg border border-edge p-3 text-xs"><div className="flex flex-wrap items-center gap-2"><strong>{c.author}</strong><span className="text-dim">{c.state || (c.resolved === true ? 'Resolved' : c.resolved === false ? 'Unresolved' : '')}</span><span className="text-faint">{c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</span></div>{c.path && <p className="mt-1 font-mono text-accent">{c.path}:{c.line} ({c.side})</p>}<p className="mt-2 whitespace-pre-wrap break-words">{c.body}</p>{(target.provider === 'github' ? /^\d+$/.test(c.id) && !!c.path : !c.state) && <button className="btn mt-2 text-xs" disabled={saving} onClick={() => { setReplyTo({ id: c.id, threadId: c.threadId }); setInline(undefined); setAction('comment'); }}><MessageSquare size={12} /> Reply</button>}</article>)}
+          {data.comments.map(c => <article key={c.id} className="rounded-lg border border-edge p-3 text-xs"><div className="flex flex-wrap items-center gap-2"><strong>{c.author}</strong><span className="text-dim">{c.state || (c.resolved === true ? 'Resolved' : c.resolved === false ? 'Unresolved' : '')}</span><span className="text-faint">{c.createdAt ? new Date(c.createdAt).toLocaleString() : ''}</span></div>{c.path && <p className="mt-1 font-mono text-accent">{c.path}:{c.line} ({c.side})</p>}<p className="mt-2 whitespace-pre-wrap break-words">{c.body}</p>{(target.provider === 'github' || target.provider === 'gitea' ? /^\d+$/.test(c.id) && !!c.path : !c.state) && <button className="btn mt-2 text-xs" disabled={saving} onClick={() => { setReplyTo({ id: c.id, threadId: c.threadId }); setInline(undefined); setAction('comment'); }}><MessageSquare size={12} /> Reply</button>}</article>)}
         </div>}
       </div>
       <footer className="max-h-[42vh] shrink-0 overflow-auto border-t border-edge bg-panel2/30 p-3">

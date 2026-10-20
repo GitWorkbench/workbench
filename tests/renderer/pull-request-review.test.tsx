@@ -91,8 +91,8 @@ describe('pull request review loading and navigation', () => {
     fireEvent.keyDown(window, { key: 'x' }); expect(close).not.toHaveBeenCalled();
     fireEvent.keyDown(window, { key: 'Escape' }); expect(close).toHaveBeenCalledOnce();
     fillMessage('Draft'); fireEvent.keyDown(window, { key: 'Escape' });
-    fireEvent.click(screen.getByRole('button', { name: 'Requests' })); expect(close).toHaveBeenCalledOnce();
-    confirm.mockReturnValue(true); fireEvent.keyDown(window, { key: 'Escape' }); fireEvent.click(screen.getByRole('button', { name: 'Requests' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pull Requests' })); expect(close).toHaveBeenCalledOnce();
+    confirm.mockReturnValue(true); fireEvent.keyDown(window, { key: 'Escape' }); fireEvent.click(screen.getByRole('button', { name: 'Pull Requests' }));
     expect(close).toHaveBeenCalledTimes(3);
     expect(confirm).toHaveBeenCalledWith('Discard your unpublished review message?');
   });
@@ -146,7 +146,7 @@ describe('review submission and inline replies', () => {
     const close = vi.fn(); render(<PullRequestReview request={request} target={target} onClose={close} />); await ready();
     fillMessage('Keep this draft'); fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
     expect(screen.getByRole('textbox', { name: 'Review message' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Requests' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Pull Requests' })).toBeDisabled();
     fireEvent.keyDown(window, { key: 'Escape' }); expect(close).not.toHaveBeenCalled();
     fireEvent.submit(screen.getByRole('textbox', { name: 'Review message' }).closest('form')!); expect(mocks.api.submitPullReview).toHaveBeenCalledOnce();
     await act(async () => reject(new Error('Permission denied')));
@@ -196,4 +196,22 @@ describe('review worktrees', () => {
     expect(screen.getByRole('button', { name: 'Create worktree' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Open in worktree…' })); expect(screen.queryByRole('textbox', { name: 'New folder' })).not.toBeInTheDocument();
   });
+});
+
+
+it('keeps a rejected Gitea reply draft and only offers inline reply targets', async () => {
+  mocks.api.getPullReview.mockResolvedValue(detail({ comments: [
+    { id: '4', author: 'alice', body: 'Review this line', path: 'src/file.ts', line: 2, side: 'new' },
+    { id: 'issue-5', author: 'bob', body: 'General conversation' }
+  ] }));
+  mocks.api.submitPullReview.mockRejectedValue(new Error('Older Gitea versions do not support inline replies.'));
+  render(<PullRequestReview request={request} target={{ ...target, provider: 'gitea' }} onClose={vi.fn()} />); await ready();
+  expect(screen.getByRole('dialog')).toHaveAttribute('aria-label', 'Review pull request');
+  fireEvent.click(screen.getByRole('button', { name: 'Conversation (2)' }));
+  expect(screen.getAllByRole('button', { name: 'Reply' })).toHaveLength(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Reply' })); fillMessage('Keep this reply draft');
+  fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Older Gitea versions');
+  expect(screen.getByRole('textbox', { name: 'Review message' })).toHaveValue('Keep this reply draft');
+  expect(mocks.api.submitPullReview).toHaveBeenCalledWith(expect.objectContaining({ provider: 'gitea', body: 'Keep this reply draft', replyTo: { id: '4', threadId: undefined } }));
 });

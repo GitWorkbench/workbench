@@ -121,8 +121,8 @@ export function CommandPalette() {
       {
         id: 'cmd-pull-requests',
         category: 'Commands',
-        title: 'Open Pull Request Context…',
-        subtitle: 'View or create GitHub, GitLab, and Bitbucket requests for this branch',
+        title: 'Open Requests…',
+        subtitle: 'View or create GitHub, GitLab, Bitbucket, and Gitea requests for this branch',
         icon: <GitPullRequest size={14} className="text-accent" />,
         action: () => useApp.getState().openPullRequestsModal()
       },
@@ -279,7 +279,7 @@ export function CommandPalette() {
         action: () => useApp.getState().openReflogModal()
       },
       { id: 'cmd-split-commit', category: 'Commands', title: 'Split Commit…', subtitle: 'Assign files and hunks to smaller commits, preview, then apply', icon: <GitBranch size={14} />, action: () => useApp.setState({ commitSplitOpen: true }) },
-      { id: 'cmd-branch-stack', category: 'Commands', title: 'Stacked Branches & PRs…', subtitle: 'Link dependent branches, preview restacks, and retarget requests', icon: <GitBranch size={14} />, action: () => useApp.setState({ branchStackOpen: true }) },
+      { id: 'cmd-branch-stack', category: 'Commands', title: 'Stacked Branches & Requests…', subtitle: 'Link dependent branches, preview restacks, and retarget requests', icon: <GitBranch size={14} />, action: () => useApp.setState({ branchStackOpen: true }) },
       { id: 'cmd-lfs', category: 'Commands', title: 'Git LFS Manager…', subtitle: 'Track large assets, inspect local objects, and transfer with progress', icon: <Download size={14} />, action: () => useApp.setState({ lfsManagerOpen: true }) },
       { id: 'cmd-sparse', category: 'Commands', title: 'Sparse Checkout…', subtitle: 'Choose folders, preview file changes, and save checkout layouts', icon: <FolderOpen size={14} />, action: () => useApp.setState({ sparseCheckoutOpen: true }) },
       { id: 'cmd-home', category: 'Commands', title: 'Go Home — Repositories & Dashboard', subtitle: 'Open projects, recent repositories, pinned status and hosted requests', icon: <FolderGit2 size={14} />, action: () => { useSettings.getState().closeSettings(); useApp.getState().openHome(); } },

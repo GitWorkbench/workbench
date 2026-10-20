@@ -59,7 +59,7 @@ export const guideTopics: GuideTopic[] = [
       { title: 'Find a repository', description: 'Use Home’s shared search to filter project names and paths. Open a recent entry, or use Resume to return to a workspace that is already open.' },
       { title: 'Pin projects you watch', description: 'Use a recent repository’s pin button to give it a status card. Pinned projects leave the recent list so each project appears once. Unpin to return it to your recent history.' },
       { title: 'Read local status', description: 'Pinned cards show branch, staged and changed files, conflicts, and ahead/behind counts. Use All pinned, With changes, or Needs attention to narrow the cards; unavailable folders also need attention.' },
-      { title: 'Refresh the information you need', description: 'Refresh rescans local status. Check PRs / MRs explicitly contacts the configured provider; expand a card’s request section to inspect its loaded requests and links.' }
+      { title: 'Refresh the information you need', description: 'Refresh rescans local status. Check requests explicitly contacts the configured provider; expand a card’s request section to inspect its loaded requests and links.' }
     ],
     tips: ['Ahead/behind compares with the last fetched upstream. A local refresh does not fetch new commits.', 'Removing a recent entry does not delete its folder. Missing pinned folders stay visible until you reconnect or unpin them.'],
     actions: [{ id: 'home', label: 'Go Home' }, { id: 'providers', label: 'Connect providers' }],
@@ -234,9 +234,9 @@ export const guideTopics: GuideTopic[] = [
     related: ['conflict-editor', 'merge-preview']
   },
   {
-    id: 'providers', category: 'collaboration', title: 'Connect GitHub, GitLab, or Bitbucket',
+    id: 'providers', category: 'collaboration', title: 'Connect GitHub, GitLab, Bitbucket, or Gitea',
     summary: 'Authorize the hosted request workspace and understand which connection controls API access versus Git transport.',
-    minutes: 5, level: 'Essentials', keywords: ['github', 'sign in', 'device', 'login', 'gitlab', 'bitbucket', 'token', 'provider', 'account', 'permissions'],
+    minutes: 5, level: 'Essentials', keywords: ['github', 'sign in', 'device', 'login', 'gitlab', 'bitbucket', 'gitea', 'token', 'provider', 'account', 'permissions'],
     location: 'Settings → Pull Request Providers',
     prerequisites: ['An account on the supported provider and a secure operating system keychain.'],
     steps: [
@@ -244,10 +244,11 @@ export const guideTopics: GuideTopic[] = [
       { title: 'Choose repository access', description: 'After sign-in completes, use Choose repositories on GitHub to install the app for the projects you want. An organization owner may need to approve access. Return and choose Refresh access, then refresh the request workspace.' },
       { title: 'Or use a manual provider token', description: 'GitHub’s manual token fallback needs Pull requests read/write and Contents read; CI also needs Checks read and Commit statuses read. GitLab needs an api token. Bitbucket Cloud needs an API token with repository read and pull request read/write plus the Atlassian account email.' },
       { title: 'Connect GitLab servers separately', description: 'In the GitLab section, choose Add GitLab server and enter the HTTPS instance URL, including a port or base path when required. Create an api-scope token on that instance. Test connection checks the account; Connect GitLab checks and saves it securely. GitLab.com and multiple self-hosted servers can stay connected together.' },
-      { title: 'Open a matching hosted repository', description: 'Open a local repository with a supported remote, then use Actions → Pull Requests / Merge Requests. Registered GitLab instances are detected from HTTPS or SSH remotes, including nested groups. The matching server token is used for requests, reviews, CI, and review worktrees. Reopen the workspace after changing a connection.' },
+      { title: 'Connect Gitea servers', description: 'In Gitea, choose Add Gitea server and enter its HTTPS instance URL, including its web port or base path. Create a token on that server with read:user, write:repository, and write:issue permissions. Test connection verifies the account; Connect Gitea saves the token encrypted. Each server has its own credential.' },
+      { title: 'Open a matching hosted repository', description: 'Open a local repository with a supported remote, then use Actions → Requests. Registered GitLab and Gitea instances are detected from HTTPS or SSH remotes, including nested groups. The matching server token is used for requests, reviews, CI, and review worktrees. Reopen the workspace after changing a connection.' },
       { title: 'Manage the connection', description: 'Use Switch GitHub account for another browser authorization, or Disconnect to remove this device’s stored credentials. To revoke access on GitHub itself, use its Authorized GitHub Apps or Installed GitHub Apps settings.' }
     ],
-    tips: ['Signing in and installing for selected repositories are separate steps. An installation count alone does not prove a particular repository is accessible.', 'GitHub sessions refresh as needed. If revoked or no longer refreshable, reconnect. Linux needs a secure keyring; a plain-text fallback is not accepted.', 'GitLab tokens stay scoped to the saved HTTPS instance. A server may require a VPN or a trusted company certificate. Custom SSH aliases must use the server hostname; ambiguous instances sharing a hostname should use HTTPS remotes.'],
+    tips: ['Signing in and installing for selected repositories are separate steps. An installation count alone does not prove a particular repository is accessible.', 'GitHub sessions refresh as needed. If revoked or no longer refreshable, reconnect. Linux needs a secure keyring; a plain-text fallback is not accepted.', 'GitLab and Gitea tokens stay scoped to the saved HTTPS instance. A server may require a VPN or a trusted company certificate. Custom SSH aliases must use the server hostname; ambiguous instances sharing a hostname should use HTTPS remotes.'],
     caution: 'Provider connection does not configure SSH keys or the Git credential helper used for fetch and push. GitHub Enterprise and Bitbucket Data Center are not supported in this workspace.',
     actions: [{ id: 'providers', label: 'Connect a provider' }],
     related: ['pull-requests', 'sync-remotes', 'review-worktrees']
@@ -256,18 +257,18 @@ export const guideTopics: GuideTopic[] = [
     id: 'pull-requests', category: 'collaboration', title: 'Create and review a pull or merge request',
     summary: 'Publish a branch, read its hosted patch and conversation, submit a review, and inspect checks for the loaded revision.',
     minutes: 7, level: 'Intermediate', keywords: ['pr', 'mr', 'pull request', 'merge request', 'review', 'approve', 'comment', 'ci', 'checks'],
-    location: 'Actions → Pull Requests / Merge Requests',
+    location: 'Actions → Requests',
     prerequisites: ['A supported hosted remote and configured provider connection.', 'Git push authentication for creating a request.'],
     steps: [
-      { title: 'Select the remote and request', description: 'Open the request workspace, select the correct remote, and refresh. Inspect source/target branches, author, draft state, and provider links before selecting a request.' },
+      { title: 'Select the remote and request', description: 'Choose Requests beside List in the left sidebar. Its separate view shows Merge Requests for GitLab and Pull Requests for GitHub, Bitbucket, or Gitea. Branches stay in List, and the two views retain separate filters. It loads open requests for the active repository. Choose a remote, refresh, or filter by title, number, author, or branch. Click a request to open its review, or use + to create one. Provider loading runs while the Requests view is selected; errors stay inline without startup notifications. The workspace also opens from Actions or Create request in a commit’s context menu.' },
       { title: 'Create from a prepared branch', description: 'To open a new request, check out your source branch, commit its intended changes, and complete the creation form. Creation pushes that branch using your normal Git authentication before contacting the provider. Uncommitted edits are not included.' },
       { title: 'Review the loaded revision', description: 'Choose Review changes, conversation & CI. Browse changed files and read the patch. Select an old or new line number when targeting an inline comment; reply in the conversation where supported.' },
       { title: 'Submit explicitly', description: 'Choose Comment, Approve, or Request changes and submit the message. Draft text stays unpublished until submission. If the source revision changed since loading, refresh and review it again; the rejected submission keeps your message.' },
       { title: 'Read CI and provider limits', description: 'Use CI for checks and statuses tied to the reviewed source revision, then refresh for newer results. Read permission warnings, missing-patch notices, and pagination limits separately from a genuinely empty result.' }
     ],
-    tips: ['On older GitLab hosts, Request changes (discussion) posts a discussion and withdraws approval rather than setting a native blocking review.', 'An error can report a partial provider action. Read it before retrying to avoid a duplicate comment or review.'],
+    tips: ['On older GitLab hosts, Request changes (discussion) posts a discussion and withdraws approval rather than setting a native blocking review.', 'Gitea inline replies depend on its API version. If the server does not support them, reply on the provider; a failed submission keeps your message.', 'An error can report a partial provider action. Read it before retrying to avoid a duplicate comment or review.'],
     caution: 'Submitting reviews, comments, and new requests writes to the selected hosting provider. Confirm the repository, target, and revision before submission.',
-    actions: [{ id: 'pull-requests', label: 'Open pull requests' }, { id: 'providers', label: 'Provider connections' }],
+    actions: [{ id: 'pull-requests', label: 'Open requests' }, { id: 'providers', label: 'Provider connections' }],
     related: ['providers', 'review-worktrees', 'branch-stacks', 'sync-remotes']
   },
   {
@@ -363,14 +364,14 @@ export const guideTopics: GuideTopic[] = [
     id: 'branch-stacks', category: 'history', title: 'Manage stacked branches and requests',
     summary: 'Link dependent branches, preview their rebases in isolation, and explicitly retarget hosted requests.',
     minutes: 8, level: 'Advanced', keywords: ['stack', 'stacked', 'restack', 'parent', 'dependent', 'retarget', 'pr', 'mr'],
-    location: 'Actions → Stacked Branches & PRs…',
+    location: 'Actions → Stacked Branches & Requests…',
     prerequisites: ['Local branches with a known parent/child relationship.', 'Git 2.38+ for restack previews; provider connection for request retargeting.'],
     steps: [
       { title: 'Link each child to its parent', description: 'Set local branch relationships and inspect their saved boundaries and commit counts. Links describe the stack; creating or changing one does not move branches. Recalculate boundary deliberately resets the split point to the current merge base.' },
       { title: 'Build a restack preview', description: 'Select the base and Build restack preview. The linked descendants are replayed in dependency order in a separate preview worktree. Inspect old/new tips without changing the source branches.' },
       { title: 'Resolve a paused preview', description: 'If a preview pauses, open its workspace, resolve conflicts, and Continue its rebase. Return to an original workspace and Resume preview. If that rebase was aborted, remove the preview and build another.' },
       { title: 'Apply only from an unaffected checkout', description: 'Check out an unaffected branch, usually the base, and clean its pending work. None of the branches being updated may be checked out in any worktree. Review all tips before Apply to branches; changed source hashes reject the application.' },
-      { title: 'Retarget requests separately', description: 'After a parent merges, explicitly change the child’s local parent, preview and apply the stack, then use Retarget an open PR / MR for its provider target. Inspect the selected remote, request, and target before the provider update.' }
+      { title: 'Retarget requests separately', description: 'After a parent merges, explicitly change the child’s local parent, preview and apply the stack, then use Retarget an open request for its provider target. Inspect the selected remote, request, and target before the provider update.' }
     ],
     tips: ['Restack previews support up to 10 descendants with up to 100 linear commits each.', 'Saved preview tips and rewrite comparisons provide references for inspection; remove a preview only after preserving any work in its workspace.'],
     caution: 'Restacking changes commit hashes and may change signatures and committer information. It does not detect merged parents, publish branches, or force-push rewritten history automatically.',

@@ -2,8 +2,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-const mock = vi.hoisted(() => ({ handlers: new Map<string, (...a: any[]) => any>(), functions: {} as Record<string, any>, git: {} as Record<string, any>, repo: '' as string | null, win: null as any, exec: vi.fn(), spawn: vi.fn(), send: vi.fn(), open: vi.fn(), reveal: vi.fn() }));
-vi.mock('electron', () => ({ app: { once: vi.fn(), getPath: () => mock.repo, relaunch: vi.fn(), exit: vi.fn() }, ipcMain: { handle: (channel: string, fn: any) => mock.handlers.set(channel, fn) }, dialog: { showOpenDialog: vi.fn() }, shell: { openPath: mock.open, showItemInFolder: mock.reveal } }));
+const mock = vi.hoisted(() => ({ handlers: new Map<string, (...a: any[]) => any>(), functions: {} as Record<string, any>, git: {} as Record<string, any>, repo: '' as string | null, win: null as any, exec: vi.fn(), spawn: vi.fn(), send: vi.fn(), open: vi.fn(), external: vi.fn(), reveal: vi.fn() }));
+vi.mock('electron', () => ({ app: { once: vi.fn(), getPath: () => mock.repo, relaunch: vi.fn(), exit: vi.fn() }, ipcMain: { handle: (channel: string, fn: any) => mock.handlers.set(channel, fn) }, dialog: { showOpenDialog: vi.fn() }, shell: { openPath: mock.open, openExternal: mock.external, showItemInFolder: mock.reveal } }));
 vi.mock('node:child_process', () => ({ exec: mock.exec, spawn: mock.spawn }));
 vi.mock('simple-git', () => ({ default: () => mock.git }));
 const modules: Record<string, string> = {
@@ -19,7 +19,7 @@ const modules: Record<string, string> = {
   'gitflow': 'getGitFlowConfig initGitFlow startGitFlowBranch finishGitFlowBranch',
   'bisect': 'startBisect stepBisect resetBisect getBisectState',
   'changelog': 'generateChangelog', 'reflog': 'getReflog createRecoveryBranch restoreHeadFromReflog',
-  'pull-requests': 'getPullRequestContext createHostedPullRequest', 'pull-request-review': 'getPullReview submitPullReview',
+  'pull-requests': 'getPullRequestContext createHostedPullRequest testGitLabConnection testGiteaConnection', 'pull-request-review': 'getPullReview submitPullReview',
   'repository-dashboard': 'pinnedRepositories pinRepository repositoryOverview', 'pull-request-worktree': 'openPullRequestWorktree',
   'commit-split': 'getCommitSplit previewCommitSplit applyCommitSplit discardCommitSplit listCommitSplitPreviews',
   'branch-stacks': 'getBranchStack setStackParent previewStackRestack resumeStackRestack applyStackRestack discardStackRestack retargetPullRequest',
@@ -176,12 +176,12 @@ describe('main process feature routing', () => {
   });
   it('captures status for log limits and still loads history when status fails', async () => { await call('git:log'); expect(mock.functions.getLog).toHaveBeenCalledWith(root, { staged: [], unstaged: [] }, 300); mock.functions.getStatus.mockRejectedValue(new Error('status failed')); await call('git:log', 50); expect(mock.functions.getLog).toHaveBeenCalledWith(root, null, 50); });
   it('returns recovery metadata and obtains commit patches before reversing hunks', async () => { mock.functions.createRecoveryBranch.mockResolvedValue({ branchName: 'recovered' }); mock.functions.restoreHeadFromReflog.mockResolvedValue({ backupBranch: 'backup' }); expect(await call('git:reflog-recover-branch', 'hash', 'saved')).toEqual({ ok: true, branchName: 'recovered' }); expect(await call('git:reflog-restore-head', 'hash')).toEqual({ ok: true, backupBranch: 'backup' }); await call('git:revert-hunk', 'hash', 'file', 2); expect(mock.functions.getCommitDiffText).toHaveBeenCalledWith(root, 'hash', 'file'); expect(mock.functions.revertHunk).toHaveBeenCalledWith(root, 'response', 2); });
-  it.each(['github', 'gitlab', 'bitbucket'])('manages %s credentials and only invalidates GitHub sign-in for GitHub', async provider => {
-    const credential = { token: 'fake-test-token' }; expect(await call('git:pull-requests:save-credential', provider, credential)).toEqual({ ok: true }); expect(mock.functions.savePullRequestCredential).toHaveBeenCalledWith(provider, credential); expect(await call('git:pull-requests:remove-credential', provider)).toEqual({ ok: true }); expect(mock.functions.removePullRequestCredential).toHaveBeenCalledWith(provider); expect(mock.functions.cancelGitHubSignIn).toHaveBeenCalledTimes(provider === 'github' ? 2 : 0); expect(mock.functions.githubCredentialsChanged).toHaveBeenCalledTimes(provider === 'github' ? 2 : 0); expect(await call('git:pull-requests:credentials')).toBe('response');
+  it.each(['github', 'gitlab', 'bitbucket', 'gitea'])('manages %s credentials and only invalidates GitHub sign-in for GitHub', async provider => {
+    const credential = { token: 'fake-test-token' }; expect(await call('git:pull-requests:save-credential', provider, credential)).toEqual({ ok: true }); expect(mock.functions.savePullRequestCredential).toHaveBeenCalledWith(provider, credential); expect(await call('git:pull-requests:remove-credential', provider)).toEqual({ ok: true }); expect(mock.functions.removePullRequestCredential).toHaveBeenCalledWith(provider, undefined); expect(mock.functions.cancelGitHubSignIn).toHaveBeenCalledTimes(provider === 'github' ? 2 : 0); expect(mock.functions.githubCredentialsChanged).toHaveBeenCalledTimes(provider === 'github' ? 2 : 0); expect(await call('git:pull-requests:credentials')).toBe('response');
   });
   it('routes provider context and creation and rejects invalid override values', async () => {
     expect(await call('git:pull-requests:context', 'origin', 'gitlab')).toBe('response'); expect(mock.functions.getPullRequestContext).toHaveBeenCalledWith(root, 'origin', 'gitlab', mock.functions.getPullRequestCredential); const params = { remoteName: 'origin', title: 'Title', description: 'Body', targetBranch: 'main' }; expect(await call('git:pull-requests:create', params)).toEqual({ ok: true, pullRequest: 'response' }); expect(mock.functions.createHostedPullRequest).toHaveBeenCalledWith(root, 'origin', 'Title', 'Body', 'main', undefined, mock.functions.getPullRequestCredential);
-    expect(await call('git:pull-requests:context', 'origin', 'evil')).toEqual({ __error: 'Choose GitHub, GitLab, or Bitbucket.' }); expect(await call('git:pull-requests:create', { ...params, providerOverride: 'evil' })).toHaveProperty('__error');
+    expect(await call('git:pull-requests:context', 'origin', 'evil')).toEqual({ __error: 'Choose GitHub, GitLab, Bitbucket, or Gitea.' }); expect(await call('git:pull-requests:create', { ...params, providerOverride: 'evil' })).toHaveProperty('__error');
   });
   it('returns operation errors in the appropriate envelope', async () => { for (const [channel, fn] of [['git:export-patch', 'exportPatch'], ['git:apply-patch', 'applyPatchFile'], ['git:stash-apply-file', 'applyStashFile']]) { mock.functions[fn].mockRejectedValue(new Error('refused')); expect(await call(channel, 'arg')).toEqual({ ok: false, error: 'refused' }); } mock.functions.stageHunk.mockRejectedValue('unknown error'); expect(await call('git:stage-hunk', 'file', 0)).toEqual({ __error: 'unknown error' }); });
 });
@@ -302,4 +302,49 @@ it('creates an initial commit for a gitignore-only scaffold', async () => {
   expect(mock.git.add).toHaveBeenCalledWith('.'); expect(mock.git.commit).toHaveBeenCalledWith('Initial commit');
   expect(fs.existsSync(path.join(directory, 'README.md'))).toBe(false);
   expect(fs.readFileSync(path.join(directory, '.gitignore'), 'utf8')).toContain('node_modules');
+});
+
+
+it.each(['gitlab', 'gitea'])('tests a %s connection at the main boundary and refuses saved token mismatches', async provider => {
+  const channel = `git:pull-requests:test-${provider}`;
+  const test = mock.functions[provider === 'gitlab' ? 'testGitLabConnection' : 'testGiteaConnection'];
+  test.mockResolvedValue('alice');
+  expect(await call(channel, 'https://code.example/forge/', 'draft-token')).toEqual({ ok: true, username: 'alice' });
+  expect(test).toHaveBeenCalledWith('https://code.example/forge', { token: 'draft-token', serverUrl: 'https://code.example/forge' });
+  mock.functions.getPullRequestCredential.mockReturnValue({ token: 'saved-token', serverUrl: 'https://code.example/forge' });
+  expect(await call(channel, 'https://code.example/forge')).toEqual({ ok: true, username: 'alice' });
+  expect(mock.functions.getPullRequestCredential).toHaveBeenCalledWith(provider, 'https://code.example/forge/');
+  mock.functions.getPullRequestCredential.mockReturnValue({ token: 'wrong-token', serverUrl: 'https://other.example' });
+  expect(await call(channel, 'https://code.example/forge')).toHaveProperty('__error', `Connect this ${provider === 'gitea' ? 'Gitea' : 'GitLab'} server first.`);
+  expect(await call(channel, 'http://code.example', 'token')).toHaveProperty('__error', expect.stringContaining('HTTPS'));
+  expect(await call(channel, 'https://code.example', 123)).toHaveProperty('__error', expect.stringContaining('valid'));
+  expect(test).toHaveBeenCalledTimes(2);
+});
+
+
+it('validates external web links before invoking the native shell', async () => {
+  mock.external.mockReset().mockResolvedValue(undefined);
+  expect(await call('app:open-external', 'https://example.com/project')).toBeUndefined();
+  expect(mock.external).toHaveBeenCalledExactlyOnceWith('https://example.com/project');
+  expect(await call('app:open-external', 'file:///secret')).toHaveProperty('__error', expect.stringContaining('HTTP or HTTPS'));
+  expect(mock.external).toHaveBeenCalledTimes(1);
+});
+it.each(['gitlab', 'gitea'])('refuses a missing saved %s token at the native boundary', async provider => {
+  mock.functions.getPullRequestCredential.mockReturnValue(null);
+  expect(await call(`git:pull-requests:test-${provider}`, 'https://code.example')).toHaveProperty('__error', expect.stringContaining('Connect this'));
+  const test = mock.functions[provider === 'gitlab' ? 'testGitLabConnection' : 'testGiteaConnection'];
+  expect(test).not.toHaveBeenCalled();
+});
+
+it('scopes a saved GitLab token without an instance to GitLab.com only', async () => {
+  mock.functions.getPullRequestCredential.mockReturnValue({ token: 'cloud-token' });
+  mock.functions.testGitLabConnection.mockResolvedValue('alice');
+  expect(await call('git:pull-requests:test-gitlab', 'https://gitlab.com')).toEqual({ ok: true, username: 'alice' });
+  expect(await call('git:pull-requests:test-gitlab', 'https://code.example')).toHaveProperty('__error', 'Connect this GitLab server first.');
+  expect(mock.functions.testGitLabConnection).toHaveBeenCalledOnce();
+});
+it('rejects saved Gitea tokens without a configured instance', async () => {
+  mock.functions.getPullRequestCredential.mockReturnValue({ token: 'unscoped-token' });
+  expect(await call('git:pull-requests:test-gitea', 'https://code.example')).toHaveProperty('__error', expect.stringContaining('URL'));
+  expect(mock.functions.testGiteaConnection).not.toHaveBeenCalled();
 });

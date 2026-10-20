@@ -6,13 +6,13 @@
 2. Git Workbench displays a short device code and opens `https://github.com/login/device` in your default browser. Copy the displayed code, enter it on GitHub and authorize **Git Workbench Desktop**. Your password and any verification codes stay on GitHub.
 3. Return to Git Workbench. The panel updates automatically with your GitHub username. You can close settings while waiting; sign-in continues until you cancel, quit Git Workbench or the device code expires.
 4. Choose **Choose repositories on GitHub** to install the app for the repositories you want to use. Sign-in and installation are separate: a user token can access only repositories that both the user and the app can access. An organization owner may need to approve the installation. After changing repository access, choose **Refresh access**, then refresh the pull request workspace.
-5. Open a repository with a GitHub.com remote and use **Actions → Pull Requests / Merge Requests**.
+5. Open a repository with a GitHub.com remote and use **Actions → Requests**.
 
 **Switch GitHub account** starts a new browser sign-in. Choose the intended account on GitHub. Your current connection is kept until the new account has been verified and saved securely. Cancelling, declining or letting the code expire preserves your existing connection.
 
 **Disconnect** removes the encrypted GitHub credentials on this device and cancels pending sign-in. To revoke the authorization on GitHub too, use [Authorized GitHub Apps](https://github.com/settings/apps/authorizations). To change an installation or remove repository access, use [Installed GitHub Apps](https://github.com/settings/installations).
 
-Git fetch, push, clone and worktree operations keep using your existing SSH keys or Git credential helper. This feature connects the hosted pull request API; it does not configure Git authentication. GitLab and Bitbucket token settings are unchanged. GitHub Enterprise is not supported.
+Git fetch, push, clone and worktree operations keep using your existing SSH keys or Git credential helper. This feature connects the hosted pull request API; it does not configure Git authentication. GitLab, Bitbucket, and Gitea use their separate provider connections. GitHub Enterprise is not supported.
 
 ## Credentials and refresh
 

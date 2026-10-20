@@ -90,17 +90,17 @@ export interface RemoteInfo {
   pushUrl: string;
 }
 
-export type PullRequestProvider = 'github' | 'gitlab' | 'bitbucket';
+export type PullRequestProvider = 'github' | 'gitlab' | 'bitbucket' | 'gitea';
 
 export interface PullRequestCredential {
   token: string;
-  /** GitLab instance URL. Omitted for the GitLab.com connection. */
+  /** GitLab or Gitea instance URL. Omitted for the GitLab.com connection. */
   serverUrl?: string;
   /** Bitbucket Cloud API tokens use the Atlassian account email as the Basic Auth username. */
   username?: string;
 }
 
-export type PullRequestCredentialStatus = Record<PullRequestProvider, boolean> & { gitlabServers?: string[] };
+export type PullRequestCredentialStatus = Record<PullRequestProvider, boolean> & { gitlabServers?: string[]; giteaServers?: string[] };
 
 export interface GitHubAccount {
   id: number;
@@ -564,6 +564,7 @@ export interface AiCommitConfig {
 }
 
 export type DiffViewMode = 'unified' | 'split';
+export interface PullRequestIntent { remoteName?: string; requestId?: string; mode?: 'create' | 'review' }
 export type DiffActiveTab = 'diff' | 'blame' | 'history';
 
 export interface GitFlowConfig {
@@ -700,6 +701,7 @@ export interface GitWorkbenchApi extends AdvancedGitApi {
   savePullRequestCredential(provider: PullRequestProvider, credential: PullRequestCredential): Promise<{ ok: boolean; error?: string }>;
   removePullRequestCredential(provider: PullRequestProvider, serverUrl?: string): Promise<{ ok: boolean; error?: string }>;
   testGitLabConnection(serverUrl: string, token?: string): Promise<{ ok: boolean; username?: string; error?: string }>;
+  testGiteaConnection(serverUrl: string, token?: string): Promise<{ ok: boolean; username?: string; error?: string }>;
   getPullRequestContext(remoteName?: string, providerOverride?: PullRequestProvider): Promise<PullRequestContext>;
   createHostedPullRequest(params: { remoteName: string; title: string; description: string; targetBranch: string; providerOverride?: PullRequestProvider }): Promise<{ ok: boolean; pullRequest?: HostedPullRequest; error?: string }>;
   addRemote(name: string, url: string): Promise<{ ok: boolean; error?: string }>;

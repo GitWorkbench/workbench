@@ -102,8 +102,9 @@ import {
 import { startBisect, stepBisect, resetBisect, getBisectState } from './git/bisect';
 import { generateChangelog } from './git/changelog';
 import { getReflog, createRecoveryBranch, restoreHeadFromReflog } from './git/reflog';
-import { getPullRequestContext, createHostedPullRequest, testGitLabConnection } from './git/pull-requests';
+import { getPullRequestContext, createHostedPullRequest, testGitLabConnection, testGiteaConnection } from './git/pull-requests';
 import { normalizeGitLabServer } from '../shared/gitlab-server';
+import { normalizeHostingServer, pullRequestProviders } from '../shared/hosting-provider';
 import { externalWebUrl } from '../shared/external-url';
 import { getPullReview, submitPullReview } from './git/pull-request-review';
 import { pinnedRepositories, pinRepository, repositoryOverview } from './git/repository-dashboard';
@@ -124,7 +125,6 @@ import {
 } from './git/provider-credentials';
 import { explainCodeChanges } from '../shared/ai';
 
-const pullRequestProviders: PullRequestProvider[] = ['github', 'gitlab', 'bitbucket'];
 const isPullRequestProvider = (value: unknown): value is PullRequestProvider =>
   typeof value === 'string' && pullRequestProviders.includes(value as PullRequestProvider);
 
@@ -786,7 +786,7 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
   handle('git:pull-requests:credentials', async () => getPullRequestCredentialStatus());
 
   handle('git:pull-requests:save-credential', async (provider: unknown, credential: PullRequestCredential) => {
-    if (!isPullRequestProvider(provider)) throw new Error('Choose GitHub, GitLab, or Bitbucket.');
+    if (!isPullRequestProvider(provider)) throw new Error('Choose GitHub, GitLab, Bitbucket, or Gitea.');
     if (provider === 'github') cancelGitHubSignIn();
     savePullRequestCredential(provider, credential);
     if (provider === 'github') githubCredentialsChanged();
@@ -802,8 +802,17 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
     return { ok: true, username };
   });
 
+  handle('git:pull-requests:test-gitea', async (serverUrl: string, token?: string) => {
+    const server = normalizeHostingServer(serverUrl, 'Gitea');
+    if (token !== undefined && typeof token !== 'string') throw new Error('Enter a valid Gitea access token.');
+    const credential = token !== undefined ? { token, serverUrl: server } : getPullRequestCredential('gitea', `${server}/`);
+    if (!credential || (token === undefined && normalizeHostingServer(credential.serverUrl ?? '', 'Gitea') !== server)) throw new Error('Connect this Gitea server first.');
+    const username = await testGiteaConnection(server, credential);
+    return { ok: true, username };
+  });
+
   handle('git:pull-requests:remove-credential', async (provider: unknown, serverUrl?: string) => {
-    if (!isPullRequestProvider(provider)) throw new Error('Choose GitHub, GitLab, or Bitbucket.');
+    if (!isPullRequestProvider(provider)) throw new Error('Choose GitHub, GitLab, Bitbucket, or Gitea.');
     if (provider === 'github') cancelGitHubSignIn();
     removePullRequestCredential(provider, serverUrl);
     if (provider === 'github') githubCredentialsChanged();
@@ -811,7 +820,7 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
   });
 
   handle('git:pull-requests:context', async (remoteName?: string, providerOverride?: PullRequestProvider) => {
-    if (providerOverride && !isPullRequestProvider(providerOverride)) throw new Error('Choose GitHub, GitLab, or Bitbucket.');
+    if (providerOverride && !isPullRequestProvider(providerOverride)) throw new Error('Choose GitHub, GitLab, Bitbucket, or Gitea.');
     return getPullRequestContext(requireRepo(), remoteName, providerOverride, getPullRequestCredential);
   });
 
@@ -822,7 +831,7 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
     targetBranch: string;
     providerOverride?: PullRequestProvider;
   }) => {
-    if (params.providerOverride && !isPullRequestProvider(params.providerOverride)) throw new Error('Choose GitHub, GitLab, or Bitbucket.');
+    if (params.providerOverride && !isPullRequestProvider(params.providerOverride)) throw new Error('Choose GitHub, GitLab, Bitbucket, or Gitea.');
     const pullRequest = await createHostedPullRequest(
       requireRepo(), params.remoteName, params.title, params.description,
       params.targetBranch, params.providerOverride, getPullRequestCredential

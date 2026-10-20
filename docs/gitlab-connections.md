@@ -7,7 +7,7 @@ Open **Settings → Pull Request Providers → GitLab**. You can connect GitLab.
 1. Choose **Add GitLab server** and enter the instance's HTTPS URL, such as `https://code.company.com`, `https://code.company.com:8443`, or `https://code.company.com/gitlab`. Use the instance URL, not a project URL or `/api/v4` endpoint.
 2. Choose **Create a token on this server** to open the instance's token settings in your default browser. Create a personal access token with the `api` scope on that GitLab instance. The account must have access to the projects you want to use.
 3. Paste the token. **Test connection** verifies it against the instance's current-user API without saving it. **Connect GitLab** verifies it and saves it encrypted with the operating system keychain/keyring.
-4. Reopen **Actions → Pull Requests / Merge Requests** and select the repository's remote. Home's **Check PRs / MRs** also uses the matching connection.
+4. Reopen **Actions → Requests** and select the repository's remote. The sidebar and workspace show **Merge Requests** for GitLab. Home's **Check requests** also uses the matching connection.
 
 Use **Replace token** when a token expires, **Test connection** to check a saved connection, or **Remove** to delete just that instance's stored credential. Removing a connection does not revoke the token on GitLab; revoke it on the server when needed.
 

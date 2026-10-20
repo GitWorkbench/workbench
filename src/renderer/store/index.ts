@@ -97,6 +97,7 @@ interface AppState {
   rangeComparisonOpen: boolean;
   rangeComparisonId: string | null;
   pullRequestsModalOpen: boolean;
+  pullRequestIntent: import('../../shared/types').PullRequestIntent | null;
   changelogModalOpen: boolean;
   simulateMergeBranch: string | null;
   worktreesModalOpen: boolean;
@@ -157,7 +158,7 @@ interface AppActions {
   closeBisectModal(): void;
   openReflogModal(): void;
   closeReflogModal(): void;
-  openPullRequestsModal(): void;
+  openPullRequestsModal(intent?: import('../../shared/types').PullRequestIntent): void;
   closePullRequestsModal(): void;
   openChangelogModal(): void;
   closeChangelogModal(): void;
@@ -205,7 +206,7 @@ function resetRepositoryView(cancelOpening = true): Partial<AppState> {
     isOpeningRepo: false, openingRepoName: null,
     conflictedFileToResolve: null, rebaseModalBaseCommit: null, tagModalCommit: null,
     sparseCheckoutOpen: false, lfsManagerOpen: false, branchStackOpen: false, commitSplitOpen: false, bisectModalOpen: false, reflogModalOpen: false, restorePointsOpen: false, resolutionMemoryOpen: false, rangeComparisonOpen: false, rangeComparisonId: null, pullRequestsModalOpen: false, worktreesModalOpen: false, gitFlowModalOpen: false,
-    changelogModalOpen: false, simulateMergeBranch: null, addRemoteModalOpen: false
+    changelogModalOpen: false, simulateMergeBranch: null, addRemoteModalOpen: false, pullRequestIntent: null
   };
 }
 
@@ -261,6 +262,7 @@ export const useApp = create<AppStore>((set, get) => ({
   rangeComparisonOpen: false,
   rangeComparisonId: null,
   pullRequestsModalOpen: false,
+  pullRequestIntent: null,
   changelogModalOpen: false,
   simulateMergeBranch: null,
   worktreesModalOpen: false,
@@ -720,12 +722,12 @@ export const useApp = create<AppStore>((set, get) => ({
     set({ reflogModalOpen: false });
   },
 
-  openPullRequestsModal() {
-    set({ pullRequestsModalOpen: true });
+  openPullRequestsModal(intent) {
+    set({ pullRequestsModalOpen: true, pullRequestIntent: intent || null });
   },
 
   closePullRequestsModal() {
-    set({ pullRequestsModalOpen: false });
+    set({ pullRequestsModalOpen: false, pullRequestIntent: null });
   },
 
   openChangelogModal() {

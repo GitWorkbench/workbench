@@ -1,3 +1,4 @@
+import { pullRequestProviders } from '../../shared/hosting-provider';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
@@ -185,15 +186,15 @@ export async function discardStackRestack(repo: string, id: string) {
 }
 
 export async function retargetPullRequest(repo: string, input: PullReviewTarget & { head: string; previousTarget: string; newTarget: string }, credentials: (p: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null) {
-  if (!input || !['github', 'gitlab', 'bitbucket'].includes(input.provider) || !/^\d+$/.test(input.requestId) || !/^[a-f0-9]{40,64}$/i.test(input.head)) throw new Error('Load the current request revision first.');
+  if (!input || !pullRequestProviders.includes(input.provider) || !/^\d+$/.test(input.requestId) || !/^[a-f0-9]{40,64}$/i.test(input.head)) throw new Error('Load the current request revision first.');
   await branchHash(repo, input.newTarget);
   const { config, credential } = await hostedReviewClient(repo, input.remoteName, input.provider, credentials);
-  const endpoint = `${apiPath(config)}/${input.provider === 'github' ? 'pulls' : input.provider === 'gitlab' ? 'merge_requests' : 'pullrequests'}/${input.requestId}`;
+  const endpoint = `${apiPath(config)}/${(input.provider === 'github' || input.provider === 'gitea') ? 'pulls' : input.provider === 'gitlab' ? 'merge_requests' : 'pullrequests'}/${input.requestId}`;
   const pr = await requestJson<Record<string, any>>(config, credential, endpoint, 'GET');
-  const head = input.provider === 'github' ? pr.head?.sha : input.provider === 'gitlab' ? pr.diff_refs?.head_sha || pr.sha : pr.source?.commit?.hash;
-  const target = input.provider === 'github' ? pr.base?.ref : input.provider === 'gitlab' ? pr.target_branch : pr.destination?.branch?.name;
+  const head = (input.provider === 'github' || input.provider === 'gitea') ? pr.head?.sha : input.provider === 'gitlab' ? pr.diff_refs?.head_sha || pr.sha : pr.source?.commit?.hash;
+  const target = (input.provider === 'github' || input.provider === 'gitea') ? pr.base?.ref : input.provider === 'gitlab' ? pr.target_branch : pr.destination?.branch?.name;
   const open = input.provider === 'gitlab' ? pr.state === 'opened' : input.provider === 'bitbucket' ? pr.state === 'OPEN' : pr.state === 'open';
   if (!open || head !== input.head || target !== input.previousTarget) throw new Error('The request changed or closed. Reload requests before retargeting.');
-  await requestJson(config, credential, endpoint, input.provider === 'github' ? 'PATCH' : 'PUT', input.provider === 'github' ? { base: input.newTarget } : input.provider === 'gitlab' ? { target_branch: input.newTarget } : { destination: { branch: { name: input.newTarget } } });
+  await requestJson(config, credential, endpoint, (input.provider === 'github' || input.provider === 'gitea') ? 'PATCH' : 'PUT', (input.provider === 'github' || input.provider === 'gitea') ? { base: input.newTarget } : input.provider === 'gitlab' ? { target_branch: input.newTarget } : { destination: { branch: { name: input.newTarget } } });
   return { ok: true };
 }

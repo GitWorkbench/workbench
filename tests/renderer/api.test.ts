@@ -154,3 +154,28 @@ describe('client-side AI generation fallback', () => {
     await client.api.generateAiCommitMessage(); expect(mock.generate.mock.calls.at(-1)![0].diff).toContain('summary.txt');
   });
 });
+
+
+it('models Gitea server connections in browser previews without storing tokens', async () => {
+  const { api } = client;
+  expect(await api.testGiteaConnection('https://code.example')).toMatchObject({ ok: false });
+  expect(await api.testGiteaConnection('https://code.example', 'preview-token')).toMatchObject({ ok: true });
+  await api.savePullRequestCredential('gitea', { serverUrl: 'https://code.example/forge/', token: 'preview-token' });
+  expect(await api.getPullRequestCredentialStatus()).toMatchObject({ gitea: true, giteaServers: ['https://code.example/forge'] });
+  expect(await api.getPullRequestContext('origin', 'gitea')).toMatchObject({ provider: 'gitea', repositoryUrl: 'https://code.example/forge/GitWorkbench/workbench', credentialConfigured: true });
+  expect(JSON.stringify(await api.getPullRequestCredentialStatus())).not.toContain('preview-token');
+  await api.removePullRequestCredential('gitea', 'https://code.example/forge');
+  expect(await api.getPullRequestCredentialStatus()).toMatchObject({ gitea: false, giteaServers: [] });
+});
+
+
+it('normalizes browser web links and models GitLab account checks without real credentials', async () => {
+  const open = vi.spyOn(window, 'open').mockReturnValue(null);
+  await client.api.openExternal('https://example.com/project');
+  expect(open).toHaveBeenCalledWith('https://example.com/project', '_blank', 'noopener,noreferrer');
+  await expect(client.api.openExternal('file:///secret')).rejects.toThrow('HTTP or HTTPS');
+  expect(await client.api.testGitLabConnection('https://gitlab.example')).toMatchObject({ ok: false });
+  expect(await client.api.testGitLabConnection('https://gitlab.example', 'preview-token')).toMatchObject({ ok: true, username: 'preview-user' });
+  await client.api.savePullRequestCredential('gitlab', { serverUrl: 'https://gitlab.example', token: 'preview-token' });
+  expect(await client.api.testGitLabConnection('https://gitlab.example')).toMatchObject({ ok: true });
+});

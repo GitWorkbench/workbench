@@ -370,7 +370,7 @@ export function SettingsPage() {
     { id: 'profiles' as const, label: 'Commit Profiles & GPG', icon: <User size={16} />, desc: 'Git credentials, signing keys & identities' },
     { id: 'ai' as const, label: 'AI Assistant', icon: <Sparkles size={16} />, desc: 'Code reviews, commit messages & providers' },
     { id: 'git' as const, label: 'Git & Synchronization', icon: <RefreshCw size={16} />, desc: 'Auto-fetch, focus sync & remotes' },
-    { id: 'providers' as const, label: 'Pull Request Providers', icon: <GitPullRequest size={16} />, desc: 'GitHub, GitLab & Bitbucket accounts' },
+    { id: 'providers' as const, label: 'Pull Request Providers', icon: <GitPullRequest size={16} />, desc: 'GitHub, GitLab, Bitbucket & Gitea accounts' },
     { id: 'shortcuts' as const, label: 'Keyboard Shortcuts', icon: <Command size={16} />, desc: 'Hotkeys, quick actions & navigation' },
     { id: 'about' as const, label: 'About & Information', icon: <Info size={16} />, desc: 'Version, updates & feature guides' },
   ];

@@ -5,12 +5,13 @@ const mocks = vi.hoisted(() => ({ raw: vi.fn(), remotes: vi.fn(), credential: vi
 vi.mock('../../src/main/git/core', () => ({ gitFor: () => ({ raw: mocks.raw }) }));
 vi.mock('../../src/main/git/objects-navigation', () => ({ getRemotes: mocks.remotes }));
 vi.mock('../../src/main/git/github-auth', () => ({ githubRequestCredential: mocks.credential, githubSessionRejected: mocks.rejected }));
-import { apiPath, createHostedPullRequest, getPullRequestContext, hostedReviewClient, requestJson } from '../../src/main/git/pull-requests';
+import { apiPath, createHostedPullRequest, getPullRequestContext, hostedReviewClient, requestJson, testGitLabConnection } from '../../src/main/git/pull-requests';
 
 const credential: PullRequestCredential = { token: 'secret', username: 'developer@example.com' };
 const credentials = vi.fn(() => credential as PullRequestCredential | null);
 const remote = (url: string, name = 'origin', pushUrl = url): RemoteInfo => ({ name, fetchUrl: url, pushUrl });
 const configs = {
+  gitea: { provider: 'gitea', host: 'code.example', path: 'owner/repo', serverUrl: 'https://code.example', webUrl: 'https://code.example/owner/repo', apiBase: 'https://code.example/api/v1' },
   github: { provider: 'github', host: 'github.com', path: 'owner/repo', webUrl: 'https://github.com/owner/repo', apiBase: 'https://api.github.com' },
   gitlab: { provider: 'gitlab', host: 'gitlab.com', path: 'group/sub/repo', webUrl: 'https://gitlab.com/group/sub/repo', apiBase: 'https://gitlab.com/api/v4' },
   bitbucket: { provider: 'bitbucket', host: 'bitbucket.org', path: 'workspace/repo', webUrl: 'https://bitbucket.org/workspace/repo', apiBase: 'https://api.bitbucket.org/2.0' }
@@ -41,7 +42,7 @@ describe('hosted provider detection and remote selection', () => {
     ['git@github.com:owner/repo.git', undefined, 'github', 'owner/repo', 'https://api.github.com'],
     ['https://GITHUB.com/owner/repo.GIT/', undefined, 'github', 'owner/repo', 'https://api.github.com'],
     ['ssh://git@gitlab.com/group/sub/repo.git', undefined, 'gitlab', 'group/sub/repo', 'https://gitlab.com/api/v4'],
-    ['http://gitlab.company.example/team/repo.git', undefined, 'gitlab', 'team/repo', 'https://gitlab.company.example/api/v4'],
+    ['https://gitlab.company.example/team/repo.git', 'gitlab', 'gitlab', 'team/repo', 'https://gitlab.company.example/api/v4'],
     ['git@bitbucket.org:workspace/repo.git', undefined, 'bitbucket', 'workspace/repo', 'https://api.bitbucket.org/2.0'],
     ['https://code.company.example/team/repo.git', 'gitlab', 'gitlab', 'team/repo', 'https://code.company.example/api/v4'],
     ['https://github.com/owner/repo%20name.git', undefined, 'github', 'owner/repo name', 'https://api.github.com']
@@ -64,7 +65,7 @@ describe('hosted provider detection and remote selection', () => {
     mocks.remotes.mockResolvedValue([remote(url)]);
     const context = await getPullRequestContext('/repo', undefined, override);
     expect(context.provider).toBeNull();
-    expect(context.error).toContain('not a supported');
+    expect(context.error).toContain('not a recognized provider');
   });
   it('uses push URL when fetch URL is missing', async () => {
     mocks.remotes.mockResolvedValue([remote('', 'origin', 'https://github.com/owner/repo.git')]);
@@ -155,11 +156,11 @@ describe('requestJson transport and credential boundaries', () => {
   it('rejects oversized bodies and malformed JSON', async () => {
     fakeFetch(response('x'.repeat(12_000_001)), response('not JSON'));
     await expect(requestJson(configs.gitlab, credential, '/large', 'GET')).rejects.toThrow('response is too large');
-    await expect(requestJson(configs.gitlab, credential, '/invalid', 'GET')).rejects.toBeInstanceOf(SyntaxError);
+    await expect(requestJson(configs.gitlab, credential, '/invalid', 'GET')).rejects.toThrow('valid API response');
   });
   it('converts network failures and preserves unexpected errors', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('offline')).mockRejectedValueOnce(new Error('unexpected')));
-    await expect(requestJson(configs.bitbucket, credential, '/test', 'GET')).rejects.toThrow('Check your internet connection');
+    await expect(requestJson(configs.bitbucket, credential, '/test', 'GET')).rejects.toThrow('Check the server URL, network or VPN');
     await expect(requestJson(configs.bitbucket, credential, '/test', 'GET')).rejects.toThrow('unexpected');
   });
   it('aborts after 20 seconds and clears its timeout', async () => {
@@ -316,5 +317,57 @@ describe('createHostedPullRequest validation and submission', () => {
     mocks.remotes.mockResolvedValue([remote('', 'origin', 'https://github.com/owner/repo.git')]);
     fakeFetch(response({}), response([]), response({ number: 8, html_url: '/8' }));
     expect(await createHostedPullRequest('/repo', 'origin', 'Title', '', 'main', undefined, credentials)).toMatchObject({ id: '8', url: '/8' });
+  });
+});
+
+
+describe('self-hosted connection verification and boundaries', () => {
+  it('verifies a GitLab instance using only its normalized API and token', async () => {
+    const fetch = fakeFetch(response({ username: 'alice' }));
+    expect(await testGitLabConnection('https://code.example:8443/gitlab/', { token: ' test-token ' })).toBe('alice');
+    expect(fetch.mock.calls[0][0]).toBe('https://code.example:8443/gitlab/api/v4/user');
+    expect(fetch.mock.calls[0][1].headers['PRIVATE-TOKEN']).toBe('test-token');
+  });
+  it.each(['', 'bad\rheader', 'bad\nheader', 'bad\0header'])('rejects malformed GitLab account tokens %# without network access', async token => {
+    const fetch = fakeFetch();
+    await expect(testGitLabConnection('https://gitlab.com', { token })).rejects.toThrow('valid GitLab access token');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it.each([{}, { username: 42 }, { username: '' }])('rejects unreadable GitLab user responses %#', async account => {
+    fakeFetch(response(account));
+    await expect(testGitLabConnection('https://gitlab.com', { token: 'test-token' })).rejects.toThrow('did not return a GitLab account');
+  });
+  it('rejects a missing GitLab API and mismatched credential origins without sending a foreign token', async () => {
+    const fetch = fakeFetch(response({}, 404));
+    await expect(testGitLabConnection('https://gitlab.com', { token: 'test-token' })).rejects.toThrow('API was not found');
+    fetch.mockClear();
+    await expect(requestJson({ ...configs.gitlab, apiBase: 'https://other.example/api/v4' }, credential, '/user', 'GET')).rejects.toThrow('configured server');
+    expect(fetch).not.toHaveBeenCalled();
+    await expect(requestJson({ ...configs.gitlab, apiBase: 'https://gitlab.com' }, credential, '/api/not-graphql', 'POST')).rejects.toThrow('configured server');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('preserves the exact GitLab base path for GraphQL requests', async () => {
+    const fetch = fakeFetch(response({ data: {} }));
+    await requestJson({ ...configs.gitlab, serverUrl: 'https://code.example/gitlab', apiBase: 'https://code.example/gitlab' }, { token: 'scoped-token', serverUrl: 'https://code.example/gitlab' }, '/api/graphql', 'POST', { query: '{ currentUser { username } }' });
+    expect(fetch.mock.calls[0][0]).toBe('https://code.example/gitlab/api/graphql');
+  });
+  it('detects configured providers and rejects ambiguous cross-provider instances and public-host overrides', async () => {
+    mocks.remotes.mockResolvedValue([remote('https://code.example/forge/team/repo.git')]);
+    const lookup = (provider: PullRequestProvider) => ({ token: 'test-token', serverUrl: provider === 'gitlab' ? 'https://code.example' : 'https://code.example/forge' });
+    const fetch = fakeFetch(response({}), response([], 200));
+    expect((await getPullRequestContext('/repo', undefined, undefined, lookup)).provider).toBe('gitea');
+    fetch.mockClear();
+    const ambiguous = () => ({ token: 'test-token', serverUrl: 'https://code.example/forge' });
+    expect((await getPullRequestContext('/repo', undefined, undefined, ambiguous)).provider).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+    mocks.remotes.mockResolvedValue([remote('https://github.com/team/repo.git')]);
+    expect((await getPullRequestContext('/repo', undefined, 'gitlab', credentials)).provider).toBeNull();
+    expect((await getPullRequestContext('/repo', undefined, 'gitea', credentials)).provider).toBeNull();
+    await expect(hostedReviewClient('/repo', 'origin', 'gitea', credentials)).rejects.toThrow('Select a supported remote');
+  });
+  it('uses the push URL when a supported review remote has no fetch URL', async () => {
+    mocks.remotes.mockResolvedValue([remote('', 'origin', 'https://github.com/owner/repo.git')]);
+    expect((await hostedReviewClient('/repo', 'origin', 'github', credentials)).config.provider).toBe('github');
+    expect(credentials).toHaveBeenCalledWith('github', 'https://github.com/owner/repo.git');
   });
 });

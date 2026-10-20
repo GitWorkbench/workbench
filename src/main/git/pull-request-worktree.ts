@@ -1,3 +1,4 @@
+import { pullRequestProviders } from '../../shared/hosting-provider';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,7 +9,7 @@ import { apiPath, hostedReviewClient, requestJson } from './pull-requests';
 import { getRemotes } from './objects-navigation';
 
 export async function openPullRequestWorktree(repo: string, input: PullReviewTarget & { head: string; directory: string; branch: string }, credentials: (p: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null) {
-  if (!input || !['github', 'gitlab', 'bitbucket'].includes(input.provider) || !/^\d+$/.test(input.requestId) || !/^[a-f0-9]{40,64}$/i.test(input.head)) throw new Error('Load the current PR revision before opening a worktree.');
+  if (!input || !pullRequestProviders.includes(input.provider) || !/^\d+$/.test(input.requestId) || !/^[a-f0-9]{40,64}$/i.test(input.head)) throw new Error('Load the current request revision before opening a worktree.');
   const git = gitWithEnvironment(repo, { GIT_LFS_SKIP_SMUDGE: '1' }, 120_000);
   if (!input.branch || input.branch.startsWith('-')) throw new Error('Enter a new local review branch name.');
   await git.raw(['check-ref-format', `refs/heads/${input.branch}`]);
@@ -23,12 +24,12 @@ export async function openPullRequestWorktree(repo: string, input: PullReviewTar
   const { config, credential } = await hostedReviewClient(repo, input.remoteName, input.provider, credentials);
   const remote = (await getRemotes(repo)).find(r => r.name === input.remoteName);
   if (!remote) throw new Error('The selected remote no longer exists.');
-  const endpoint = `${apiPath(config)}/${input.provider === 'github' ? 'pulls' : input.provider === 'gitlab' ? 'merge_requests' : 'pullrequests'}/${input.requestId}`;
+  const endpoint = `${apiPath(config)}/${(input.provider === 'github' || input.provider === 'gitea') ? 'pulls' : input.provider === 'gitlab' ? 'merge_requests' : 'pullrequests'}/${input.requestId}`;
   const pr = await requestJson<Record<string, any>>(config, credential, endpoint, 'GET');
-  const currentHead = input.provider === 'github' ? pr.head?.sha : input.provider === 'gitlab' ? pr.diff_refs?.head_sha || pr.sha : pr.source?.commit?.hash;
+  const currentHead = (input.provider === 'github' || input.provider === 'gitea') ? pr.head?.sha : input.provider === 'gitlab' ? pr.diff_refs?.head_sha || pr.sha : pr.source?.commit?.hash;
   if (currentHead !== input.head) throw new Error('The request has new commits. Refresh the review and try again.');
   let source = remote.name;
-  let ref = input.provider === 'github' ? `refs/pull/${input.requestId}/head` : `refs/merge-requests/${input.requestId}/head`;
+  let ref = (input.provider === 'github' || input.provider === 'gitea') ? `refs/pull/${input.requestId}/head` : `refs/merge-requests/${input.requestId}/head`;
   if (input.provider === 'bitbucket') {
     const fullName = pr.source?.repository?.full_name;
     const branch = pr.source?.branch?.name;

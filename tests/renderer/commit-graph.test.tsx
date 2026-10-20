@@ -21,7 +21,7 @@ const commits = () => [makeCommit('aaaa1111', { refs: [branch('main', { isCurren
 beforeEach(() => {
   Object.keys(mock.state).forEach(key => delete mock.state[key]);
   Object.assign(mock.state, { log: { commits: commits(), totalCommits: 3, hasMore: false }, filter: '', filterAuthor: '', filterDateRange: 'all', status: { currentBranch: 'main', staged: [], unstaged: [] }, selectedCommit: null, compareCommits: null, remotes: [], openDiff: null, diffMaximized: false, isLoadingMoreCommits: false });
-  for (const name of ['selectCommit', 'setCompareCommits', 'openFileDiff', 'setFilterAuthor', 'setFilterDateRange', 'openBisectModal', 'openChangelogModal', 'notify', 'loadMoreCommits', 'openRebaseModal', 'cherryPickCommit', 'openCreateTagModal', 'refresh']) mock.state[name] = vi.fn();
+  for (const name of ['selectCommit', 'setCompareCommits', 'openFileDiff', 'setFilterAuthor', 'setFilterDateRange', 'openBisectModal', 'openChangelogModal', 'notify', 'loadMoreCommits', 'openRebaseModal', 'cherryPickCommit', 'openCreateTagModal', 'openPullRequestsModal', 'refresh']) mock.state[name] = vi.fn();
   mock.state.runAndRefresh = vi.fn(async (run: () => unknown) => { await run(); return true; });
   Object.assign(mock.settings, { graphRowHeight: 26, commitColumns: { author: true, date: true, sha: true }, commitColumnWidths: { author: 180, date: 200, sha: 110 }, setCommitColumns: vi.fn(), setCommitColumnWidths: vi.fn() });
   mock.setState.mockReset(); mock.clipboard.mockReset().mockResolvedValue(undefined); mock.observers.length = 0;
@@ -210,8 +210,13 @@ describe('commit context actions', () => {
     context(); fireEvent.click(screen.getByRole('button', { name: 'Split into smaller commits…' })); expect(mock.setState).toHaveBeenCalledWith({ commitSplitOpen: true });
     context(); fireEvent.click(screen.getByRole('button', { name: /Compare with selected/ })); expect(mock.state.setCompareCommits).toHaveBeenCalledWith(['bbbb2222', 'aaaa1111']);
   });
-  it.each(['Recompose commit with AI (Preview)', 'Start a pull request to origin', 'Explain Branch Changes (Preview)'])('labels unfinished command %s as preview', label => {
+  it.each(['Recompose commit with AI (Preview)', 'Explain Branch Changes (Preview)'])('labels unfinished command %s as preview', label => {
     render(<CommitGraph />); context(); fireEvent.click(screen.getByRole('button', { name: label })); expect(mock.state.notify).toHaveBeenCalledWith('info', expect.stringContaining('preview feature'));
+  });
+  it('opens request creation for the current branch without publishing it', () => {
+    render(<CommitGraph />); context(); fireEvent.click(screen.getByRole('button', { name: 'Create request…' }));
+    expect(mock.state.openPullRequestsModal).toHaveBeenCalledWith({ remoteName: 'origin', mode: 'create' });
+    expect(mock.api.push).not.toHaveBeenCalled();
   });
   it.each(['Bad', 'Good'])('marks a %s commit for bisect and reports rejected results', async verdict => {
     render(<CommitGraph />); context(); fireEvent.click(screen.getByRole('button', { name: `Mark as ${verdict} commit for Bisect` })); await waitFor(() => expect(mock.state.openBisectModal).toHaveBeenCalledOnce());

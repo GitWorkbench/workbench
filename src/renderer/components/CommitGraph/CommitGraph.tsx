@@ -937,9 +937,9 @@ export function CommitGraph() {
     },
     { label: '', divider: true },
     {
-      label: 'Start a pull request to origin',
+      label: 'Create request…',
       icon: <GitPullRequest size={13} />,
-      onClick: () => previewStub('Start a pull request')
+      onClick: () => useApp.getState().openPullRequestsModal({ remoteName: 'origin', mode: 'create' })
     },
     {
       label: 'Explain Branch Changes (Preview)',

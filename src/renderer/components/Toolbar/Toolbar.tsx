@@ -384,7 +384,7 @@ export function Toolbar() {
               />
               <MenuItem
                 icon={<GitPullRequest size={14} className="text-accent" />}
-                label="Pull Requests / Merge Requests…"
+                label="Requests…"
                 disabled={!hasRepo}
                 onClick={() => {
                   close();
@@ -409,7 +409,7 @@ export function Toolbar() {
                 }}
               />
               <MenuItem icon={<GitBranch size={14} />} label="Split Commit…" disabled={!hasRepo} onClick={() => { close(); useApp.setState({ commitSplitOpen: true }); }} />
-              <MenuItem icon={<GitBranch size={14} />} label="Stacked Branches & PRs…" disabled={!hasRepo} onClick={() => { close(); useApp.setState({ branchStackOpen: true }); }} />
+              <MenuItem icon={<GitBranch size={14} />} label="Stacked Branches & Requests…" disabled={!hasRepo} onClick={() => { close(); useApp.setState({ branchStackOpen: true }); }} />
               <MenuItem icon={<Download size={14} />} label="Git LFS Manager…" disabled={!hasRepo} onClick={() => { close(); useApp.setState({ lfsManagerOpen: true }); }} />
               <MenuItem icon={<FolderOpen size={14} />} label="Sparse Checkout…" disabled={!hasRepo} onClick={() => { close(); useApp.setState({ sparseCheckoutOpen: true }); }} />
               <MenuItem icon={<Undo2 size={14} />} label="Restore Points…" disabled={!hasRepo} onClick={() => { close(); useApp.setState({ restorePointsOpen: true }); }} />

@@ -4,10 +4,11 @@ import type { PullRequestCredentialStatus, PullRequestProvider } from '../../../
 import { useApp } from '../../store';
 import { api } from '../../lib/api';
 import { GitHubSignInPanel } from './GitHubSignInPanel';
+import { HostingConnectionsSettings } from './HostingConnectionsSettings';
 import { GitLabConnectionsSettings } from './GitLabConnectionsSettings';
 
 const providers: Array<{
-  id: PullRequestProvider;
+  id: 'bitbucket';
   name: string;
   detail: string;
   tokenName: string;
@@ -15,18 +16,13 @@ const providers: Array<{
   instructions: string;
 }> = [
   {
-    id: 'github', name: 'GitHub', detail: 'GitHub.com pull requests', tokenName: 'Personal access token',
-    tokenUrl: 'https://github.com/settings/personal-access-tokens/new',
-    instructions: 'Create a fine-grained token with Pull requests read and write access for the repositories you use.'
-  },
-  {
     id: 'bitbucket', name: 'Bitbucket Cloud', detail: 'Bitbucket Cloud pull requests', tokenName: 'API token',
     tokenUrl: 'https://id.atlassian.com/manage-profile/security/api-tokens',
     instructions: 'Allow repository read and pull request read/write. Enter the Atlassian account email used with the token.'
   }
 ];
 
-const emptyStatus: PullRequestCredentialStatus = { github: false, gitlab: false, bitbucket: false };
+const emptyStatus: PullRequestCredentialStatus = { github: false, gitlab: false, bitbucket: false, gitea: false };
 
 export function PullRequestProvidersSettings() {
   const notify = useApp((state) => state.notify);
@@ -64,7 +60,7 @@ export function PullRequestProvidersSettings() {
     try {
       const result = await api.savePullRequestCredential(provider, {
         token,
-        ...(provider === 'bitbucket' ? { username: bitbucketEmail.trim() } : {})
+        username: bitbucketEmail.trim()
       });
       if (!result.ok) throw new Error(result.error || `Could not save the ${provider} token.`);
       setTokens((existing) => ({ ...existing, [provider]: '' }));
@@ -89,7 +85,7 @@ export function PullRequestProvidersSettings() {
       if (!result.ok) throw new Error(result.error || `Could not remove the ${provider} token.`);
       setCredentialStatus((current) => ({ ...current, [provider]: false }));
       setTokens((current) => ({ ...current, [provider]: '' }));
-      setEditing(current => current === provider ? null : current);
+      setEditing(null);
       notify('success', `${name} token removed`);
     } catch (reason) {
       const message = String(reason).replace(/^Error:\s*/, '');
@@ -132,8 +128,8 @@ export function PullRequestProvidersSettings() {
       ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <GitHubSignInPanel />
         {providers.map((provider) => {
-          if (provider.id === 'github') return <GitHubSignInPanel key={provider.id} />;
           const configured = credentialStatus[provider.id];
           const isEditing = !loading && (editing === provider.id || !configured);
           const busy = saving === provider.id || removing === provider.id;
@@ -171,20 +167,18 @@ export function PullRequestProvidersSettings() {
                 </div>
               ) : (
                 <form className="border-t border-edge/70 pt-3 space-y-2.5" onSubmit={(event) => void save(event, provider)}>
-                  {provider.id === 'bitbucket' ? (
-                    <label className="block space-y-1 text-[10px] text-dim">
-                      Atlassian account email
-                      <input
-                        className="input w-full text-xs"
-                        type="email"
-                        autoComplete="username"
-                        value={bitbucketEmail}
-                        onChange={(event) => setBitbucketEmail(event.target.value)}
-                        placeholder="you@example.com"
-                        required
-                      />
-                    </label>
-                  ) : null}
+                  <label className="block space-y-1 text-[10px] text-dim">
+                    Atlassian account email
+                    <input
+                      className="input w-full text-xs"
+                      type="email"
+                      autoComplete="username"
+                      value={bitbucketEmail}
+                      onChange={(event) => setBitbucketEmail(event.target.value)}
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </label>
                   <label className="block space-y-1 text-[10px] text-dim">
                     {provider.tokenName}
                     <div className="flex gap-1.5">
@@ -221,6 +215,12 @@ export function PullRequestProvidersSettings() {
         })}
         <GitLabConnectionsSettings
           servers={credentialStatus.gitlabServers ?? (credentialStatus.gitlab ? ['https://gitlab.com'] : [])}
+          loading={loading}
+          onChanged={refreshStatus}
+        />
+        <HostingConnectionsSettings
+          provider="gitea"
+          servers={credentialStatus.giteaServers ?? []}
           loading={loading}
           onChanged={refreshStatus}
         />

@@ -82,7 +82,7 @@ describe('Home workspace hub', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Dashboard unavailable');
     fireEvent.click(screen.getByRole('button', { name: 'Retry' })); expect(mocks.home.reload).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh', exact: true })); expect(mocks.home.refresh).toHaveBeenCalledWith(['/repo']);
-    fireEvent.click(screen.getByRole('button', { name: 'Check PRs / MRs' })); expect(mocks.home.refresh).toHaveBeenCalledWith(['/repo'], true);
+    fireEvent.click(screen.getByRole('button', { name: 'Check requests' })); expect(mocks.home.refresh).toHaveBeenCalledWith(['/repo'], true);
   });
   it('shows a skeleton during initialization and disables actions during opening and mutation', () => {
     mocks.home.initializing = true;
@@ -116,7 +116,7 @@ describe('Home workspace hub', () => {
     mocks.home.rows = { '/repo': row({ requests: [] }), '/other': row({ hostedMessage: 'Connect a provider' }) };
     const { rerender } = render(<Home />);
     expect(screen.getByText('0 open requests loaded')).toBeVisible(); expect(screen.getByText('Connect a provider')).toBeVisible(); expect(screen.getByText('Refreshing…')).toBeVisible();
-    mocks.home.refreshing = 'hosted'; rerender(<Home />); expect(screen.getByText('Checking PRs…')).toBeVisible();
+    mocks.home.refreshing = 'hosted'; rerender(<Home />); expect(screen.getByText('Checking requests…')).toBeVisible();
   });
   it('explains when every recent project is pinned and handles a root path name', () => {
     mocks.home.pins = ['/']; mocks.home.rows = { '/': row() }; mocks.app.recentRepos = ['/'];

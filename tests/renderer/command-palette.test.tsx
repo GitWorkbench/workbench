@@ -76,7 +76,7 @@ describe('built-in command actions', () => {
     render(<CommandPalette />); selectText(title); await act(async () => {}); expect(mock.api[name]).toHaveBeenCalledWith(...args); expect(mock.setState).toHaveBeenCalledWith({ commandPaletteOpen: false });
   });
   it.each([
-    ['Open Pull Request Context…', 'openPullRequestsModal', []], ['Create / Initialize Repository…', 'openCreateRepoModal', []], ['Open Repository…', 'openRepoDialog', []],
+    ['Open Requests…', 'openPullRequestsModal', []], ['Create / Initialize Repository…', 'openCreateRepoModal', []], ['Open Repository…', 'openRepoDialog', []],
     ['Create Tag…', 'openCreateTagModal', ['HEAD']], ['Add Remote…', 'openAddRemoteModal', []], ['Toggle Terminal Drawer', 'toggleTerminalDrawer', []], ['Toggle Sidebar', 'toggleSidebar', []],
     ['Keyboard Shortcuts Cheatsheet…', 'toggleShortcutsModal', []], ['Refresh Repository', 'refresh', []], ['Git Flow Operations…', 'openGitFlowModal', []], ['Explore Git Workbench…', 'openUsageGuide', []],
     ['Git Bisect Wizard…', 'openBisectModal', []], ['Reflog & Recovery…', 'openReflogModal', []], ['Generate Release Changelog…', 'openChangelogModal', []], ['Manage Git Worktrees…', 'openWorktreesModal', []]
@@ -84,7 +84,7 @@ describe('built-in command actions', () => {
     render(<CommandPalette />); selectText(title); expect(mock.state[name]).toHaveBeenCalledWith(...args);
   });
   it.each([
-    ['Split Commit…', { commitSplitOpen: true }], ['Stacked Branches & PRs…', { branchStackOpen: true }], ['Git LFS Manager…', { lfsManagerOpen: true }], ['Sparse Checkout…', { sparseCheckoutOpen: true }],
+    ['Split Commit…', { commitSplitOpen: true }], ['Stacked Branches & Requests…', { branchStackOpen: true }], ['Git LFS Manager…', { lfsManagerOpen: true }], ['Sparse Checkout…', { sparseCheckoutOpen: true }],
     ['Restore Points…', { restorePointsOpen: true }], ['Conflict Resolution Memory…', { resolutionMemoryOpen: true }], ['Rebase & Rewrite Comparison…', { rangeComparisonOpen: true, rangeComparisonId: null }]
   ])('%s opens the corresponding panel state', (title, state) => {
     render(<CommandPalette />); selectText(title); expect(mock.setState).toHaveBeenCalledWith(state);

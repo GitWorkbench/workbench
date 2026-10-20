@@ -131,7 +131,7 @@ describe('main-process repository boundary', () => {
   });
   it('does not pass arbitrary provider names to credential storage', async () => {
     for (const channel of ['git:pull-requests:save-credential', 'git:pull-requests:remove-credential']) {
-      expect(await call(channel, 'attacker', { token: 'secret' })).toMatchObject({ __error: 'Choose GitHub, GitLab, or Bitbucket.' });
+      expect(await call(channel, 'attacker', { token: 'secret' })).toMatchObject({ __error: 'Choose GitHub, GitLab, Bitbucket, or Gitea.' });
     }
   });
   it('opens existing files in the OS editor without executing shell strings', async () => {

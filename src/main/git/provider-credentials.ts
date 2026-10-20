@@ -2,6 +2,7 @@ import { app, safeStorage } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { matchGitLabServer, normalizeGitLabServer } from '../../shared/gitlab-server';
+import { matchHostingServer, normalizeHostingServer } from '../../shared/hosting-provider';
 import type {
   PullRequestCredential,
   PullRequestCredentialStatus,
@@ -21,6 +22,7 @@ export interface StoredProviderCredential extends PullRequestCredential {
 }
 type CredentialMap = Partial<Record<PullRequestProvider, StoredProviderCredential>> & {
   gitlabServers?: Record<string, StoredProviderCredential>;
+  giteaServers?: Record<string, StoredProviderCredential>;
 };
 
 const credentialFile = () => path.join(app.getPath('userData'), 'hosted-git-credentials.enc');
@@ -61,6 +63,8 @@ export function getPullRequestCredentialStatus(): PullRequestCredentialStatus {
   const saved = readCredentials();
   return {
     github: !!saved.github?.token,
+    gitea: Object.values(saved.giteaServers || {}).some(credential => !!credential.token),
+    giteaServers: Object.keys(saved.giteaServers || {}).filter(server => !!saved.giteaServers?.[server]?.token).sort(),
     gitlab: !!saved.gitlab?.token || Object.values(saved.gitlabServers || {}).some(credential => !!credential.token),
     gitlabServers: [...new Set([
       ...(saved.gitlab?.token ? ['https://gitlab.com'] : []),
@@ -72,6 +76,10 @@ export function getPullRequestCredentialStatus(): PullRequestCredentialStatus {
 
 export function getPullRequestCredential(provider: PullRequestProvider, remoteUrl?: string): StoredProviderCredential | null {
   const saved = readCredentials();
+  if (provider === 'gitea') {
+    const server = remoteUrl ? matchHostingServer(remoteUrl, Object.keys(saved.giteaServers || {})) : null;
+    return server ? saved.giteaServers?.[server] ?? null : null;
+  }
   if (provider !== 'gitlab') return saved[provider] ?? null;
   const connections = { ...saved.gitlabServers };
   if (saved.gitlab?.token) connections['https://gitlab.com'] = { ...saved.gitlab, serverUrl: 'https://gitlab.com' };
@@ -99,8 +107,13 @@ export function savePullRequestCredential(provider: PullRequestProvider, credent
   const credentials = readCredentials();
   if (provider === 'gitlab') {
     const serverUrl = normalizeGitLabServer(credential.serverUrl ?? 'https://gitlab.com');
+    if (credentials.giteaServers?.[serverUrl]) throw new Error('This instance is already connected as Gitea. Remove that connection before changing its provider.');
     credentials.gitlabServers = { ...credentials.gitlabServers, [serverUrl]: { token, serverUrl } };
     if (serverUrl === 'https://gitlab.com') delete credentials.gitlab;
+  } else if (provider === 'gitea') {
+    const serverUrl = normalizeHostingServer(credential.serverUrl ?? '', 'Gitea');
+    if (credentials.gitlabServers?.[serverUrl] || (serverUrl === 'https://gitlab.com' && credentials.gitlab?.token)) throw new Error('This instance is already connected as GitLab. Remove that connection before changing its provider.');
+    credentials.giteaServers = { ...credentials.giteaServers, [serverUrl]: { token, serverUrl } };
   } else credentials[provider] = { token, ...(provider === 'bitbucket' ? { username } : {}) };
   writeCredentials(credentials);
 }
@@ -113,6 +126,12 @@ export function removePullRequestCredential(provider: PullRequestProvider, serve
     if (credentials.gitlabServers) {
       delete credentials.gitlabServers[server];
       if (!Object.keys(credentials.gitlabServers).length) delete credentials.gitlabServers;
+    }
+  } else if (provider === 'gitea') {
+    const server = normalizeHostingServer(serverUrl ?? '', 'Gitea');
+    if (credentials.giteaServers) {
+      delete credentials.giteaServers[server];
+      if (!Object.keys(credentials.giteaServers).length) delete credentials.giteaServers;
     }
   } else delete credentials[provider];
   if (Object.keys(credentials).length === 0) {

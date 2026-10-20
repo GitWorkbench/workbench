@@ -124,13 +124,13 @@ describe('Toolbar tools, menus and search', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Git Flow' })); expect(mocks.app.openGitFlowModal).toHaveBeenCalledOnce();
   });
   it.each([
-    ['Command Palette…', 'openCommandPalette'], ['Toggle Terminal Drawer', 'toggleTerminalDrawer'], ['Pull Requests / Merge Requests…', 'openPullRequestsModal'],
+    ['Command Palette…', 'openCommandPalette'], ['Toggle Terminal Drawer', 'toggleTerminalDrawer'], ['Requests…', 'openPullRequestsModal'],
     ['Reflog & Recovery…', 'openReflogModal'], ['Refresh', 'refresh'], ['Git Flow Operations…', 'openGitFlowModal'], ['Explore Git Workbench…', 'openUsageGuide']
   ])('opens %s using the selected repository context', (label, method) => {
     render(<Toolbar />); action(label); expect(mocks.app[method]).toHaveBeenCalledOnce();
   });
   it.each([
-    ['Split Commit…', { commitSplitOpen: true }], ['Stacked Branches & PRs…', { branchStackOpen: true }], ['Git LFS Manager…', { lfsManagerOpen: true }],
+    ['Split Commit…', { commitSplitOpen: true }], ['Stacked Branches & Requests…', { branchStackOpen: true }], ['Git LFS Manager…', { lfsManagerOpen: true }],
     ['Sparse Checkout…', { sparseCheckoutOpen: true }], ['Restore Points…', { restorePointsOpen: true }], ['Conflict Resolution Memory…', { resolutionMemoryOpen: true }],
     ['Rebase & Rewrite Comparison…', { rangeComparisonOpen: true, rangeComparisonId: null }]
   ])('opens advanced tool %s', (label, patch) => {

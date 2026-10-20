@@ -95,6 +95,7 @@ export type Api = import('../shared/types').AdvancedGitApi & {
   savePullRequestCredential(provider: import('../shared/types').PullRequestProvider, credential: import('../shared/types').PullRequestCredential): Promise<{ ok: boolean; error?: string }>;
   removePullRequestCredential(provider: import('../shared/types').PullRequestProvider, serverUrl?: string): Promise<{ ok: boolean; error?: string }>;
   testGitLabConnection(serverUrl: string, token?: string): Promise<{ ok: boolean; username?: string; error?: string }>;
+  testGiteaConnection(serverUrl: string, token?: string): Promise<{ ok: boolean; username?: string; error?: string }>;
   getPullRequestContext(remoteName?: string, providerOverride?: import('../shared/types').PullRequestProvider): Promise<import('../shared/types').PullRequestContext>;
   createHostedPullRequest(params: { remoteName: string; title: string; description: string; targetBranch: string; providerOverride?: import('../shared/types').PullRequestProvider }): Promise<{ ok: boolean; pullRequest?: import('../shared/types').HostedPullRequest; error?: string }>;
   addRemote(name: string, url: string): Promise<{ ok: boolean; error?: string }>;
@@ -279,6 +280,7 @@ const api: Api = {
   savePullRequestCredential: (provider, credential) => call('git:pull-requests:save-credential', provider, credential),
   removePullRequestCredential: (provider, serverUrl) => call('git:pull-requests:remove-credential', provider, serverUrl),
   testGitLabConnection: (serverUrl, token) => call('git:pull-requests:test-gitlab', serverUrl, token),
+  testGiteaConnection: (serverUrl, token) => call('git:pull-requests:test-gitea', serverUrl, token),
   getPullRequestContext: (remoteName, providerOverride) => call('git:pull-requests:context', remoteName, providerOverride),
   createHostedPullRequest: (params) => call('git:pull-requests:create', params),
   addRemote: (name, url) => call('git:add-remote', name, url),

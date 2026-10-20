@@ -1,7 +1,6 @@
 import React, { useRef, useState } from 'react';
 import {
   List as ListIcon,
-  Bot,
   GitBranch,
   Archive,
   Trash2,
@@ -12,6 +11,7 @@ import {
   Copy,
   Pencil,
   GitMerge,
+  GitPullRequest,
   ArrowUpFromLine,
   ArrowDownToLine,
   ArrowUp,
@@ -31,6 +31,7 @@ import { useApp } from '../../store';
 import { api } from '../../lib/api';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { CheckoutBranchModal, CheckoutTarget } from './CheckoutBranchModal';
+import { SidebarPullRequests } from './SidebarPullRequests';
 import {
   BranchInfo,
   StashInfo,
@@ -351,6 +352,8 @@ function SidebarFull({
   status: ReturnType<typeof useApp.getState>['status'];
   activeTab: string | null;
 }) {
+  const [view, setView] = useState<'repository' | 'requests'>('repository');
+  const [requestFilter, setRequestFilter] = useState('');
   const q = filter.toLowerCase();
   const locals = [...new Map(branches.local.map((b) => [b.fullName, b] as const)).values()].filter((b) =>
     b.name.toLowerCase().includes(q)
@@ -857,17 +860,14 @@ function SidebarFull({
 
   return (
     <div className="relative flex flex-col bg-panel border-r border-edge shrink-0 min-h-0" style={{ width }}>
-      {/* List / Agents toggle */}
+      {/* Separate repository and hosted-request views */}
       <div className="flex items-center gap-1 p-1.5 border-b border-edge">
-        <div className="flex rounded bg-panel2 p-0.5 flex-1">
-          <button className="flex-1 flex items-center justify-center gap-1 rounded bg-panel3 px-2 py-1 text-xs text-fg font-medium">
+        <div className="flex rounded bg-panel2 p-0.5 flex-1 min-w-0" role="group" aria-label="Sidebar views">
+          <button aria-pressed={view === 'repository'} onClick={() => setView('repository')} className={`flex-1 flex items-center justify-center gap-1 rounded px-1.5 py-1 text-xs ${view === 'repository' ? 'bg-panel3 text-fg font-medium' : 'text-dim hover:text-fg'}`}>
             <ListIcon size={12} /> List
           </button>
-          <button
-            className="flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 text-xs text-dim hover:text-fg"
-            onClick={() => notify('info', 'Agents is a placeholder for a future feature')}
-          >
-            <Bot size={12} /> Agents
+          <button aria-pressed={view === 'requests'} onClick={() => { setContextMenu(null); setView('requests'); }} className={`flex-1 flex items-center justify-center gap-1 rounded px-1.5 py-1 text-xs ${view === 'requests' ? 'bg-panel3 text-fg font-medium' : 'text-dim hover:text-fg'}`}>
+            <GitPullRequest size={12} /> Requests
           </button>
         </div>
         <button className="btn-icon" title="Hide sidebar" onClick={() => useApp.setState({ sidebarVisible: false })}>
@@ -880,14 +880,15 @@ function SidebarFull({
         <div className="relative flex items-center">
           <Search size={12} className="absolute left-2 text-faint pointer-events-none" />
           <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter branches, tags, remotes…"
+            value={view === 'requests' ? requestFilter : filter}
+            onChange={(e) => view === 'requests' ? setRequestFilter(e.target.value) : setFilter(e.target.value)}
+            aria-label={view === 'requests' ? 'Filter requests' : 'Filter repository'}
+            placeholder={view === 'requests' ? 'Filter title, author, branch…' : 'Filter branches, tags, remotes…'}
             className="w-full text-xs !pl-6.5 !pr-6 py-1 h-7"
           />
-          {filter ? (
+          {(view === 'requests' ? requestFilter : filter) ? (
             <button
-              onClick={() => setFilter('')}
+              onClick={() => view === 'requests' ? setRequestFilter('') : setFilter('')}
               className="absolute right-1.5 text-faint hover:text-fg p-0.5"
               title="Clear filter"
             >
@@ -898,6 +899,10 @@ function SidebarFull({
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
+        <div hidden={view !== 'requests'}>
+          {activeTab ? <SidebarPullRequests key={activeTab} repo={activeTab} remotes={remotes} query={requestFilter} enabled={view === 'requests'} /> : <p className="px-3 py-4 text-xs text-dim">Open a repository to view requests.</p>}
+        </div>
+        <div hidden={view !== 'repository'}>
         {/* LOCAL BRANCHES */}
         <Section
           title="LOCAL"
@@ -1147,6 +1152,7 @@ function SidebarFull({
           ))}
           {stashes.length === 0 && <div className="px-3 py-1 text-xs text-faint">No stashes</div>}
         </Section>
+        </div>
       </div>
 
       {/* Resize handle */}

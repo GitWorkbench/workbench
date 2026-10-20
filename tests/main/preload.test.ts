@@ -133,7 +133,9 @@ pushTag git:push-tag 2
 getRemotes git:get-remotes 0
 getPullRequestCredentialStatus git:pull-requests:credentials 0
 savePullRequestCredential git:pull-requests:save-credential 2
-removePullRequestCredential git:pull-requests:remove-credential 1
+removePullRequestCredential git:pull-requests:remove-credential 2
+testGitLabConnection git:pull-requests:test-gitlab 2
+testGiteaConnection git:pull-requests:test-gitea 2
 getPullRequestContext git:pull-requests:context 2
 createHostedPullRequest git:pull-requests:create 1
 addRemote git:add-remote 2
@@ -171,6 +173,7 @@ maximizeWindow window:maximize 0
 closeWindow window:close 0
 isWindowMaximized window:is-maximized 0
 restartApp app:restart 0
+openExternal app:open-external 1
 `.trim().split('\n').map(line => {
   const [name, channel, count] = line.split(' ');
   return { name, channel, count: Number(count) };

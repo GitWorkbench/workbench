@@ -8,7 +8,6 @@ import {
   KeyRound,
   Loader2,
   RefreshCw,
-  Settings2,
   X
 } from 'lucide-react';
 import type {
@@ -18,6 +17,7 @@ import type {
   PullRequestProvider,
   RemoteInfo
 } from '../../../shared/types';
+import { requestLabel } from '../../../shared/hosting-provider';
 import { useApp } from '../../store';
 import { useSettings } from '../../store/settings';
 import { api } from '../../lib/api';
@@ -26,7 +26,8 @@ import { PullRequestReview } from './PullRequestReview';
 const providerInfo: Record<PullRequestProvider, { label: string }> = {
   github: { label: 'GitHub' },
   gitlab: { label: 'GitLab' },
-  bitbucket: { label: 'Bitbucket Cloud' }
+  bitbucket: { label: 'Bitbucket Cloud' },
+  gitea: { label: 'Gitea' }
 };
 
 function dateLabel(value?: string): string {
@@ -43,6 +44,9 @@ export function PullRequestsModal() {
   const [reviewRequest, setReviewRequest] = useState<HostedPullRequest | null>(null);
   const repoPath = useApp(s => s.activeTab);
   const isOpen = useApp((state) => state.pullRequestsModalOpen);
+  const intent = useApp(state => state.pullRequestIntent);
+  const intentHandled = useRef(false);
+  const titleInput = useRef<HTMLInputElement>(null);
   const close = useApp((state) => state.closePullRequestsModal);
   const notify = useApp((state) => state.notify);
   const branches = useApp((state) => state.branches);
@@ -59,6 +63,8 @@ export function PullRequestsModal() {
   const [description, setDescription] = useState('');
   const [targetBranch, setTargetBranch] = useState('');
   const loadId = useRef(0);
+  const creationPending = useRef(false);
+  const viewGeneration = useRef(0);
 
   const activeProvider = context?.provider || providerOverride;
   const provider = activeProvider ? providerInfo[activeProvider] : null;
@@ -95,6 +101,8 @@ export function PullRequestsModal() {
   useEffect(() => {
     if (!isOpen) return;
     let current = true;
+    viewGeneration.current++;
+    intentHandled.current = false;
     setContext(null);
     setReviewRequest(null);
     setTitle('');
@@ -109,7 +117,7 @@ export function PullRequestsModal() {
       setCredentialStatus(savedCredentials);
       const tracking = branches.local.find((branch) => branch.isCurrent)?.tracking || '';
       const trackingRemote = tracking.split('/')[0];
-      const initialRemote = remoteList.find((remote) => remote.name === trackingRemote)?.name ||
+      const initialRemote = remoteList.find(remote => remote.name === intent?.remoteName)?.name || remoteList.find((remote) => remote.name === trackingRemote)?.name ||
         remoteList.find((remote) => remote.name === 'origin')?.name || remoteList[0]?.name || '';
       setSelectedRemote(initialRemote);
       void loadContext(initialRemote || undefined, undefined, remoteList);
@@ -118,15 +126,28 @@ export function PullRequestsModal() {
     });
     return () => {
       current = false;
+      viewGeneration.current++;
       loadId.current++;
     };
-  }, [isOpen, repoPath, loadContext]);
+  }, [isOpen, repoPath, loadContext, intent]);
 
   useEffect(() => {
     if (!context) return;
     setTargetBranch(context.defaultBranch || '');
     setSelectedRequestId(null);
   }, [context?.remoteName, context?.provider, context?.defaultBranch]);
+
+  useEffect(() => {
+    if (!isOpen || loading || !context || !intent || intentHandled.current || context.error) return;
+    intentHandled.current = true;
+    if (intent.requestId) {
+      const request = context.pullRequests.find(item => item.id === intent.requestId);
+      if (request) {
+        setSelectedRequestId(request.id);
+        if (intent.mode === 'review') setReviewRequest(request);
+      } else setMessage('This request is no longer in the loaded open list. Refresh or open it on the provider.');
+    } else if (intent.mode === 'create') titleInput.current?.focus();
+  }, [isOpen, loading, context, intent]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -136,10 +157,6 @@ export function PullRequestsModal() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, close]);
-
-  useEffect(() => {
-    if (selectedRequest) setSelectedRequestId(selectedRequest.id);
-  }, [selectedRequest?.id]);
 
   if (!isOpen) return null;
   if (reviewRequest && context?.provider && context.remoteName) return <PullRequestReview key={`${repoPath}:${context.remoteName}:${reviewRequest.id}`} request={reviewRequest} target={{ provider: context.provider, remoteName: context.remoteName, requestId: reviewRequest.id }} onClose={() => setReviewRequest(null)} />;
@@ -167,25 +184,33 @@ export function PullRequestsModal() {
 
   const createRequest = async (event: React.FormEvent, selectedProvider: { label: string }) => {
     event.preventDefault();
-    if (!context?.remoteName || creatingRequest) return;
+    if (!context?.remoteName || creationPending.current) return;
+    creationPending.current = true;
+    const repository = repoPath;
+    const view = viewGeneration.current;
+    const requestRemote = context.remoteName;
+    const stillOpen = () => view === viewGeneration.current && useApp.getState().activeTab === repository && useApp.getState().pullRequestsModalOpen;
     setCreatingRequest(true);
     setMessage('Pushing the current branch and creating the request…');
     try {
       const result = await api.createHostedPullRequest({
-        remoteName: context.remoteName,
+        remoteName: requestRemote,
         title,
         description,
         targetBranch,
         providerOverride
       });
       if (!result.ok || !result.pullRequest) throw new Error(result.error || 'Could not create the request.');
+      if (!stillOpen()) return;
       setSelectedRequestId(result.pullRequest.id);
-      await loadContext(context.remoteName, providerOverride, remotes);
+      await loadContext(requestRemote, providerOverride, remotes);
+      if (!stillOpen()) return;
       setMessage('Request created.');
       notify('success', `${selectedProvider.label} request created`);
     } catch (error) {
-      setMessage(String(error).replace(/^Error:\s*/, ''));
+      if (stillOpen()) setMessage(String(error).replace(/^Error:\s*/, ''));
     } finally {
+      creationPending.current = false;
       setCreatingRequest(false);
     }
   };
@@ -206,14 +231,14 @@ export function PullRequestsModal() {
               <GitPullRequest size={18} />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-fg">Pull request context</h2>
-              <p className="text-[11px] text-dim truncate">GitHub pull requests, GitLab merge requests, and Bitbucket pull requests</p>
+              <h2 className="text-sm font-semibold text-fg">{requestLabel(activeProvider)}</h2>
+              <p className="text-[11px] text-dim truncate">{provider ? `${provider.label} · ${context?.repository || 'Repository requests'}` : 'GitHub, GitLab, Bitbucket, and Gitea'}</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
             <button
               className="btn-icon !w-8 !h-8 text-dim hover:text-fg"
-              title="Refresh pull requests"
+              aria-label={`Refresh ${requestLabel(activeProvider).toLowerCase()}`}
               onClick={() => void loadContext(selectedRemote, providerOverride, remotes)}
               disabled={loading || !selectedRemote}
             >
@@ -243,11 +268,11 @@ export function PullRequestsModal() {
           {context?.repository ? <span className="text-[11px] text-faint truncate">{context.repository}</span> : null}
         </div>
 
-        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+        <div className={`flex-1 min-h-0 grid grid-cols-1 ${configured ? 'lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]' : ''}`}>
           <section className="min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-edge">
             <div className="px-4 py-3 border-b border-edge flex items-center justify-between">
               <div>
-                <h3 className="text-xs font-semibold text-fg">Open requests</h3>
+                <h3 className="text-xs font-semibold text-fg">Open {requestLabel(activeProvider).toLowerCase()}</h3>
                 <p className="text-[10px] text-dim mt-0.5">{context?.currentBranch ? <>Current branch: <span className="font-mono text-accent">{context.currentBranch}</span></> : 'Choose a remote to load request context'}</p>
               </div>
               {context?.repositoryUrl ? <a href={context.repositoryUrl} target="_blank" rel="noreferrer" className="btn !px-2 !py-1 text-[10px] gap-1"><ExternalLink size={11} /> Repository</a> : null}
@@ -256,11 +281,12 @@ export function PullRequestsModal() {
             {providerNeedsChoosing ? (
               <div className="p-5 border-b border-edge bg-panel2/25 space-y-2">
                 <div className="text-xs font-medium text-fg">Choose the hosting service</div>
-                <p className="text-[11px] text-dim">For a self-hosted GitLab remote, connect its instance URL in provider settings, then reopen this workspace.</p>
-                <button className="btn-secondary text-xs" onClick={openProviderSettings}>Configure GitLab server</button>
+                <p className="text-[11px] text-dim">For a GitLab or Gitea remote, connect its instance URL in provider settings, then reopen this workspace.</p>
+                <button className="btn-secondary text-xs" onClick={openProviderSettings}>Configure hosting server</button>
                 <select className="input max-w-xs text-xs" value={providerOverride || ''} onChange={(event) => selectProvider(event.target.value as PullRequestProvider | '')}>
                   <option value="">Select provider…</option>
                   <option value="gitlab">GitLab (including self-managed)</option>
+                  <option value="gitea">Gitea</option>
                 </select>
               </div>
             ) : null}
@@ -271,7 +297,7 @@ export function PullRequestsModal() {
               ) : !context?.provider ? (
                 <div className="py-12 px-6 text-center text-xs text-dim">
                   <GitBranch size={21} className="mx-auto mb-2 text-faint" />
-                  {message || context?.error || 'Add a Git remote to view pull requests.'}
+                  {message || context?.error || 'Add a Git remote to view requests.'}
                 </div>
               ) : context.error ? (
                 <div className="rounded-lg border border-warn/30 bg-warn/5 p-4 text-[11px] leading-relaxed text-warn">
@@ -280,13 +306,14 @@ export function PullRequestsModal() {
               ) : !configured ? (
                 <div className="py-12 px-6 text-center text-xs text-dim">
                   <KeyRound size={22} className="mx-auto mb-2 text-faint" />
-                  Connect your {provider?.label} account to load open requests for this repository.
+                  <p>Connect your {provider?.label} account to load open requests for this repository.</p>
+                  <button className="mt-3 text-accent hover:underline" onClick={openProviderSettings}>Open connection settings</button>
                 </div>
               ) : loading && !context.pullRequests.length ? (
-                <div className="py-14 flex flex-col items-center gap-2 text-xs text-dim"><Loader2 size={18} className="animate-spin text-accent" />Loading open requests…</div>
+                <div className="py-14 flex flex-col items-center gap-2 text-xs text-dim"><Loader2 size={18} className="animate-spin text-accent" />Loading open {requestLabel(activeProvider).toLowerCase()}…</div>
               ) : activePullRequests.length === 0 ? (
                 <div className="py-12 px-6 text-center text-xs text-dim">
-                  <CheckCircle2 size={22} className="mx-auto mb-2 text-add" />No open requests found for this repository.
+                  <CheckCircle2 size={22} className="mx-auto mb-2 text-add" />No open {requestLabel(activeProvider).toLowerCase()} found for this repository.
                 </div>
               ) : activePullRequests.map((request) => <PullRequestRow
                 key={request.id}
@@ -300,83 +327,52 @@ export function PullRequestsModal() {
             {selectedRequest ? <RequestDetails request={selectedRequest} onReview={() => setReviewRequest(selectedRequest)} /> : null}
           </section>
 
-          <section className="min-h-0 overflow-y-auto p-5 space-y-5">
-            {!provider ? (
-              <div className="rounded-xl border border-edge bg-panel2/30 p-5 text-xs text-dim">
-                <AlertCircle size={16} className="text-warn mb-2" />Choose a supported hosting service to connect an account.
-              </div>
-            ) : (
-              <>
-                <div className="rounded-xl border border-edge bg-panel2/35 p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5">
-                      <div className="mt-0.5 w-7 h-7 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent"><Settings2 size={14} /></div>
-                      <div>
-                        <h3 className="text-xs font-semibold text-fg">{provider.label} provider settings</h3>
-                        <p className="text-[10px] text-dim mt-0.5">Manage this provider’s access token in Settings.</p>
-                      </div>
-                    </div>
-                    {configured ? <span className="text-[10px] text-add flex items-center gap-1"><CheckCircle2 size={12} /> Token saved</span> : null}
+          {(configured || message) && <section className="min-h-0 overflow-y-auto p-5 space-y-5">
+            {configured && provider ? (
+              <form className="rounded-xl border border-edge bg-panel2/35 p-4 space-y-3" onSubmit={(event) => void createRequest(event, provider)}>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-semibold text-fg">Create from current branch</h3>
+                    <p className="text-[10px] text-dim mt-0.5">Git Workbench pushes this branch, then creates a request.</p>
                   </div>
-                  <div className="pl-9 space-y-2">
-                    <p className="text-[10px] text-dim leading-relaxed">
-                      {configured
-                        ? 'Your token is stored encrypted on this device. You can replace or remove it from the provider settings page.'
-                        : 'No token is saved for this provider yet. Add one in Settings to load requests and create new ones.'}
-                    </p>
-                    <button className="btn text-[10px] !px-2.5 !py-1.5" onClick={openProviderSettings}>
-                      <Settings2 size={12} /> {configured ? 'Manage provider settings' : 'Configure in Settings'}
-                    </button>
-                  </div>
+                  {context?.currentBranch ? <span className="max-w-36 truncate text-[10px] font-mono text-accent" title={context.currentBranch}>{context.currentBranch}</span> : null}
                 </div>
-
-                {configured ? (
-                  <form className="rounded-xl border border-edge bg-panel2/35 p-4 space-y-3" onSubmit={(event) => void createRequest(event, provider)}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <h3 className="text-xs font-semibold text-fg">Create from current branch</h3>
-                        <p className="text-[10px] text-dim mt-0.5">Git Workbench pushes this branch, then creates a request.</p>
-                      </div>
-                      {context?.currentBranch ? <span className="max-w-36 truncate text-[10px] font-mono text-accent" title={context.currentBranch}>{context.currentBranch}</span> : null}
-                    </div>
-                    {currentBranchRequest ? (
-                      <div className="rounded-lg border border-add/25 bg-add/5 p-3 text-[11px] text-dim flex items-center gap-2">
-                        <CheckCircle2 size={14} className="text-add shrink-0" />An open request already exists for this branch.
-                        <button type="button" className="ml-auto text-accent hover:underline shrink-0" onClick={() => setSelectedRequestId(currentBranchRequest.id)}>View</button>
-                      </div>
-                    ) : (
-                      <>
-                        <label className="block text-[10px] text-dim space-y-1">
-                          Target branch
-                          <input className="input w-full font-mono text-xs" value={targetBranch} onChange={(event) => setTargetBranch(event.target.value)} placeholder="main" required />
-                        </label>
-                        <label className="block text-[10px] text-dim space-y-1">
-                          Title
-                          <input className="input w-full text-xs" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What does this change do?" required />
-                        </label>
-                        <label className="block text-[10px] text-dim space-y-1">
-                          Description <span className="text-faint">(optional)</span>
-                          <textarea className="input w-full min-h-24 resize-y text-xs" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add context for reviewers…" />
-                        </label>
-                        <p className="text-[10px] text-faint leading-relaxed">Only committed changes are pushed. Uncommitted edits remain in your working tree and are not part of the request.</p>
-                        <button type="submit" className="btn btn-primary w-full justify-center !py-2 text-xs" disabled={!canCreate || creatingRequest}>
-                          {creatingRequest ? <><Loader2 size={13} className="animate-spin" /> Pushing branch &amp; creating…</> : <><GitPullRequest size={13} /> Push branch &amp; create {activeProvider === 'gitlab' ? 'merge request' : 'pull request'}</>}
-                        </button>
-                      </>
-                    )}
-                  </form>
-                ) : null}
-              </>
-            )}
+                {currentBranchRequest ? (
+                  <div className="rounded-lg border border-add/25 bg-add/5 p-3 text-[11px] text-dim flex items-center gap-2">
+                    <CheckCircle2 size={14} className="text-add shrink-0" />An open request already exists for this branch.
+                    <button type="button" className="ml-auto text-accent hover:underline shrink-0" onClick={() => setSelectedRequestId(currentBranchRequest.id)}>View</button>
+                  </div>
+                ) : (
+                  <>
+                    <label className="block text-[10px] text-dim space-y-1">
+                      Target branch
+                      <input className="input w-full font-mono text-xs" value={targetBranch} onChange={(event) => setTargetBranch(event.target.value)} placeholder="main" required />
+                    </label>
+                    <label className="block text-[10px] text-dim space-y-1">
+                      Title
+                      <input ref={titleInput} className="input w-full text-xs" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="What does this change do?" required />
+                    </label>
+                    <label className="block text-[10px] text-dim space-y-1">
+                      Description <span className="text-faint">(optional)</span>
+                      <textarea className="input w-full min-h-24 resize-y text-xs" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Add context for reviewers…" />
+                    </label>
+                    <p className="text-[10px] text-faint leading-relaxed">Only committed changes are pushed. Uncommitted edits remain in your working tree and are not part of the request.</p>
+                    <button type="submit" className="btn btn-primary w-full justify-center !py-2 text-xs" disabled={!canCreate || creatingRequest}>
+                      {creatingRequest ? <><Loader2 size={13} className="animate-spin" /> Pushing branch &amp; creating…</> : <><GitPullRequest size={13} /> Push branch &amp; create {requestLabel(activeProvider, false).toLowerCase()}</>}
+                    </button>
+                  </>
+                )}
+              </form>
+            ) : null}
 
             {message ? <div className={`rounded-lg border p-3 text-[11px] leading-relaxed ${/created\.$/.test(message) ? 'border-add/30 bg-add/5 text-add' : /Pushing/.test(message) ? 'border-accent/30 bg-accent/5 text-accent' : 'border-warn/30 bg-warn/5 text-warn'}`}>
               {/Pushing/.test(message) ? <Loader2 size={12} className="inline mr-1.5 animate-spin" /> : <AlertCircle size={12} className="inline mr-1.5" />}{message}
             </div> : null}
-          </section>
+          </section>}
         </div>
 
         <footer className="flex items-center justify-between gap-3 px-5 py-2.5 border-t border-edge bg-panel2/30 shrink-0">
-          <span className="text-[10px] text-faint">{configured ? `${activePullRequests.length} open request${activePullRequests.length === 1 ? '' : 's'}` : 'Access tokens stay encrypted on this device.'}</span>
+          <span className="text-[10px] text-faint">{configured ? `${activePullRequests.length} open request${activePullRequests.length === 1 ? '' : 's'}` : 'Choose a remote to browse requests.'}</span>
           <button className="btn !px-3 !py-1.5 text-[11px]" onClick={close}>Done</button>
         </footer>
       </div>

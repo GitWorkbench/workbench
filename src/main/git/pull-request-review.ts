@@ -1,16 +1,18 @@
 import type { PullReviewTarget, PullReviewDetail, PullReviewFile, PullReviewSubmission, PullRequestCredential, PullRequestProvider } from '../../shared/types';
 import { apiPath, hostedReviewClient, requestJson } from './pull-requests';
+import { pullRequestProviders } from '../../shared/hosting-provider';
+import { getGiteaReview, submitGiteaReview } from './gitea-review';
 import { reviewDiffLines } from '../../shared/review-diff';
 
 type Credentials = (provider: PullRequestProvider, remoteUrl?: string) => PullRequestCredential | null;
 type Row = Record<string, any>;
 
 async function client(repo: string, target: PullReviewTarget, credentials: Credentials) {
-  if (!target || !['github', 'gitlab', 'bitbucket'].includes(target.provider) || !/^\d+$/.test(target.requestId)) throw new Error('Invalid review target.');
+  if (!target || !pullRequestProviders.includes(target.provider) || !/^\d+$/.test(target.requestId)) throw new Error('Invalid review target.');
   const { config, credential } = await hostedReviewClient(repo, target.remoteName, target.provider, credentials);
   const root = apiPath(config);
-  const pr = `${root}/${target.provider === 'gitlab' ? 'merge_requests' : target.provider === 'github' ? 'pulls' : 'pullrequests'}/${target.requestId}`;
-  return { root, pr, apiBase: config.apiBase, get: <T = Row>(path: string) => requestJson<T>(config, credential, path, 'GET'),
+  const pr = `${root}/${target.provider === 'gitlab' ? 'merge_requests' : target.provider === 'github' || target.provider === 'gitea' ? 'pulls' : 'pullrequests'}/${target.requestId}`;
+  return { root, pr, config, credential, apiBase: config.apiBase, get: <T = Row>(path: string) => requestJson<T>(config, credential, path, 'GET'),
     graph: async (query: string, variables?: unknown) => {
       const result = await requestJson<Row>({ ...config, apiBase: config.apiBase.replace(/\/api\/v4$/, '') }, credential, '/api/graphql', 'POST', { query, variables });
       if (result.errors?.length) throw new Error(result.errors.map((e: Row) => e.message).join('; '));
@@ -44,6 +46,7 @@ async function collect(c: Awaited<ReturnType<typeof client>>, path: string, warn
 
 export async function getPullReview(repo: string, target: PullReviewTarget, credentials: Credentials): Promise<PullReviewDetail> {
   const c = await client(repo, target, credentials);
+  if (target.provider === 'gitea') return getGiteaReview(c.config, c.credential, target.requestId);
   const pr = await c.get(c.pr);
   const d: PullReviewDetail = { head: '', base: '', start: '', description: '', files: [], comments: [], checks: [], warnings: [], changeRequestMode: target.provider === 'gitlab' ? 'discussion' : 'native' };
   const optional = async (label: string, fn: () => Promise<void>) => {
@@ -120,7 +123,7 @@ export async function submitPullReview(repo: string, p: PullReviewSubmission, cr
   if ((p.inline || p.replyTo) && p.action !== 'comment') throw new Error('Submit line comments separately from your approval or change request.');
   const c = await client(repo, p, credentials);
   const latest = await c.get(c.pr);
-  const head = p.provider === 'github' ? latest.head.sha : p.provider === 'gitlab' ? latest.diff_refs?.head_sha || latest.sha : latest.source.commit.hash;
+  const head = p.provider === 'github' || p.provider === 'gitea' ? latest.head.sha : p.provider === 'gitlab' ? latest.diff_refs?.head_sha || latest.sha : latest.source.commit.hash;
   if (!p.head || head !== p.head) throw new Error('This request changed while you were reviewing it. Refresh and review the new changes before submitting. Your draft has been kept.');
   let file: PullReviewFile | undefined;
   let selectedLine: ReturnType<typeof reviewDiffLines>[number] | undefined;
@@ -131,7 +134,9 @@ export async function submitPullReview(repo: string, p: PullReviewSubmission, cr
     selectedLine = file && reviewDiffLines(file.patch).find(l => (p.inline!.side === 'old' ? l.oldNo : l.newNo) === p.inline!.line);
     if (!selectedLine || !Number.isInteger(p.inline.line) || !['old', 'new'].includes(p.inline.side)) throw new Error('Choose a displayed line in the current patch.');
   }
-  if (p.provider === 'github') {
+  if (p.provider === 'gitea') {
+    await submitGiteaReview(c.config, c.credential, p, body);
+  } else if (p.provider === 'github') {
     if (p.replyTo) {
       if (!/^\d+$/.test(p.replyTo.id)) throw new Error('Only inline comment threads support replies here.');
       await c.post(`${c.pr}/comments/${p.replyTo.id}/replies`, { body });
