@@ -201,6 +201,71 @@ describe('AI commit explanation', () => {
 });
 
 describe('working directory staging and commit operations', () => {
+  it('resizes the commit message editor with a draggable and keyboard-accessible handle', () => {
+    const frames: FrameRequestCallback[] = [];
+    let nextFrameId = 0;
+    const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      frames.push(callback);
+      return ++nextFrameId;
+    });
+    const cancelFrame = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    const view = workdir();
+    const editor = screen.getByRole('textbox');
+    const handle = screen.getByRole('separator', { name: 'Resize commit message editor' });
+    const profileButton = screen.getByTitle(/Commit Profile:/);
+    expect(editor).toHaveClass('resize-none');
+    expect(editor).toHaveStyle({ height: '72px' });
+    expect(handle).toHaveClass('cursor-row-resize');
+    expect(handle).toHaveAttribute('aria-valuenow', '72');
+    expect(handle.compareDocumentPosition(profileButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(handle.compareDocumentPosition(editor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.mouseUp(window);
+    fireEvent.mouseMove(window, { clientY: 200 });
+    expect(editor).toHaveStyle({ height: '72px' });
+    fireEvent.mouseDown(handle, { clientY: 100 });
+    fireEvent.mouseMove(window, { clientY: 40 });
+    fireEvent.mouseMove(window, { clientY: 30 });
+    expect(editor).toHaveStyle({ height: '72px' });
+    expect(requestFrame).toHaveBeenCalledTimes(1);
+    act(() => frames.shift()?.(0));
+    expect(editor).toHaveStyle({ height: '142px' });
+    expect(handle).toHaveAttribute('aria-valuenow', '142');
+    fireEvent.mouseUp(window);
+    fireEvent.mouseMove(window, { clientY: 1000 });
+    expect(editor).toHaveStyle({ height: '142px' });
+
+    fireEvent.mouseDown(handle, { clientY: 30 });
+    fireEvent.mouseMove(window, { clientY: -500 });
+    const canceledMaxFrame = frames.shift();
+    fireEvent.mouseUp(window);
+    expect(cancelFrame).toHaveBeenCalledWith(2);
+    expect(editor).toHaveStyle({ height: '320px' });
+    act(() => canceledMaxFrame?.(0));
+    expect(editor).toHaveStyle({ height: '320px' });
+    fireEvent.mouseDown(handle, { clientY: -500 });
+    fireEvent.mouseMove(window, { clientY: 0 });
+    const canceledMinFrame = frames.shift();
+    fireEvent.mouseUp(window);
+    expect(cancelFrame).toHaveBeenCalledWith(3);
+    expect(editor).toHaveStyle({ height: '64px' });
+    act(() => canceledMinFrame?.(0));
+    expect(editor).toHaveStyle({ height: '64px' });
+
+    fireEvent.keyDown(handle, { key: 'ArrowUp' });
+    expect(editor).toHaveStyle({ height: '80px' });
+    fireEvent.keyDown(handle, { key: 'ArrowDown' });
+    expect(editor).toHaveStyle({ height: '64px' });
+    fireEvent.keyDown(handle, { key: 'ArrowLeft' });
+    expect(editor).toHaveStyle({ height: '64px' });
+
+    fireEvent.mouseDown(handle, { clientY: 0 });
+    fireEvent.mouseMove(window, { clientY: -16 });
+    const canceledUnmountFrame = frames.shift();
+    view.unmount();
+    expect(cancelFrame).toHaveBeenCalledWith(4);
+    act(() => canceledUnmountFrame?.(0));
+  });
   it.each([null, { staged: [], unstaged: [] }])('revalidates generation after changes disappear before the next render: %j', status => {
     workdir();
     mocks.state.status = status;
@@ -217,6 +282,19 @@ describe('working directory staging and commit operations', () => {
   it.each([{ filePath: 'work.ts', commitHash: 'other', staged: false }, { filePath: 'work.ts', commitHash: null, staged: true }, { filePath: 'work.ts', commitHash: null, staged: false }])('matches the unstaged selection with its revision and index side: %j', openDiff => {
     update({ openDiff }); workdir([], [changed('work.ts')]);
     expect(screen.getByTitle('work.ts').parentElement).toHaveClass(openDiff.commitHash === null && !openDiff.staged ? 'bg-accent/15' : 'hover:bg-panel2');
+  });
+  it('makes staged and unstaged file rows pointer-clickable without underlining their names', () => {
+    workdir();
+    for (const path of ['staged.ts', 'unstaged.ts']) {
+      const fileName = screen.getByTitle(path);
+      expect(fileName).not.toHaveClass('hover:underline');
+      expect(fileName.closest('.group')).toHaveClass('cursor-pointer');
+      fireEvent.click(fileName.closest('.group')!);
+    }
+    expect(mocks.state.openFileDiff.mock.calls).toEqual([
+      [{ commitHash: null, filePath: 'staged.ts', staged: true, status: 'modified' }],
+      [{ commitHash: null, filePath: 'unstaged.ts', staged: false, status: 'modified' }]
+    ]);
   });
   it('shows WIP without immutable commit actions and opens conflicted files in the merge editor', () => {
     workdir([changed('staged.ts')], [changed('conflict.ts', 'conflicted'), changed('fresh.ts', 'untracked')]);

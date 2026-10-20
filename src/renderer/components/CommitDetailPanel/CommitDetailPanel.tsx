@@ -70,6 +70,56 @@ function WorkdirPanel() {
   const openDiff = useApp((s) => s.openDiff);
   const runAndRefresh = useApp((s) => s.runAndRefresh);
   const [msg, setMsg] = useState('');
+  const [messageEditorHeight, setMessageEditorHeight] = useState(72);
+  const messageEditorHeightRef = useRef(72);
+  const messageEditorResizeStart = useRef<{ y: number; height: number } | null>(null);
+  const messageEditorResizeFrame = useRef<number | null>(null);
+  const pendingMessageEditorHeight = useRef<number | null>(null);
+  const messageEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const messageEditorResizeHandleRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const applyMessageEditorHeight = (height: number) => {
+      messageEditorHeightRef.current = height;
+      if (messageEditorRef.current) messageEditorRef.current.style.height = `${height}px`;
+      messageEditorResizeHandleRef.current?.setAttribute('aria-valuenow', String(height));
+    };
+    const onMouseMove = (event: MouseEvent) => {
+      const start = messageEditorResizeStart.current;
+      if (!start) return;
+      pendingMessageEditorHeight.current = Math.max(64, Math.min(320, start.height + start.y - event.clientY));
+      if (messageEditorResizeFrame.current !== null) return;
+      messageEditorResizeFrame.current = window.requestAnimationFrame(() => {
+        messageEditorResizeFrame.current = null;
+        const height = pendingMessageEditorHeight.current;
+        pendingMessageEditorHeight.current = null;
+        if (height === null) return;
+        applyMessageEditorHeight(height);
+      });
+    };
+    const onMouseUp = () => {
+      if (!messageEditorResizeStart.current) return;
+      messageEditorResizeStart.current = null;
+      if (messageEditorResizeFrame.current !== null) window.cancelAnimationFrame(messageEditorResizeFrame.current);
+      messageEditorResizeFrame.current = null;
+      const height = pendingMessageEditorHeight.current ?? messageEditorHeightRef.current;
+      pendingMessageEditorHeight.current = null;
+      applyMessageEditorHeight(height);
+      setMessageEditorHeight(height);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      if (messageEditorResizeFrame.current !== null) window.cancelAnimationFrame(messageEditorResizeFrame.current);
+    };
+  }, []);
+
+  const startMessageEditorResize = (event: React.MouseEvent) => {
+    event.preventDefault();
+    messageEditorResizeStart.current = { y: event.clientY, height: messageEditorHeightRef.current };
+  };
 
   const {
     defaultAuthorName,
@@ -194,13 +244,14 @@ function WorkdirPanel() {
             return (
               <div
                 key={f.path}
-                className={`group flex items-center gap-2 px-3 py-1 text-sm select-none ${
+                className={`group flex items-center gap-2 px-3 py-1 text-sm select-none cursor-pointer ${
                   active ? 'bg-accent/15' : 'hover:bg-panel2'
                 }`}
+                onClick={() => void useApp.getState().openFileDiff({ commitHash: null, filePath: f.path, staged: true, status: f.status })}
               >
                 <StatusIcon status={f.status} />
                 <span
-                  className={`truncate font-mono text-xs flex-1 cursor-pointer hover:underline ${
+                  className={`truncate font-mono text-xs flex-1 ${
                     f.status === 'untracked' || f.status === 'added'
                       ? 'text-add hover:text-add'
                       : f.status === 'deleted'
@@ -208,7 +259,6 @@ function WorkdirPanel() {
                         : 'text-fg/90 hover:text-accent'
                   }`}
                   title={f.path}
-                  onClick={() => void useApp.getState().openFileDiff({ commitHash: null, filePath: f.path, staged: true, status: f.status })}
                 >
                   {f.path}
                 </span>
@@ -216,7 +266,7 @@ function WorkdirPanel() {
                   <button
                     className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded text-dim hover:text-fg hover:bg-panel3 transition-opacity"
                     title="Unstage"
-                    onClick={() => void runAndRefresh(() => api.unstageFiles([f.path]))}
+                    onClick={(event) => { event.stopPropagation(); void runAndRefresh(() => api.unstageFiles([f.path])); }}
                   >
                     <Undo2 size={11} />
                   </button>
@@ -261,13 +311,17 @@ function WorkdirPanel() {
             return (
               <div
                 key={f.path}
-                className={`group flex items-center gap-2 px-3 py-1 text-sm select-none ${
+                className={`group flex items-center gap-2 px-3 py-1 text-sm select-none cursor-pointer ${
                   active ? 'bg-accent/15' : 'hover:bg-panel2'
                 }`}
+                onClick={() => {
+                  if (f.status === 'conflicted') useApp.getState().openConflictResolver(f.path);
+                  else void useApp.getState().openFileDiff({ commitHash: null, filePath: f.path, staged: false, status: f.status });
+                }}
               >
                 <StatusIcon status={f.status} />
                 <span
-                  className={`truncate font-mono text-xs flex-1 cursor-pointer hover:underline ${
+                  className={`truncate font-mono text-xs flex-1 ${
                     f.status === 'untracked' || f.status === 'added'
                       ? 'text-add hover:text-add'
                       : f.status === 'deleted'
@@ -275,10 +329,6 @@ function WorkdirPanel() {
                         : 'text-fg/90 hover:text-accent'
                   }`}
                   title={f.path}
-                  onClick={() => {
-                    if (f.status === 'conflicted') useApp.getState().openConflictResolver(f.path);
-                    else void useApp.getState().openFileDiff({ commitHash: null, filePath: f.path, staged: false, status: f.status });
-                  }}
                 >
                   {f.path}
                 </span>
@@ -291,11 +341,11 @@ function WorkdirPanel() {
                   {f.status === 'conflicted' ? <button
                     className="flex items-center gap-1 rounded border border-warn/30 px-1.5 py-0.5 text-[10px] text-warn hover:bg-warn/10"
                     title="Resolve this file in the three-pane merge editor"
-                    onClick={() => useApp.getState().openConflictResolver(f.path)}
+                    onClick={(event) => { event.stopPropagation(); useApp.getState().openConflictResolver(f.path); }}
                   ><GitMerge size={11} />Resolve</button> : <button
                     className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded text-dim hover:text-fg hover:bg-panel3 transition-opacity"
                     title="Stage file"
-                    onClick={() => void runAndRefresh(() => api.stageFiles([f.path]))}
+                    onClick={(event) => { event.stopPropagation(); void runAndRefresh(() => api.stageFiles([f.path])); }}
                   >
                     <Plus size={11} />
                   </button>}
@@ -303,7 +353,7 @@ function WorkdirPanel() {
                     <button
                       className="opacity-0 group-hover:opacity-100 flex items-center justify-center w-5 h-5 rounded text-dim hover:text-del hover:bg-del/10 transition-opacity"
                       title="Discard changes"
-                      onClick={() => void runAndRefresh(() => api.discardFile(f.path), 'Changes discarded')}
+                      onClick={(event) => { event.stopPropagation(); void runAndRefresh(() => api.discardFile(f.path), 'Changes discarded'); }}
                     >
                       <RotateCcw size={11} />
                     </button>
@@ -316,7 +366,33 @@ function WorkdirPanel() {
       )}
 
       {/* Commit box */}
-      <div className="p-3 border-t border-edge mt-auto space-y-2 bg-panel2/30">
+      <div className="relative p-3 mt-auto space-y-2 bg-panel2/30">
+        <div
+          ref={messageEditorResizeHandleRef}
+          role="separator"
+          aria-label="Resize commit message editor"
+          aria-orientation="horizontal"
+          aria-valuenow={messageEditorHeight}
+          aria-valuemin={64}
+          aria-valuemax={320}
+          tabIndex={0}
+          className="absolute inset-x-0 top-0 z-10 h-2 cursor-row-resize border-t border-edge hover:border-accent focus-visible:border-accent focus-visible:outline-none"
+          title="Drag to resize commit message editor"
+          onMouseDown={startMessageEditorResize}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              const height = Math.min(320, messageEditorHeightRef.current + 16);
+              messageEditorHeightRef.current = height;
+              setMessageEditorHeight(height);
+            } else if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              const height = Math.max(64, messageEditorHeightRef.current - 16);
+              messageEditorHeightRef.current = height;
+              setMessageEditorHeight(height);
+            }
+          }}
+        />
         {/* Profile and AI Action Header */}
         <div className="flex items-center justify-between gap-1 relative">
           {/* Active Commit Profile Switcher */}
@@ -502,6 +578,7 @@ function WorkdirPanel() {
         )}
 
         <textarea
+          ref={messageEditorRef}
           value={msg}
           onChange={(e) => setMsg(e.target.value)}
           onKeyDown={(e) => {
@@ -509,7 +586,8 @@ function WorkdirPanel() {
           }}
           placeholder="Commit message (e.g. feat: add new feature)&#10;Press Ctrl+Enter to commit"
           rows={3}
-          className="w-full text-xs font-mono resize-none rounded border border-edge bg-base/80 p-2 text-fg placeholder:text-dim/60 focus:border-accent focus:ring-1 focus:ring-accent/30 transition-all"
+          style={{ height: messageEditorHeight }}
+          className="w-full text-xs font-mono resize-none rounded border border-edge bg-base/80 p-2 text-fg placeholder:text-dim/60 focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
         />
 
         <button
