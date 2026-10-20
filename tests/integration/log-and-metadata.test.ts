@@ -132,7 +132,7 @@ describe('repository graph, commit metadata and dashboard', () => {
     const overview = await repositoryOverview(fixture.repo, true, credentials);
     expect(overview).toMatchObject({ branch: 'main', changed: 0, hostedMessage: expect.stringMatching(/Configure|configured/i) });
     expect(overview.requests).toBeUndefined();
-    expect(credentials).toHaveBeenCalledWith('github');
+    expect(credentials).toHaveBeenCalledWith('github', 'https://github.com/example/fixture.git');
   });
 
   it('persists ordered unique pins, removes pins and filters malformed input', async () => {

@@ -57,8 +57,8 @@ describe('external workflow preconditions do not mutate repositories or contact 
 
   it('validates review identity and branch names before provider access', async () => {
     const credentials = vi.fn(() => null);
-    await expect(openPullRequestWorktree(fixture.repo, { ...reviewInput(fixture), requestId: 'invalid' }, credentials)).rejects.toThrow('current PR revision');
-    await expect(openPullRequestWorktree(fixture.repo, { ...reviewInput(fixture), head: 'invalid' }, credentials)).rejects.toThrow('current PR revision');
+    await expect(openPullRequestWorktree(fixture.repo, { ...reviewInput(fixture), requestId: 'invalid' }, credentials)).rejects.toThrow('current request revision');
+    await expect(openPullRequestWorktree(fixture.repo, { ...reviewInput(fixture), head: 'invalid' }, credentials)).rejects.toThrow('current request revision');
     await expect(openPullRequestWorktree(fixture.repo, { ...reviewInput(fixture), branch: '-unsafe' }, credentials)).rejects.toThrow('local review branch');
     await expect(openPullRequestWorktree(fixture.repo, { ...reviewInput(fixture), branch: 'main' }, credentials)).rejects.toThrow('already exists');
     expect(credentials).not.toHaveBeenCalled();

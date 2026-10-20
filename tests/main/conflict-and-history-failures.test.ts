@@ -110,3 +110,11 @@ it('preserves NUL-delimited Unicode and tab paths without requiring the host fil
     ? { stdout: '日本\tfile.txt\0from -> to.txt\0', stderr: '' } : original(cmd, args, opts));
   expect((await getRepoOperationState(root)).conflictedFiles).toEqual(['日本\tfile.txt', 'from -> to.txt']);
 });
+
+it('detects a binary base even when both side stages and the working file are absent', async () => {
+  fs.unlinkSync(file);
+  mock.exec.mockImplementation(async (_cmd, args) => ({ stdout: args[0] === 'ls-files'
+    ? `100644 ${hash} 1\tfile.txt\0` : args[0] === 'cat-file' ? Buffer.from([0, 255]) : 'main', stderr: '' }));
+  expect(await getConflictFile(root, 'file.txt')).toMatchObject({ kind: 'binary', workingTreeExists: false, baseContent: '', currentContent: null, incomingContent: null });
+  expect(fs.existsSync(file)).toBe(false);
+});

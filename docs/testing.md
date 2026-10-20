@@ -38,6 +38,18 @@ Run the coverage command to obtain the current measured result; a passing functi
 
 Unreachable defensive branches should be reviewed before changing their source. Keep useful safety guards; add a reproducible failure or race scenario where possible. Assertions must verify outcomes, state, arguments, and failure behavior rather than merely executing lines.
 
+## Required development workflow
+
+Every feature, fix, and refactor includes regression tests and a coverage check. This is the default for implementation work; it does not require a separate testing request each time.
+
+1. Add tests alongside the code. Exercise the successful workflow, relevant errors, and safety boundaries. For a reported bug, first reproduce it with a failing assertion.
+2. Run the affected suites while developing. Use real disposable Git repositories for Git semantics and renderer interaction tests for UI behavior; mock external/native boundaries deterministically.
+3. Run `npm run test:coverage`, followed by `npm run test:coverage:report`, against the final source. Review the per-file results and annotated uncovered statements, functions, and branches for every changed executable file. Add meaningful cases for missing behavior and rerun the checks.
+4. Keep all four 100% per-file thresholds intact. Do not hide executable files, add coverage-ignore directives, weaken assertions, or remove useful guards to pass the gate.
+5. Report the exact commands, pass/fail results, measured percentages, and any remaining gaps. Do not describe a passing functional suite as complete coverage. A failed gate remains a failed gate even when functional tests pass.
+
+An explicit request to skip validation applies to that task only and must be reported. Documentation-only changes do not require runtime tests. Type checking and native platform smoke checks are separate from coverage and must be reported independently when performed.
+
 ## What the suites exercise
 
 | Area | Examples |
@@ -45,7 +57,7 @@ Unreachable defensive branches should be reviewed before changing their source. 
 | Git repository workflows | Status, staging files/hunks/lines, untracked patches, commits, branches, remotes, stash inspection and selective apply, tags, submodules, worktrees |
 | History and recovery | Rebase, split commits, stacked branches, reflog recovery, restore points, rewrite comparisons, bisect, Git Flow |
 | Conflict resolution | Three index stages, text/binary/symlink/submodule conflicts, incomplete markers, stale snapshots, manual editing, CodeMirror integration, remembered resolutions |
-| Hosting providers | GitHub/GitLab/Bitbucket context, credential storage, sign-in device flow, review files/comments/checks, request creation/retargeting, PR worktrees |
+| Hosting providers | GitHub/GitLab/Bitbucket/Gitea context, scoped server connections, credential storage, sign-in device flow, review files/comments/checks, request creation/retargeting, review worktrees |
 | Repository size features | Sparse checkout preview and restore, ignored-file protection, LFS configuration, bounded transfers and cancellation |
 | Main process | Electron lifecycle, window commands, updater states/errors, preload contract, IPC argument routing, mutation serialization, process timeouts/output bounds |
 | Interface | Home dashboard, About/updates, guides, typography/settings, navigation, branch sidebar, graph canvas/hover/context actions, commit details, diffs, command palette, terminal and workflow dialogs |

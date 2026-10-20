@@ -74,7 +74,7 @@ export async function getConflictFile(repoPath: string, filePath: string): Promi
   }));
   const kind = stages.some(s => s.mode === '160000') ? 'submodule'
     : working.symlink || stages.some(s => s.mode === '120000') ? 'symlink'
-    : [working.content, ...versions.filter((v): v is Buffer => v !== null)].some(isBinary) ? 'binary' : 'text';
+    : [working.content, ...versions.filter(v => v !== null)].some(isBinary) ? 'binary' : 'text';
   const rawContent = kind === 'text' ? working.content.toString('utf8') : '';
   let sections: ConflictFileParsed['sections'] = [];
   let parseWarning: string | undefined;

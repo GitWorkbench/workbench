@@ -27,6 +27,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 | `src/main/index.ts` | Electron lifecycle, windows, native integration |
 | `src/main/ipc.ts` | IPC handlers, repository context, mutation coordination |
 | `src/main/git/` | Git workflows, provider adapters, authentication and recovery |
+| `src/main/git/ai-history.ts` | Commit-based message drafts, checked history rewrites and branch explanations |
 | `src/main/updater.ts` | Update checks, download/install state and release links |
 | `src/preload/index.ts` | Restricted, typed `contextBridge` API and event subscriptions |
 | `src/shared/types.ts` | Cross-process contracts, including `GitWorkbenchApi` |
@@ -69,8 +70,8 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 
 - Keep credentials and OAuth refresh logic in the main process using the existing secure-storage implementation. Never put tokens in renderer state, app preferences, browser storage, URLs, logs, fixtures, or commits.
 - `src/shared/github-app.json` contains public app metadata only. Private keys, client secrets, personal tokens, and downloaded `.pem` files must never be bundled or committed.
-- Preserve the distinct GitHub, GitLab, and Bitbucket adapters, permissions, pagination, error handling, and supported host boundaries. Do not treat an arbitrary remote host as a trusted provider endpoint.
-- GitLab connections are scoped to their normalized HTTPS instance URL, including port and base path. Pass the configured remote URL to the credential resolver for all hosted operations; never reuse another instance's token. Keep REST and GraphQL base paths consistent. See [GitLab connections](docs/gitlab-connections.md).
+- Preserve the distinct GitHub, GitLab, Bitbucket, and Gitea adapters, permissions, pagination, error handling, and supported host boundaries. Do not treat an arbitrary remote host as a trusted provider endpoint.
+- GitLab and Gitea connections are scoped to their normalized HTTPS instance URL, including port and base path. Pass the configured remote URL to the credential resolver for all hosted operations; never reuse another instance's token. Keep REST and GraphQL base paths consistent. Gitea uses its own API v1 adapter and never receives a GitLab token. See [GitLab connections](docs/gitlab-connections.md) and [Gitea connections](docs/gitea-connections.md).
 - Validate external URLs and redirect destinations before forwarding credentials or opening them. Handle expired sessions, missing permissions, rate limits, offline state, and changed PR source revisions.
 - Repository pushes continue to use the user's configured Git authentication. Provider API sign-in does not replace SSH keys or credential helpers.
 
@@ -84,12 +85,15 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 - Preserve resizable commit columns and their visibility/order settings. Keep relative time when the absolute date/time option is off.
 - Use the shared `AppLogo` with square dimensions and preserved aspect ratio. Use the shared loading progress component; keep one progress indicator and respect reduced-motion preferences.
 - Restoring repositories during startup must stay quiet. Clicking the checked-out branch should not open a redundant checkout dialog.
+- Keep List and Requests as separate sidebar views with independent filters; do not add placeholder Agents navigation. Connected request modals focus on browsing and creation; provider credentials belong in Settings. Sidebar request headings use Merge Requests for GitLab and Pull Requests for GitHub, Bitbucket, or Gitea. Request loading stays scoped to the active repository and selected remote, uses inline errors, and never pushes automatically. AI history actions generate drafts only on request; applying a message requires confirmation, an unchanged branch/HEAD, a clean linear checkout, and a restore point. Preserve file trees and author metadata when rewriting messages.
 - Include accessible labels for icon buttons, visible keyboard focus, keyboard navigation, appropriate dialog focus/Escape behavior, and clear loading, empty, error, and success states.
 - Keep user-facing copy concrete and professional. Update the built-in guide in `src/renderer/components/Help/usageGuideContent.ts` when a workflow changes.
 
 ## Tests and validation
 
-Follow the user's latest validation instructions. Do not add or run tests or typechecks outside the requested scope; honor an explicit request to skip them. Documentation-only edits do not require runtime tests. When implementation testing is requested, add regression coverage and start with the affected suite, then expand as the scope warrants.
+The user requires tests and measured coverage for every implementation change. This is standing authorization to add and run relevant tests and coverage checks during feature development, fixes, and refactors. Add regression tests with the implementation, run the affected suites first, then run `npm run test:coverage` and `npm run test:coverage:report` before reporting completion. Review uncovered statements, branches, and functions in every changed executable file and add meaningful cases for the gaps. Keep existing coverage from regressing. A passing build or functional suite alone does not satisfy this requirement.
+
+Follow a later explicit user request to skip validation for that specific task, and report the skipped checks. Documentation-only edits do not require runtime tests. Typechecks remain a separate check and run when requested. Preserve the strict per-file coverage gate; if validation fails, fix failures caused by the change and clearly report remaining failures and uncovered paths instead of claiming the implementation is fully validated.
 
 | Command | Purpose |
 | --- | --- |
@@ -140,5 +144,6 @@ Follow the user's latest validation instructions. Do not add or run tests or typ
 - [Advanced workflows and recovery](docs/advanced-features.md)
 - [GitHub sign-in configuration](docs/github-sign-in.md)
 - [GitLab.com and self-hosted connections](docs/gitlab-connections.md)
+- [Gitea connections](docs/gitea-connections.md)
 - [Application identity and data locations](docs/branding.md)
 - [Disposable demonstration repositories](docs/demo-repositories.md)
