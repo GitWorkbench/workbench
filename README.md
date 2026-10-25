@@ -255,7 +255,7 @@ Open the terminal with **Ctrl/Cmd+`** or its toolbar/status-bar action. It uses 
 
 Hiding the drawer keeps programs running. Each repository has its own session, restored with recent output when reopened (up to eight sessions per window). **Restart shell** explicitly stops the session's programs; closing the app ends all sessions. Terminal commands use normal local-account permissions and do not receive the app's restore-point safeguards. Status refreshes after command output settles or focus leaves the terminal; use Refresh for changes from long-running background tools.
 
-`node-pty` is a native dependency. `npm run dev` and `npm start` rebuild it for Electron first; release packaging also rebuilds it on each native runner and unpacks its binaries from ASAR. Building it from source needs Python and a C++ toolchain (Linux build-essential, macOS Xcode command-line tools, Windows Visual Studio C++ tools). Windows requires Windows 10 version 1809 or newer.
+`node-pty` uses Node-API binaries that work in Node and Electron without an Electron-specific rebuild. Windows and macOS use the package’s architecture-specific prebuilds; Linux compiles its Node-API module during `npm ci` and needs Python and a C++ toolchain. Build Linux packages on a runner matching the target CPU architecture. Packaging preserves the native files outside ASAR, and universal macOS builds retain both Darwin prebuild directories. `npm run verify:terminal` runs a real shell inside Electron to check the installed terminal dependency; release jobs run this before packaging. Windows requires Windows 10 version 1809 or newer.
 
 ### Publishing a release and its update files
 

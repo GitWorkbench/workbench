@@ -28,8 +28,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:coverage:report": "node scripts/report-test-coverage.cjs",
-    "predev": "electron-builder install-app-deps",
-    "prestart": "electron-builder install-app-deps"
+    "verify:terminal": "node scripts/check-terminal.cjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -125,10 +124,12 @@
         "zip"
       ],
       "category": "public.app-category.developer-tools",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "x64ArchFiles": "**/node-pty/prebuilds/darwin-{x64,arm64}/**"
     },
     "asarUnpack": [
       "node_modules/node-pty/**"
-    ]
+    ],
+    "npmRebuild": false
   }
 }
