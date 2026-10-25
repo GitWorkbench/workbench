@@ -23,6 +23,6 @@
   --content-text-small: var(--content-text-caption);
   --content-text-subheading: calc(var(--content-font-size) + 1px);
   --content-text-heading: calc(var(--content-font-size) + 5px);
-  --content-text-title: calc(var(--content-font-size) + 9px);
+  --content-text-title: calc(var(--content-font-size) + 6px);
   --content-text-metric: var(--content-text-heading);
 }

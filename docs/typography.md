@@ -6,7 +6,7 @@ Open **Settings → Typography & Density** to adjust each area separately. Chang
 | --- | --- | --- | --- |
 | Interface text | Navigation, buttons, labels and general workspace text | 11–16px | 13px |
 | Diff & code text | Diff content and line numbers, merge editor, code/patch previews and terminal content | 10–18px | 12px |
-| Home text | Repository cards, recent repositories and Home actions | 11–18px | 13px |
+| Home text | Repository rows, recent repositories and Home actions | 11–18px | 13px |
 | Guide text | Explore Git Workbench navigation, cards and instructions | 11–20px | 13px |
 
 Headings and supporting labels keep their size hierarchy within the selected area. Branch labels and commit hashes can use the monospace family while retaining interface sizing; changing code size does not resize them. The interface font family is shared by interface, Home and guide text. Code & Monospace Font controls the monospace family, separately from text sizes.
@@ -23,7 +23,7 @@ Existing interface/code sizes are retained within supported ranges. On the first
 
 - The document keeps its 13px root scale for `rem` layout dimensions. Interface text uses `--font-size-ui` and the Tailwind text-size tokens, separately from layout dimensions.
 - Home and guide use `--font-size-home` and `--font-size-guide` through scoped content typography tokens.
-- Home uses one size for repository names and controls, one shared supporting size for paths/status labels, and one section-heading size across pinned, recent, and setup panels. Its title and counters use fixed offsets from the Home text setting, so larger preferences do not exaggerate the hierarchy. Supporting text stays at least 11px. These overrides do not change guide text or the interface setting.
+- Home uses one size for repository names and controls, one shared supporting size for paths/status labels, and one section-heading size across pinned, recent, and setup panels. Its compact title uses a fixed offset from the Home text setting. Repository rows align branch, status, and sync data; paths and branch names truncate with full values available on hover. Counts and controls use the same scale across the workspace, so larger preferences do not exaggerate the hierarchy. Supporting text stays at least 11px. These overrides do not change guide text or the interface setting.
 - `font-mono` selects a font family only. Code sizing is opt-in through `code-surface` or the merge editor’s explicit code size. Code line heights are unitless, so larger code remains readable without overlapping lines.
 - Font limits, defaults, migration and setters share one definition in the settings store. Typography values are validated on load, save and application to the document.
 

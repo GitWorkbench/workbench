@@ -23,6 +23,41 @@ beforeEach(() => {
 const pinned = () => within(screen.getByRole('region', { name: 'Pinned repositories' }));
 
 describe('Home workspace hub', () => {
+  it('aligns repository information in a compact list and keeps clean sync states readable', () => {
+    mocks.home.pins = ['/work/api', '/work/design', '/work/review'];
+    mocks.home.rows = {
+      '/work/api': row({ changed: 5, staged: 2, ahead: 3, behind: 1 }),
+      '/work/design': row(),
+      '/work/review': row({ branch: '', conflicts: 1, changed: 1, behind: 2 })
+    };
+    render(<Home />);
+    expect(screen.getByRole('heading', { name: 'Repositories', exact: true })).toBeVisible();
+    for (const label of ['Repository', 'Branch', 'Working tree', 'Sync']) expect(pinned().getByText(label, { exact: true })).toBeVisible();
+    const apiRow = within(pinned().getByRole('article', { name: 'api' }));
+    expect(apiRow.getByText('/work/api')).toHaveAttribute('title', '/work/api');
+    expect(apiRow.getByText('main', { exact: true })).toHaveAttribute('title', 'main');
+    expect(apiRow.getByText('2 staged')).toBeVisible();
+    expect(apiRow.getByTitle('3 to push')).toHaveTextContent('3'); expect(apiRow.getByTitle('1 to pull')).toHaveTextContent('1');
+    const clean = within(pinned().getByRole('article', { name: 'design' }));
+    expect(clean.getByText('Up to date')).toBeVisible(); expect(clean.queryByText('0 staged')).not.toBeInTheDocument();
+    fireEvent.click(clean.getByRole('button', { name: 'Open', exact: true })); expect(mocks.app.openRepo).toHaveBeenCalledWith('/work/design');
+    const review = within(pinned().getByRole('article', { name: 'review' }));
+    expect(review.getByText('1 conflict')).toBeVisible(); expect(review.getByText('—')).toBeVisible(); expect(review.getByTitle('2 to pull')).toHaveTextContent('2');
+    expect(within(screen.getByRole('button', { name: 'All pinned' })).getByText('3')).toBeVisible();
+    expect(within(screen.getByRole('button', { name: 'With changes' })).getByText('2')).toBeVisible();
+    expect(within(screen.getByRole('button', { name: 'Needs attention' })).getByText('1')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'All pinned' })).toHaveAttribute('aria-pressed', 'true');
+  });
+  it('marks refreshing rows busy and keeps unresolved filter totals distinct from zero', () => {
+    mocks.home.pins = ['/loading']; mocks.home.pending = ['/loading'];
+    const { rerender } = render(<Home />);
+    expect(pinned().getByRole('article', { name: 'loading' })).toHaveAttribute('aria-busy', 'true');
+    expect(within(screen.getByRole('button', { name: 'With changes' })).getByText('—')).toBeVisible();
+    expect(pinned().getByText('Loading…')).toBeVisible();
+    mocks.home.rows = { '/loading': row() }; mocks.home.pending = []; rerender(<Home />);
+    expect(pinned().getByRole('article', { name: 'loading' })).toHaveAttribute('aria-busy', 'false');
+    expect(within(screen.getByRole('button', { name: 'With changes' })).getByText('0')).toBeVisible();
+  });
   it('provides onboarding, open/create/browse and setup tools without empty placeholders', () => {
     render(<Home />);
     expect(screen.getByRole('heading', { name: 'Keep your projects close' })).toBeVisible();

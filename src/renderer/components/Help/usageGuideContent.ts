@@ -57,9 +57,9 @@ export const guideTopics: GuideTopic[] = [
     location: 'Home tab · Ctrl/Cmd+T',
     steps: [
       { title: 'Find a repository', description: 'Use Home’s shared search to filter project names and paths. Open a recent entry, or use Resume to return to a workspace that is already open.' },
-      { title: 'Pin projects you watch', description: 'Use a recent repository’s pin button to give it a status card. Pinned projects leave the recent list so each project appears once. Unpin to return it to your recent history.' },
-      { title: 'Read local status', description: 'Pinned cards show branch, staged and changed files, conflicts, and ahead/behind counts. Use All pinned, With changes, or Needs attention to narrow the cards; unavailable folders also need attention.' },
-      { title: 'Refresh the information you need', description: 'Refresh rescans local status. Check requests explicitly contacts the configured provider; expand a card’s request section to inspect its loaded requests and links.' }
+      { title: 'Pin projects you watch', description: 'Use a recent repository’s pin button to add it to the pinned list. Pinned projects leave the recent list so each project appears once. Unpin to return it to your recent history.' },
+      { title: 'Read local status', description: 'Each pinned row aligns the repository name and path, branch, working-tree status, and sync counts. When there are no ahead/behind commits, Sync shows Up to date instead of repeated zero counters. Use All pinned, With changes, or Needs attention to narrow the list; unavailable folders also need attention.' },
+      { title: 'Refresh the information you need', description: 'Refresh rescans local status. Check requests explicitly contacts the configured provider; expand a row’s request section to inspect its loaded requests and links.' }
     ],
     tips: ['Ahead/behind compares with the last fetched upstream. A local refresh does not fetch new commits.', 'Removing a recent entry does not delete its folder. Missing pinned folders stay visible until you reconnect or unpin them.'],
     actions: [{ id: 'home', label: 'Go Home' }, { id: 'providers', label: 'Connect providers' }],
