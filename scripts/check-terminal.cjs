@@ -17,16 +17,18 @@ if (process.argv.includes('--runtime')) {
   const timer = setTimeout(() => {
     console.error('The Electron terminal smoke check timed out.');
     terminal.kill();
-    process.exitCode = 1;
+    process.exit(1);
   }, 10_000);
   terminal.onData(data => { output = (output + data).slice(-32_768); });
   terminal.onExit(({ exitCode }) => {
     clearTimeout(timer);
     if (exitCode !== 0 || !output.includes(marker)) {
       console.error(`The Electron terminal smoke check failed (exit ${exitCode}).`);
-      process.exitCode = 1;
+      process.exit(1);
     } else {
-      console.log(`Interactive terminal verified in Electron ${process.versions.electron} on ${process.platform}/${process.arch}.`);
+      // ConPTY's native worker can outlive its shell. This disposable verifier
+      // has finished once exit and output are verified; do not wait on it.
+      process.stdout.write(`Interactive terminal verified in Electron ${process.versions.electron} on ${process.platform}/${process.arch}.\n`, () => process.exit(0));
     }
   });
 } else {

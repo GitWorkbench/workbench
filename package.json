@@ -11,6 +11,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "postinstall": "node scripts/prepare-terminal.cjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
