@@ -503,20 +503,20 @@ export const guideTopics: GuideTopic[] = [
     related: ['staging-commits', 'ai-assistant', 'providers', 'terminal-shortcuts']
   },
   {
-    id: 'terminal-shortcuts', category: 'preferences', title: 'Navigate quickly with the palette and command drawer',
-    summary: 'Find tools and repository objects by name, and run a command without leaving the project window.',
+    id: 'terminal-shortcuts', category: 'preferences', title: 'Navigate quickly with the palette and terminal',
+    summary: 'Find tools and repository objects by name, and use an interactive shell without leaving the project window.',
     minutes: 4, level: 'Intermediate', keywords: ['keyboard', 'shortcuts', 'palette', 'terminal', 'command', 'search', 'quick', 'hotkey'],
     location: 'Ctrl/Cmd+K → palette · Ctrl/Cmd+` → terminal · ? → shortcuts',
     steps: [
       { title: 'Search commands and repository objects', description: 'Open the command palette with Ctrl/Cmd+K. Search the available Commands, Branches, Tags, Commits, or Files and read the selected item before pressing Enter; some results execute Git actions rather than merely opening a panel.' },
       { title: 'Use navigation shortcuts', description: 'Ctrl/Cmd+T opens Home, Ctrl/Cmd+F focuses repository search on Home or the commit filter in a workspace, Ctrl/Cmd+B toggles the sidebar, and Ctrl/Cmd+, opens Settings. Open the shortcuts sheet for the full current list.' },
-      { title: 'Run a repository command', description: 'Open Terminal from the toolbar or Ctrl/Cmd+`. Enter a command or choose a preset such as git status -s. The drawer runs commands in the active repository and shows output, errors, exit code, and elapsed time.' },
-      { title: 'Read and revisit output', description: 'Use command history, copy an output log when useful, and resize or maximize the drawer for longer results. This is a command runner, so use your system terminal for a persistent interactive shell or tools needing interactive input.' },
-      { title: 'Return to the workspace', description: 'Close the drawer when done. Refresh the repository if an external command changed files or Git state and the view has not caught up. Press Escape to dismiss the active modal or diff where supported.' }
+      { title: 'Run a repository command', description: 'Open Terminal from the toolbar or Ctrl/Cmd+`. It starts your login shell in the selected repository, or PowerShell on Windows. Type directly at the prompt: cd, environment variables, shell history, Tab completion, interactive prompts, and Ctrl+C work within the same session.' },
+      { title: 'Read and revisit output', description: 'Drag the top edge to resize the terminal or maximize it. Copy selected output with Ctrl+Shift+C (Cmd+C on macOS), paste with Ctrl+Shift+V (Cmd+V), and use Clear scrollback for a cleaner view. Diff & Code font settings also size terminal text.' },
+      { title: 'Return to the workspace', description: 'Hide the drawer to keep the shell running; reopening it or returning to the same repository restores the session and recent output. Restart shell explicitly stops its programs. Sessions end when the app closes. Repository status refreshes after command output settles or you leave the terminal; use Refresh if an external process changes the repository later.' }
     ],
     tips: ['Typing ? outside a text input opens the shortcuts sheet.', 'A palette item’s description helps distinguish opening a tool from immediately fetching, pushing, applying, or switching something.'],
     caution: 'Commands execute with your local account’s access. Destructive or remote-changing commands need the same care as in your normal terminal; do not assume they receive the app’s restore-point protections.',
-    actions: [{ id: 'palette', label: 'Open command palette' }, { id: 'terminal', label: 'Open command drawer' }, { id: 'shortcuts', label: 'Show shortcuts' }],
+    actions: [{ id: 'palette', label: 'Open command palette' }, { id: 'terminal', label: 'Open terminal' }, { id: 'shortcuts', label: 'Show shortcuts' }],
     related: ['home-workspaces', 'commit-graph', 'sync-remotes', 'preferences']
   }
 ];

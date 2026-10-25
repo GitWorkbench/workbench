@@ -109,7 +109,8 @@ describe('browser preview API', () => {
       'resolveConflictFile', 'abortOperation', 'continueOperation', 'cherryPick', 'executeInteractiveRebase', 'openTerminal', 'openInEditor', 'initGitFlow', 'finishGitFlowBranch', 'applyStashFile', 'resetBisect', 'exportPatch', 'applyPatch'];
     for (const name of simpleActions) expect(await (client.api as any)[name]()).toMatchObject({ ok: true });
     for (const name of ['stageFiles', 'unstageFiles', 'stageAll', 'unstageAll', 'discardFile']) expect(await (client.api as any)[name]()).toEqual({});
-    for (const name of ['onAppUpdateState', 'onGitHubSignInState', 'onLfsTransfer']) expect((client.api as any)[name](() => {})()).toBeUndefined();
+    for (const name of ['onAppUpdateState', 'onGitHubSignInState', 'onLfsTransfer', 'onTerminalEvent']) expect((client.api as any)[name](() => {})()).toBeUndefined();
+    for (const name of ['openTerminalSession', 'writeTerminalSession', 'resizeTerminalSession', 'closeTerminalSession', 'acknowledgeTerminalData', 'detachTerminalSession']) await expect((client.api as any)[name]()).rejects.toThrow('Interactive terminals require the desktop app.');
     expect(client.api.setActiveRepo(null)).toBeUndefined();
     expect(await client.api.getCommitsForRebase('base')).toEqual(expect.any(Array));
     expect(await client.api.startGitFlowBranch({ type: 'feature', name: 'preview' })).toMatchObject({ branchName: 'feature/preview' });

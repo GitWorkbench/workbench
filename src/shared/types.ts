@@ -633,8 +633,32 @@ export interface AppUpdateState {
   canInstallInApp: boolean;
 }
 
+export interface TerminalSession {
+  id: string;
+  connectionId: string;
+  repoPath: string;
+  shell: string;
+  output: string;
+  sequence: number;
+  exitCode?: number;
+}
+
+export type TerminalEvent =
+  | { id: string; sequence: number; type: 'data'; data: string }
+  | { id: string; sequence: number; type: 'exit'; exitCode: number };
+
+export interface TerminalApi {
+  openTerminalSession(repoPath: string, cols: number, rows: number): Promise<TerminalSession>;
+  writeTerminalSession(id: string, data: string): Promise<void>;
+  resizeTerminalSession(id: string, cols: number, rows: number): Promise<void>;
+  closeTerminalSession(id: string): Promise<void>;
+  acknowledgeTerminalData(id: string, sequence: number): Promise<void>;
+  detachTerminalSession(id: string, connectionId: string): Promise<void>;
+  onTerminalEvent(cb: (event: TerminalEvent) => void): () => void;
+}
+
 // IPC API exposed via contextBridge
-export interface GitWorkbenchApi extends AdvancedGitApi {
+export interface GitWorkbenchApi extends AdvancedGitApi, TerminalApi {
   getAppUpdateState(): Promise<AppUpdateState>;
   checkForAppUpdates(): Promise<AppUpdateState>;
   downloadAppUpdate(): Promise<AppUpdateState>;

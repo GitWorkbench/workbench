@@ -56,6 +56,12 @@ deleteRestorePoint git:restore-points:delete 1
 getPullReview git:pull-review:get 1
 submitPullReview git:pull-review:submit 1
 getAppUpdateState app-update:get-state 0
+openTerminalSession terminal:open 3
+writeTerminalSession terminal:write 2
+resizeTerminalSession terminal:resize 3
+closeTerminalSession terminal:close 1
+acknowledgeTerminalData terminal:acknowledge 2
+detachTerminalSession terminal:detach 2
 checkForAppUpdates app-update:check 0
 downloadAppUpdate app-update:download 0
 installAppUpdate app-update:install 0
@@ -182,7 +188,7 @@ openExternal app:open-external 1
 });
 const subscriptions = [
   ['onGitHubSignInState', 'github-auth:state'], ['onLfsTransfer', 'git:lfs-progress'],
-  ['onAppUpdateState', 'app-update:state'], ['onMaximizeChange', 'window:maximize-change']
+  ['onAppUpdateState', 'app-update:state'], ['onMaximizeChange', 'window:maximize-change'], ['onTerminalEvent', 'terminal:event']
 ];
 let api: Record<string, (...args: any[]) => any>;
 beforeAll(async () => {

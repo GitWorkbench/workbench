@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { registerIpc } from './ipc';
 import { registerUpdater } from './updater';
+import { registerTerminal } from './terminal';
 import { configureAppIdentity, configureAppMenu } from './app-identity';
 import { APP_NAME } from '../shared/appIdentity';
 
@@ -58,6 +59,7 @@ app.whenReady().then(() => {
     () => currentRepo
   );
   registerUpdater(() => mainWindow);
+  registerTerminal(() => mainWindow, () => currentRepo);
 
   // Track the active repo path (sent from renderer when a tab is focused)
   ipcMain.on('repo:set-active', (_e, repoPath: string | null) => {

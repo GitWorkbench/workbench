@@ -6,7 +6,7 @@ export default defineConfig({
     build: {
       outDir: 'out/main',
       lib: { entry: 'src/main/index.ts' },
-      rollupOptions: { external: ['simple-git'] }
+      rollupOptions: { external: ['simple-git', 'node-pty'] }
     }
   },
   preload: {

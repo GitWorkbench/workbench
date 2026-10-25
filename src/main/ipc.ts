@@ -897,6 +897,8 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
     try {
       if (plat === 'darwin') {
         spawn('open', ['-a', 'Terminal', repo], { detached: true, stdio: 'ignore' }).unref();
+      } else if (plat === 'win32') {
+        spawn('powershell.exe', ['-NoLogo', '-NoExit'], { cwd: repo, detached: true, stdio: 'ignore', windowsHide: false }).unref();
       } else {
         // Linux: try common terminals in order
         for (const term of [

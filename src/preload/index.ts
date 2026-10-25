@@ -8,7 +8,7 @@ const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
     return result as T;
   });
 
-export type Api = import('../shared/types').AdvancedGitApi & {
+export type Api = import('../shared/types').AdvancedGitApi & import('../shared/types').TerminalApi & {
   getAppUpdateState(): Promise<import('../shared/types').AppUpdateState>;
   checkForAppUpdates(): Promise<import('../shared/types').AppUpdateState>;
   downloadAppUpdate(): Promise<import('../shared/types').AppUpdateState>;
@@ -197,6 +197,17 @@ const api: Api = {
   getPullReview: (target) => call('git:pull-review:get', target),
   submitPullReview: (params) => call('git:pull-review:submit', params),
   getAppUpdateState: () => call('app-update:get-state'),
+  openTerminalSession: (repoPath, cols, rows) => call('terminal:open', repoPath, cols, rows),
+  writeTerminalSession: (id, data) => call('terminal:write', id, data),
+  resizeTerminalSession: (id, cols, rows) => call('terminal:resize', id, cols, rows),
+  closeTerminalSession: (id) => call('terminal:close', id),
+  acknowledgeTerminalData: (id, sequence) => call('terminal:acknowledge', id, sequence),
+  detachTerminalSession: (id, connectionId) => call('terminal:detach', id, connectionId),
+  onTerminalEvent: (cb) => {
+    const handler = (_event: IpcRendererEvent, event: import('../shared/types').TerminalEvent) => cb(event);
+    ipcRenderer.on('terminal:event', handler);
+    return () => ipcRenderer.removeListener('terminal:event', handler);
+  },
   checkForAppUpdates: () => call('app-update:check'),
   downloadAppUpdate: () => call('app-update:download'),
   installAppUpdate: () => call('app-update:install'),

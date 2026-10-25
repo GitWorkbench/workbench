@@ -8,6 +8,7 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock('../../src/main/ipc', () => ({ registerIpc: mock.register }));
 vi.mock('../../src/main/updater', () => ({ registerUpdater: mock.updater }));
+vi.mock('../../src/main/terminal', () => ({ registerTerminal: mock.register }));
 vi.mock('../../src/main/app-identity', () => ({ configureAppIdentity: mock.identity, configureAppMenu: mock.menu }));
 vi.mock('electron', () => ({
   app: { whenReady: mock.ready, on: (name: string, fn: (...args: any[]) => any) => mock.handlers.set(name, fn), quit: mock.quit },
@@ -38,18 +39,20 @@ describe('Electron application lifecycle', () => {
     await start(); const win = mock.windows[0];
     expect(win.options).toMatchObject({ minWidth: 1024, minHeight: 640, title: 'Git Workbench', webPreferences: { contextIsolation: true, nodeIntegration: false } });
     expect(win.loadFile).toHaveBeenCalledWith(expect.stringContaining(path.join('renderer', 'index.html')));
-    expect(mock.register).toHaveBeenCalledOnce(); expect(mock.updater).toHaveBeenCalledOnce();
+    expect(mock.register).toHaveBeenCalledTimes(2); expect(mock.updater).toHaveBeenCalledOnce();
     expect(mock.identity).toHaveBeenCalledOnce();
     expect(mock.identity.mock.invocationCallOrder[0]).toBeLessThan(mock.ready.mock.invocationCallOrder[0]);
     expect(mock.menu).toHaveBeenCalledOnce();
     expect(mock.menu.mock.invocationCallOrder[0]).toBeGreaterThan(mock.ready.mock.invocationCallOrder[0]);
     const [getWindow, getRepo] = mock.register.mock.calls[0];
+    const [getTerminalWindow, getTerminalRepo] = mock.register.mock.calls[1];
+    expect(getTerminalWindow()).toBe(win); expect(getTerminalRepo()).toBeNull();
     expect(getWindow()).toBe(win); expect(mock.updater.mock.calls[0][0]()).toBe(win); expect(getRepo()).toBeNull();
-    mock.ipc.get('repo:set-active')!({}, '/temporary/repository'); expect(getRepo()).toBe('/temporary/repository');
+    mock.ipc.get('repo:set-active')!({}, '/temporary/repository'); expect(getRepo()).toBe('/temporary/repository'); expect(getTerminalRepo()).toBe('/temporary/repository');
     mock.ipc.get('repo:set-active')!({}, null); expect(getRepo()).toBeNull();
     win.events.get('maximize')!(); win.events.get('unmaximize')!();
     expect(win.webContents.send.mock.calls).toEqual([['window:maximize-change', true], ['window:maximize-change', false]]);
-    win.events.get('closed')!(); expect(getWindow()).toBeNull();
+    win.events.get('closed')!(); expect(getWindow()).toBeNull(); expect(getTerminalWindow()).toBeNull();
     win.events.get('maximize')!(); win.events.get('unmaximize')!(); expect(win.webContents.send).toHaveBeenCalledTimes(2);
   });
   it('loads a development URL only when one is configured', async () => {

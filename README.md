@@ -249,6 +249,14 @@ npm run dist:mac
 ```
 This creates a DMG and ZIP in `dist/`. macOS builds are unsigned and will always use the GitHub release page for manual download and installation; in-app macOS updates are not enabled.
 
+### Interactive terminal
+
+Open the terminal with **Ctrl/Cmd+`** or its toolbar/status-bar action. It uses xterm.js and a native pseudoterminal, with a persistent login shell on Linux/macOS and PowerShell on Windows. Shell history, Tab completion, `cd`, environment variables, ANSI colors, interactive input, and Ctrl+C work directly at the prompt. The terminal follows code font preferences and can be resized or maximized.
+
+Hiding the drawer keeps programs running. Each repository has its own session, restored with recent output when reopened (up to eight sessions per window). **Restart shell** explicitly stops the session's programs; closing the app ends all sessions. Terminal commands use normal local-account permissions and do not receive the app's restore-point safeguards. Status refreshes after command output settles or focus leaves the terminal; use Refresh for changes from long-running background tools.
+
+`node-pty` is a native dependency. `npm run dev` and `npm start` rebuild it for Electron first; release packaging also rebuilds it on each native runner and unpacks its binaries from ASAR. Building it from source needs Python and a C++ toolchain (Linux build-essential, macOS Xcode command-line tools, Windows Visual Studio C++ tools). Windows requires Windows 10 version 1809 or newer.
+
 ### Publishing a release and its update files
 
 Git Workbench checks public, non-draft GitHub Releases in `GitWorkbench/workbench`. Local `dist` commands only build files; the GitHub Actions release workflow builds and uploads them automatically when a version tag is pushed.

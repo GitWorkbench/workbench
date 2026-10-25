@@ -29,6 +29,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 | `src/main/git/` | Git workflows, provider adapters, authentication and recovery |
 | `src/main/git/ai-history.ts` | Commit-based message drafts, checked history rewrites and branch explanations |
 | `src/main/updater.ts` | Update checks, download/install state and release links |
+| `src/main/terminal.ts` | Repository-scoped pseudoterminals, bounded output and session cleanup |
 | `src/preload/index.ts` | Restricted, typed `contextBridge` API and event subscriptions |
 | `src/shared/types.ts` | Cross-process contracts, including `GitWorkbenchApi` |
 | `src/shared/` | Shared pure logic and public GitHub App metadata |
@@ -51,6 +52,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 - Follow existing error envelopes and event unsubscribe patterns. Give the UI useful errors without dumping raw HTTP responses, headers, credentials, or stack traces.
 - Keep shared modules safe to import in the renderer. Do not import main-process runtime code into renderer or shared code.
 - Capture the intended repository and selection for asynchronous work. Reject stale results after switching repositories, revisions, files, or tabs. Use existing mutation queues and refresh helpers rather than starting competing mutations.
+- Keep interactive terminal processes in the main process with narrow, owner-checked IPC. Bind creation to the active repository; preserve sessions on drawer hide, bound output and session counts, and stop processes on window destruction or app quit. Keep node-pty external to the main bundle and its native binaries unpacked for packaging.
 - Clean up listeners, timers, observers, editor instances, subscriptions, and subprocesses. Support cancellation and bounded execution for long operations.
 - Migrate persisted settings with validated defaults. Preserve existing preferences and normalize invalid stored values.
 
