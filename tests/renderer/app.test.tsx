@@ -21,12 +21,12 @@ const children = [
   ['Repository', 'CreateRepoModal'], ['CommandPalette', 'CommandPalette'], ['TerminalDrawer', 'TerminalDrawer'],
   ['Help', 'ShortcutsModal'], ['Help', 'UsageGuideModal'], ['GitFlow', 'GitFlowModal'], ['Bisect', 'BisectModal'],
   ['Reflog', 'ReflogModal'], ['Reflog', 'RestorePointsModal'], ['Changelog', 'ChangelogModal'], ['Worktrees', 'WorktreesModal'],
-  ['PullRequests', 'PullRequestsModal'], ['Common', 'ToastContainer']
+  ['PullRequests', 'PullRequestsModal'], ['Common', 'ToastContainer'], ['Updates', 'AppUpdateNotice']
 ];
 let App: typeof import('../../src/renderer/App').App;
 beforeAll(async () => {
   for (const [directory, name] of children) {
-    vi.doMock(`../../src/renderer/components/${directory}/${name}`, () => ({ [name]: ({ isReady, onClose }: any) => <div data-testid={name} data-ready={String(isReady)}>
+    vi.doMock(`../../src/renderer/components/${directory}/${name}`, () => ({ [name]: ({ isReady, ready, onClose }: any) => <div data-testid={name} data-ready={String(ready ?? isReady)}>
       {name === 'Home' && <input aria-label="Search repositories" />}
       {name === 'CommitGraph' && <input placeholder="Filter commits" />}
       {onClose && <button onClick={onClose}>Close {name}</button>}
@@ -49,6 +49,12 @@ const finishStartup = async () => { await advance(2400); await advance(450); };
 const key = (value: string, patch: Record<string, unknown> = {}) => fireEvent.keyDown(window, { key: value, ...patch });
 
 describe('application composition and startup', () => {
+  it('keeps the update notice available on Settings after startup, deferring it for active dialogs', async () => {
+    mock.settings.isSettingsOpen = true; const { rerender } = render(<App />); await finishStartup();
+    expect(screen.getByTestId('AppUpdateNotice')).toHaveAttribute('data-ready', 'true');
+    mock.app.conflictedFileToResolve = 'conflict.txt'; rerender(<App />); expect(screen.getByTestId('AppUpdateNotice')).toHaveAttribute('data-ready', 'false');
+    mock.app.conflictedFileToResolve = null; rerender(<App />); expect(screen.getByTestId('AppUpdateNotice')).toHaveAttribute('data-ready', 'true');
+  });
   it('initializes once, shows the repository workspace, and waits for minimum startup time', async () => {
     const { rerender } = render(<App />); await settle(); expect(mock.app.init).toHaveBeenCalledOnce();
     for (const name of ['TabBar', 'Toolbar', 'Sidebar', 'CommitGraph', 'CommitDetailPanel', 'DiffViewer', 'StatusBar', 'TerminalDrawer']) expect(screen.getByTestId(name)).toBeInTheDocument();

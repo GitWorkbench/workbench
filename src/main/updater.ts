@@ -104,7 +104,7 @@ async function checkForUpdates(): Promise<AppUpdateState> {
   }
 
   if (checkInProgress) return checkInProgress;
-  if (state.status === 'downloading' || state.status === 'installing') return state;
+  if (state.status === 'downloading' || state.status === 'installing' || hasDownloadedUpdate) return state;
 
   checkInProgress = (async () => {
     hasDownloadedUpdate = false;
@@ -195,8 +195,8 @@ export function registerUpdater(getWin: () => BrowserWindow | null) {
     await shell.openExternal(releasePageUrl);
   });
 
-  // Start quietly after the window has had time to open. The About page can read
-  // the latest state later, so no startup toast or renderer listener is required.
+  // Start after the window opens. The renderer prompts only for an available
+  // update; startup errors and an up-to-date result remain quiet.
   if (app.isPackaged && (process.platform === 'linux' || process.platform === 'darwin' || process.platform === 'win32')) {
     const timer = setTimeout(() => void checkForUpdates(), 5000);
     timer.unref();

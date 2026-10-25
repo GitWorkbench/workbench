@@ -17,8 +17,10 @@ vi.mock('../../src/renderer/lib/api', () => ({ api: mocks.api }));
 import { StatusBar } from '../../src/renderer/components/StatusBar/StatusBar';
 import { TabBar } from '../../src/renderer/components/TabBar/TabBar';
 import { APP_VERSION } from '../../src/renderer/lib/appVersion';
+import { useAppUpdates } from '../../src/renderer/store/appUpdates';
 
 beforeEach(() => {
+  useAppUpdates.setState({ update: null, dialogOpen: false });
   Object.assign(mocks.app, { tabs: [], activeTab: null, homeOpen: true, status: null, stashes: [], log: null, isLoadingMoreCommits: false, terminalDrawerOpen: false,
     branches: { local: [{ fullName: 'main', name: 'main', isCurrent: true }, { fullName: 'feature', name: 'feature', isCurrent: false }], remote: [] },
     runAndRefresh: vi.fn(async (callback: () => any) => callback()), toggleTerminalDrawer: vi.fn(), openCommandPalette: vi.fn(), setActiveTab: vi.fn(), closeTab: vi.fn(), openHome: vi.fn() });
@@ -31,6 +33,17 @@ beforeEach(() => {
 });
 
 describe('StatusBar', () => {
+  it('keeps update availability, progress, errors and restart reachable beside the app version', async () => {
+    render(<StatusBar />); await screen.findByText('Git Workbench v1.2.3');
+    const update = { currentVersion: '1.2.3', availableVersion: '1.3.0', status: 'available' as const, canInstallInApp: true };
+    act(() => useAppUpdates.getState().receive(update));
+    fireEvent.click(screen.getByRole('button', { name: 'Update available' })); expect(useAppUpdates.getState().dialogOpen).toBe(true);
+    for (const [status, label] of [['downloading', 'Downloading update · 25%'], ['downloaded', 'Update ready · Restart'], ['installing', 'Installing update…'], ['error', 'Update needs attention']] as const) {
+      act(() => useAppUpdates.getState().receive({ ...update, status, progress: 25 })); expect(screen.getByRole('button', { name: label })).toBeVisible();
+    }
+    act(() => useAppUpdates.getState().receive({ ...update, status: 'downloading' })); expect(screen.getByText('Downloading update · 0%')).toBeVisible();
+    act(() => useAppUpdates.getState().receive({ ...update, status: 'not-available' })); expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
   it('shows Home with singular/plural repository counts and the installed version', async () => {
     const { rerender } = render(<StatusBar />);
     expect(screen.getByText('Home')).toBeVisible(); expect(screen.getByText('· 0 repositories open')).toBeVisible();

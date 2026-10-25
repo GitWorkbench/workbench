@@ -39,6 +39,7 @@ import { ChangelogModal } from './components/Changelog/ChangelogModal';
 import { WorktreesModal } from './components/Worktrees/WorktreesModal';
 import { PullRequestsModal } from './components/PullRequests/PullRequestsModal';
 import { ToastContainer } from './components/Common/ToastContainer';
+import { AppUpdateNotice } from './components/Updates/AppUpdateNotice';
 
 export function App() {
   const activeTab = useApp((s) => s.activeTab);
@@ -50,6 +51,14 @@ export function App() {
   const closeUsageGuide = useApp((s) => s.closeUsageGuide);
   const closeGitFlowModal = useApp((s) => s.closeGitFlowModal);
   const [isReady, setIsReady] = useState(false);
+  const updatePromptBlocked = useApp(s => [
+    s.isOpeningRepo, s.usageGuideOpen, s.conflictedFileToResolve, s.rebaseModalBaseCommit,
+    s.createRepoModalOpen, s.commandPaletteOpen, s.pullRequestsModalOpen, s.commitSplitOpen,
+    s.branchStackOpen, s.restorePointsOpen, s.resolutionMemoryOpen, s.rangeComparisonOpen,
+    s.lfsManagerOpen, s.sparseCheckoutOpen, s.gitFlowModalOpen, s.bisectModalOpen,
+    s.reflogModalOpen, s.changelogModalOpen, s.worktreesModalOpen, s.simulateMergeBranch,
+    s.tagModalCommit, s.addRemoteModalOpen, s.shortcutsModalOpen
+  ].some(Boolean));
 
   const isSettingsOpen = useSettings((s) => s.isSettingsOpen);
   const autoFetch = useSettings((s) => s.autoFetch);
@@ -257,6 +266,7 @@ export function App() {
       {gitFlowModalOpen && <GitFlowModal onClose={closeGitFlowModal} />}
       <RepoOpeningAnimation />
       <AppLoadingScreen isReady={isReady} />
+      <AppUpdateNotice ready={isReady && !updatePromptBlocked} />
       <ToastContainer />
     </div>
   );

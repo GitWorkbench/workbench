@@ -39,6 +39,11 @@ afterEach(() => {
 });
 
 describe('desktop update lifecycle', () => {
+  it('retains a downloaded update when another check is requested, including the startup timer', async () => {
+    await load(); emit('update-downloaded', { version: '1.2.0' });
+    expect(await call('check')).toMatchObject({ status: 'downloaded', availableVersion: '1.2.0' });
+    await vi.advanceTimersByTimeAsync(5000); expect(mock.check).not.toHaveBeenCalled();
+  });
   it('registers explicit controls with automatic download and installation disabled', async () => {
     await load();
     const { default: { autoUpdater } } = await import('electron-updater');

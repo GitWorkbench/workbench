@@ -1,13 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { GitBranch, ArrowUp, ArrowDown, Archive, Check, ChevronDown, Home, Terminal, Search } from 'lucide-react';
+import { GitBranch, ArrowUp, ArrowDown, Archive, Check, ChevronDown, Home, Terminal, Search, ArrowDownToLine } from 'lucide-react';
 import { useApp } from '../../store';
 import { api } from '../../lib/api';
 import { Dropdown } from '../ui/Dropdown';
 import { AppLogo } from '../Common/AppLogo';
 import { APP_VERSION } from '../../lib/appVersion';
+import { useAppUpdates } from '../../store/appUpdates';
 
 export function StatusBar() {
   const [version, setVersion] = useState(APP_VERSION);
+  const update = useAppUpdates(s => s.update);
+  const showUpdate = useAppUpdates(s => s.show);
+  const updateVisible = update?.availableVersion && ['available', 'downloading', 'downloaded', 'installing', 'error'].includes(update.status);
+  const updateLabel = update?.status === 'downloading' ? `Downloading update · ${Math.floor(update.progress ?? 0)}%`
+    : update?.status === 'downloaded' ? 'Update ready · Restart'
+      : update?.status === 'installing' ? 'Installing update…'
+        : update?.status === 'error' ? 'Update needs attention' : 'Update available';
   const status = useApp((s) => s.status);
   const stashes = useApp((s) => s.stashes);
   const log = useApp((s) => s.log);
@@ -127,9 +135,12 @@ export function StatusBar() {
         <span>⌘K</span>
       </button>
 
+      {updateVisible && <button onClick={showUpdate} className="flex items-center gap-1 rounded px-1.5 py-0.5 text-accent hover:bg-accent/10 focus-visible:outline focus-visible:outline-accent" title={`Git Workbench v${update.availableVersion}`} aria-label={updateLabel}>
+        <ArrowDownToLine size={12} /><span role="status" aria-live="polite">{updateLabel}</span>
+      </button>}
       <span className="flex items-center gap-1.5 px-1.5 font-mono text-[11px] text-dim hover:text-fg transition-colors">
         <AppLogo size={12} />
-        <span>Git Workbench v{version}</span>
+        <span>Git Workbench v{update?.currentVersion || version}</span>
       </span>
     </div>
   );
