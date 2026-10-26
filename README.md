@@ -176,6 +176,16 @@ On first launch, a short, skippable setup helps you choose a commit profile, pre
 
 ### Installation
 
+#### Install the Linux release
+
+On Linux, install the latest stable build with one command:
+
+    curl -fsSL https://gitworkbench.github.io/install.sh | bash
+
+The installer detects Debian-based distributions, RPM-based distributions such as Fedora and openSUSE, and Arch-based distributions. It downloads the matching package from the public GitHub release and verifies its SHA-512 checksum before invoking the system package manager, which keeps its normal confirmation prompt. On other distributions, it installs an AppImage for the current user under ~/.local/opt/git-workbench and adds a desktop entry. Current official Linux release builds are x86_64; other architectures will receive a clear “no release metadata” message until matching builds are published. Review the [installer source](scripts/install-linux.sh) before running it if you prefer to inspect scripts first.
+
+#### Build from source
+
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/GitWorkbench/workbench.git git-workbench
