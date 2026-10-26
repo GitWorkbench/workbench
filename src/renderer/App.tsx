@@ -40,6 +40,7 @@ import { WorktreesModal } from './components/Worktrees/WorktreesModal';
 import { PullRequestsModal } from './components/PullRequests/PullRequestsModal';
 import { ToastContainer } from './components/Common/ToastContainer';
 import { AppUpdateNotice } from './components/Updates/AppUpdateNotice';
+import { SetupPage } from './components/Onboarding/SetupPage';
 
 export function App() {
   const activeTab = useApp((s) => s.activeTab);
@@ -51,6 +52,8 @@ export function App() {
   const closeUsageGuide = useApp((s) => s.closeUsageGuide);
   const closeGitFlowModal = useApp((s) => s.closeGitFlowModal);
   const [isReady, setIsReady] = useState(false);
+  const setupCompleted = useSettings(s => s.setupCompleted);
+  const setupOpen = isReady && setupCompleted === false;
   const updatePromptBlocked = useApp(s => [
     s.isOpeningRepo, s.usageGuideOpen, s.conflictedFileToResolve, s.rebaseModalBaseCommit,
     s.createRepoModalOpen, s.commandPaletteOpen, s.pullRequestsModalOpen, s.commitSplitOpen,
@@ -69,7 +72,15 @@ export function App() {
     let active = true;
     let readinessTimer: ReturnType<typeof setTimeout> | undefined;
     // The store reports initialization errors; readiness must still settle.
-    void init().catch(() => {}).finally(() => {
+    void Promise.all([
+      init().catch(() => {}),
+      useSettings.getState().initializeAiSettings(),
+      api.getSetupComplete().then(complete => {
+        if (!active) return;
+        if (complete) useSettings.setState({ setupCompleted: true });
+        else if (useSettings.getState().setupCompleted) return api.completeSetup();
+      }).catch(() => {})
+    ]).finally(() => {
       if (!active) return;
       // Ensure the opening animation displays smoothly for at least 2400ms
       const elapsed = Date.now() - startTime;
@@ -86,7 +97,7 @@ export function App() {
 
   // Show the guide on first launch, without covering an active workflow.
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || setupCompleted === false) return;
     const completed = readAppStorage('guide_completed');
     if (completed === undefined || completed === 'true') return;
     const timer = setTimeout(() => {
@@ -107,7 +118,7 @@ export function App() {
       openUsageGuide();
     }, 450);
     return () => clearTimeout(timer);
-  }, [isReady, openUsageGuide]);
+  }, [isReady, setupCompleted, openUsageGuide]);
 
   // Periodic and on-focus background git fetch to keep repository and ahead/behind status updated
   useEffect(() => {
@@ -168,6 +179,7 @@ export function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
+      if (useSettings.getState().setupCompleted === false) return;
       if (useApp.getState().usageGuideOpen) return;
       // The merge editor owns shortcuts while a draft is open.
       if (useApp.getState().conflictedFileToResolve) return;
@@ -222,7 +234,7 @@ export function App() {
   return (
     <div className="h-full flex flex-col bg-base overflow-hidden border border-edge/50">
       <TabBar />
-      {isSettingsOpen ? (
+      {setupOpen ? <SetupPage onComplete={openUsageGuide} /> : isSettingsOpen ? (
         <SettingsPage />
       ) : homeOpen || !activeTab ? (
         <Home />
@@ -266,7 +278,7 @@ export function App() {
       {gitFlowModalOpen && <GitFlowModal onClose={closeGitFlowModal} />}
       <RepoOpeningAnimation />
       <AppLoadingScreen isReady={isReady} />
-      <AppUpdateNotice ready={isReady && !updatePromptBlocked} />
+      <AppUpdateNotice ready={isReady && !setupOpen && !updatePromptBlocked} />
       <ToastContainer />
     </div>
   );

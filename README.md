@@ -166,6 +166,8 @@ Open **Home → Explore Git Workbench**, the toolbar’s Actions menu, the comma
 
 ## 🚀 Getting Started
 
+On first launch, a short, skippable setup helps you choose a commit profile, preview your Gravatar, select a theme, and configure optional AI before opening Explore. Global Git configuration is changed only with explicit opt-in. AI keys are encrypted outside renderer preferences and retained across updates; blank key fields keep saved keys. See [first-run setup and AI persistence](docs/first-run-setup.md).
+
 ### Prerequisites
 
 - **Node.js**: v22, matching CI

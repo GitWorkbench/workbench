@@ -563,6 +563,12 @@ export interface AiCommitConfig {
   promptStyle: 'conventional' | 'simple' | 'detailed' | 'gitmoji';
 }
 
+export type AiPreferences = Omit<AiCommitConfig, 'apiKey'>;
+export interface AiSettingsSnapshot {
+  config: AiPreferences | null;
+  hasApiKey: boolean;
+}
+
 export type DiffViewMode = 'unified' | 'split';
 export interface CommitRewordSnapshot { head: string; branch: string }
 export interface AiCommitDraft extends CommitRewordSnapshot {
@@ -659,6 +665,12 @@ export interface TerminalApi {
 
 // IPC API exposed via contextBridge
 export interface GitWorkbenchApi extends AdvancedGitApi, TerminalApi {
+  getAiSettings(target?: AiPreferences): Promise<AiSettingsSnapshot>;
+  importAiSettings(config: AiPreferences, apiKey: string): Promise<AiSettingsSnapshot>;
+  saveAiSettings(config: AiPreferences, apiKey?: string): Promise<AiSettingsSnapshot>;
+  testAiSettings(config: AiPreferences): Promise<{ ok: boolean; message?: string; error?: string }>;
+  getSetupComplete(): Promise<boolean>;
+  completeSetup(): Promise<void>;
   getAppUpdateState(): Promise<AppUpdateState>;
   checkForAppUpdates(): Promise<AppUpdateState>;
   downloadAppUpdate(): Promise<AppUpdateState>;

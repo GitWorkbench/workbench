@@ -37,6 +37,17 @@ let registerIpc: typeof import('../../src/main/ipc').registerIpc, root: string;
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 afterEach(() => { Object.defineProperty(process, 'platform', originalPlatform); vi.unstubAllEnvs(); });
 const call = (channel: string, ...args: any[]) => mock.handlers.get(channel)!({}, ...args);
+it('routes durable AI configuration, imports, connection checks and first-run markers without a repository', async () => {
+  mock.repo = null;
+  const config = { provider: 'local', model: 'heuristic', endpoint: '', promptStyle: 'conventional' };
+  await call('ai:settings-get'); expect(mock.functions.getAiSettings).toHaveBeenCalledWith(undefined);
+  await call('ai:settings-get', config); expect(mock.functions.getAiSettings).toHaveBeenLastCalledWith(config);
+  await call('ai:settings-save', config, 'new-key'); expect(mock.functions.saveAiSettings).toHaveBeenCalledWith(config, 'new-key');
+  await call('ai:settings-import', config, 'old-key'); expect(mock.functions.saveAiSettings).toHaveBeenLastCalledWith(config, 'old-key', true);
+  await call('ai:settings-test', config); expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ ...config, diff: expect.stringContaining('Example connection check') });
+  await call('app:setup-get'); expect(mock.functions.getSetupComplete).toHaveBeenCalled();
+  await call('app:setup-complete'); expect(mock.functions.completeSetup).toHaveBeenCalled();
+});
 beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'git-workbench-ipc-routing-'));
   vi.doMock('node:os', () => ({ default: { ...os, homedir: () => root } }));
@@ -44,14 +55,17 @@ beforeAll(async () => {
     const exports = Object.fromEntries(names.split(' ').map(name => [name, mock.functions[name] = vi.fn()]));
     vi.doMock(`../../src/main/git/${module}`, () => module === 'rewrite-comparison' ? { ...exports, rewriteActions } : exports);
   }
-  vi.doMock('../../src/main/ai', () => ({ generateCommitMessage: mock.functions.generateCommitMessage = vi.fn() }));
-  vi.doMock('../../src/shared/ai', () => ({ explainCodeChanges: mock.functions.explainCodeChanges = vi.fn() }));
+  vi.doMock('../../src/main/ai', () => ({ generateCommitMessage: mock.functions.generateCommitMessage = vi.fn(), explainCodeChanges: mock.functions.explainCodeChanges = vi.fn() }));
+  vi.doMock('../../src/main/ai-settings', () => Object.fromEntries(['getAiSettings', 'saveAiSettings', 'getSetupComplete', 'completeSetup'].map(name => [name, mock.functions[name] = vi.fn()])));
+  mock.functions.profileCommit = vi.fn();
+  vi.doMock('../../src/main/git/advanced-process', () => ({ gitWithEnvironment: mock.functions.gitWithEnvironment = vi.fn() }));
   ({ registerIpc } = await import('../../src/main/ipc'));
 });
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
 beforeEach(() => {
   for (const fn of Object.values(mock.functions)) fn.mockReset().mockResolvedValue('response');
   mock.functions.isValidRepo.mockReturnValue(true); mock.functions.errorMessage.mockImplementation((e: any) => e instanceof Error ? e.message : String(e)); mock.functions.withGit.mockImplementation(async (_repo: string, fn: (g: any) => any) => fn(mock.git));
+  mock.functions.gitWithEnvironment.mockImplementation(() => ({ raw: mock.functions.profileCommit }));
   mock.functions.finishRewrite.mockResolvedValue(null); mock.functions.captureResolutionMemory.mockResolvedValue(new Map()); mock.functions.getStatus.mockResolvedValue({ staged: [], unstaged: [] }); mock.functions.getConflictFile.mockResolvedValue({ kind: 'text', snapshot: 'snapshot-1' }); mock.functions.resolutionMemoryState.mockResolvedValue({ enabled: true });
   mock.repo = root; mock.win = { isDestroyed: () => false, webContents: { send: mock.send } }; mock.handlers.clear(); mock.send.mockReset(); mock.open.mockReset(); mock.reveal.mockReset(); mock.exec.mockReset(); mock.spawn.mockReset().mockReturnValue({ unref: vi.fn() });
   for (const method of ['init', 'diff', 'commit', 'add', 'pull', 'push', 'getRemotes', 'status', 'fetch', 'rebase', 'raw', 'log', 'getConfig', 'addConfig']) mock.git[method] = vi.fn().mockResolvedValue('git-result'); mock.git.getRemotes.mockResolvedValue([{ name: 'origin' }]); mock.git.status.mockResolvedValue({ current: 'main' }); mock.git.getConfig.mockResolvedValue({ value: 'value' });
@@ -199,7 +213,7 @@ describe('mutation safety and process boundaries', () => {
   it('keeps successful operations successful when comparison capture fails', async () => { vi.spyOn(console, 'warn').mockImplementation(() => {}); mock.functions.finishRewrite.mockRejectedValue(new Error('comparison unavailable')); expect(await call('git:continue-operation')).toEqual({ ok: true }); expect(console.warn).toHaveBeenCalledWith('Rewrite comparison:', 'comparison unavailable'); });
   it('validates the conflict snapshot before returning a remembered resolution', async () => { mock.functions.captureResolutionMemory.mockResolvedValue(new Map([['file', 'resolved content']])); expect(await call('git:rerere:suggestion', 'file')).toEqual({ enabled: true, content: 'resolved content', snapshot: 'snapshot-1' }); mock.functions.resolutionMemoryState.mockResolvedValue({ enabled: false }); expect(await call('git:rerere:suggestion', 'file')).toEqual({ enabled: false, content: null, snapshot: 'snapshot-1' }); mock.functions.getConflictFile.mockResolvedValueOnce({ snapshot: 'old' }).mockResolvedValueOnce({ snapshot: 'new' }); expect(await call('git:rerere:suggestion', 'file')).toHaveProperty('__error', expect.stringContaining('conflict changed')); expect(await call('git:rerere:forget', 'file')).toEqual({ ok: true }); expect(mock.functions.captureResolutionMemory).toHaveBeenCalledWith(root, 'file'); });
   it('provides staged diffs, staging commands, and explicit commit authors', async () => {
-    expect(await call('git:staged-diff')).toEqual({ ok: true, diff: 'git-result' }); expect(mock.git.diff).toHaveBeenCalledWith(['--cached']); for (const [channel, args] of [['git:stage', [['file']]], ['git:unstage', [['file']]], ['git:stage-all', []], ['git:unstage-all', []], ['git:discard', ['file']]] as const) expect(await call(channel, ...args)).toEqual({ staged: [], unstaged: [] }); await call('git:commit', 'message', { name: 'Alice', email: 'alice@example.invalid' }); expect(mock.git.commit).toHaveBeenCalledWith('message', undefined, { '--author': '"Alice <alice@example.invalid>"' }); await call('git:commit', 'plain'); expect(mock.git.commit).toHaveBeenCalledWith('plain'); await call('git:rebase-branch', 'develop'); expect(mock.git.rebase).toHaveBeenCalledWith(['develop']);
+    expect(await call('git:staged-diff')).toEqual({ ok: true, diff: 'git-result' }); expect(mock.git.diff).toHaveBeenCalledWith(['--cached']); for (const [channel, args] of [['git:stage', [['file']]], ['git:unstage', [['file']]], ['git:stage-all', []], ['git:unstage-all', []], ['git:discard', ['file']]] as const) expect(await call(channel, ...args)).toEqual({ staged: [], unstaged: [] }); await call('git:commit', 'message', { name: 'Alice', email: 'alice@example.invalid' }); expect(mock.functions.gitWithEnvironment).toHaveBeenCalledWith(root, { GIT_AUTHOR_NAME: 'Alice', GIT_AUTHOR_EMAIL: 'alice@example.invalid', GIT_COMMITTER_NAME: 'Alice', GIT_COMMITTER_EMAIL: 'alice@example.invalid' }); expect(mock.functions.profileCommit).toHaveBeenCalledWith(['commit', '-m', 'message']); await call('git:commit', 'plain'); expect(mock.git.commit).toHaveBeenCalledWith('plain'); await call('git:rebase-branch', 'develop'); expect(mock.git.rebase).toHaveBeenCalledWith(['develop']);
   });
   it('falls back from staged to unstaged changes for AI and supports supplied diffs', async () => { mock.git.diff.mockResolvedValueOnce('').mockResolvedValueOnce('working diff'); expect(await call('ai:generate-commit', { tone: 'short' })).toBe('response'); expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ tone: 'short', diff: 'working diff' }); await call('ai:generate-commit', { diff: 'supplied' }); expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ diff: 'supplied' }); mock.git.diff.mockRejectedValue(new Error('no diff')); await call('ai:generate-commit'); expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ diff: '' }); });
   it('explains supplied or loaded patches and reports missing/failed diffs', async () => { expect(await call('ai:explain-changes', {})).toEqual({ ok: false, error: 'No diff content found to explain' }); await call('ai:explain-changes', { diffText: 'diff', config: { model: 'model' } }); expect(mock.functions.explainCodeChanges).toHaveBeenCalledWith('diff', { model: 'model' }); await call('ai:explain-changes', { commitHash: 'hash' }); expect(mock.functions.getCommitDiffText).toHaveBeenCalledWith(root, 'hash'); mock.functions.getCommitDiffText.mockRejectedValue(new Error('missing commit')); expect(await call('ai:explain-changes', { commitHash: 'missing' })).toEqual({ ok: false, error: 'missing commit' }); });

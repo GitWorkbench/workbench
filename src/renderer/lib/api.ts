@@ -119,6 +119,12 @@ const createMockApi = (): Api & GitWorkbenchApi => {
     removeRecentRepo: async () => ({ ok: true }),
     getGitConfig: async () => ({ name: 'Jane Developer', email: 'jane@example.com' }),
     setGitConfig: async () => ({ ok: true }),
+    getAiSettings: async () => ({ config: null, hasApiKey: false }),
+    importAiSettings: async () => { throw new Error('Secure AI settings require the desktop app.'); },
+    saveAiSettings: async () => { throw new Error('Secure AI settings require the desktop app.'); },
+    testAiSettings: async () => { throw new Error('Testing AI settings requires the desktop app.'); },
+    getSetupComplete: async () => localStorage.getItem('git-workbench:setup-completed') === 'true',
+    completeSetup: async () => { localStorage.setItem('git-workbench:setup-completed', 'true'); },
     getStagedDiff: async () => ({ ok: true, diff: 'diff --git a/file.ts b/file.ts\n+console.log("hello");' }),
     setActiveRepo: () => {},
 

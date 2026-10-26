@@ -28,6 +28,16 @@ describe('native renderer bridge', () => {
 });
 
 describe('browser preview API', () => {
+  it('supports a browser-only setup marker but refuses to pretend that AI keys were saved securely', async () => {
+    localStorage.removeItem('git-workbench:setup-completed');
+    expect(await client.api.getSetupComplete()).toBe(false);
+    await client.api.completeSetup(); expect(await client.api.getSetupComplete()).toBe(true);
+    expect(await client.api.getAiSettings()).toEqual({ config: null, hasApiKey: false });
+    const config = { provider: 'local' as const, model: 'heuristic', endpoint: '', promptStyle: 'conventional' as const };
+    await expect(client.api.saveAiSettings(config)).rejects.toThrow('require the desktop app');
+    await expect(client.api.importAiSettings(config, 'fake')).rejects.toThrow('require the desktop app');
+    await expect(client.api.testAiSettings(config)).rejects.toThrow('requires the desktop app');
+  });
   it('loads a safe preview API when the renderer window is unavailable', async () => {
     vi.stubGlobal('window', undefined);
     try {

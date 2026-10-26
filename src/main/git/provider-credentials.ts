@@ -23,6 +23,7 @@ export interface StoredProviderCredential extends PullRequestCredential {
 type CredentialMap = Partial<Record<PullRequestProvider, StoredProviderCredential>> & {
   gitlabServers?: Record<string, StoredProviderCredential>;
   giteaServers?: Record<string, StoredProviderCredential>;
+  aiKeys?: Record<string, string>;
 };
 
 const credentialFile = () => path.join(app.getPath('userData'), 'hosted-git-credentials.enc');
@@ -57,6 +58,20 @@ function writeCredentials(credentials: CredentialMap) {
   fs.writeFileSync(tempFile, safeStorage.encryptString(JSON.stringify(credentials)), { mode: 0o600 });
   fs.renameSync(tempFile, file);
   try { fs.chmodSync(file, 0o600); } catch { /* Windows permissions are managed by the OS. */ }
+}
+
+/** Internal AI callers pass a validated provider/endpoint scope, never a renderer-selected file. */
+export function readAiKey(scope: string): string {
+  return readCredentials().aiKeys?.[scope] || '';
+}
+
+export function writeAiKey(scope: string, key: string): void {
+  const saved = readCredentials();
+  const keys = { ...saved.aiKeys };
+  if (key) keys[scope] = key;
+  else delete keys[scope];
+  saved.aiKeys = keys;
+  writeCredentials(saved);
 }
 
 export function getPullRequestCredentialStatus(): PullRequestCredentialStatus {

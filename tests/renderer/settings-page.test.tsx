@@ -7,7 +7,7 @@ import type { AppUpdateState } from '../../src/shared/types';
 
 const mocks = vi.hoisted(() => {
   const app: Record<string, any> = {};
-  const api = Object.fromEntries(['onAppUpdateState', 'getAppUpdateState', 'checkForAppUpdates', 'downloadAppUpdate', 'installAppUpdate', 'openAppReleasePage', 'getGitConfig', 'setGitConfig', 'generateAiCommitMessage'].map(name => [name, vi.fn()]));
+  const api = Object.fromEntries(['onAppUpdateState', 'getAppUpdateState', 'checkForAppUpdates', 'downloadAppUpdate', 'installAppUpdate', 'openAppReleasePage', 'getGitConfig', 'setGitConfig', 'generateAiCommitMessage', 'getAiSettings', 'saveAiSettings', 'testAiSettings'].map(name => [name, vi.fn()]));
   return { app, api, listener: null as null | ((state: any) => void), unsubscribe: vi.fn(), useApp: Object.assign((selector: (state: any) => any) => selector(app), { getState: () => app }) };
 });
 vi.mock('../../src/renderer/store', () => ({ useApp: mocks.useApp }));
@@ -33,6 +33,9 @@ beforeEach(() => {
   mocks.api.setGitConfig.mockResolvedValue(undefined);
   mocks.api.getGitConfig.mockResolvedValue({ name: 'Alice', email: 'alice@example.test' });
   mocks.api.generateAiCommitMessage.mockResolvedValue({ ok: true, message: 'feat: improve application' });
+  mocks.api.getAiSettings.mockResolvedValue({ config: null, hasApiKey: false });
+  mocks.api.saveAiSettings.mockResolvedValue({ config: null, hasApiKey: false });
+  mocks.api.testAiSettings.mockResolvedValue({ ok: true, message: 'feat: connection check' });
 });
 async function ready() { await screen.findByText('Current version: v0.3.0'); }
 async function emit(state: Partial<AppUpdateState>) { await act(async () => mocks.listener!({ ...idle, ...state })); }
@@ -349,35 +352,16 @@ describe('commit identity profiles', () => {
   });
 });
 
-describe('AI settings', () => {
-  it('sets each provider default, editable model/key/endpoint and preferred commit style', () => {
-    renderSection('ai');
-    const providers = [['Smart Rule-Based', 'local', 'heuristic'], ['Pollinations.ai', 'pollinations', 'openai'], ['OpenRouter Free', 'openrouter', 'openrouter/free'], ['Groq Cloud', 'groq', 'llama-3.3-70b-versatile'], ['Google Gemini', 'gemini', 'gemini-2.5-flash'], ['Ollama Local', 'ollama', 'qwen2.5-coder:7b'], ['Custom Endpoint', 'custom', 'qwen2.5-coder:7b']];
-    for (const [label, provider, model] of providers) { fireEvent.click(screen.getByText(label)); expect(useSettings.getState().aiCommit).toMatchObject({ provider, model }); }
-    fireEvent.change(screen.getByPlaceholderText('e.g. openai-fast, gemini-2.0-flash-exp'), { target: { value: 'my-model' } });
-    const key = screen.getByPlaceholderText('Leave blank for free endpoints');
-    fireEvent.change(key, { target: { value: 'secret' } }); expect(key).toHaveAttribute('type', 'password');
-    fireEvent.click(screen.getByRole('button', { name: 'Show', exact: true })); expect(key).toHaveAttribute('type', 'text');
-    fireEvent.click(screen.getByRole('button', { name: 'Hide', exact: true })); expect(key).toHaveAttribute('type', 'password');
-    fireEvent.change(screen.getByPlaceholderText('e.g. http://localhost:11434/v1 or https://your-provider/v1'), { target: { value: 'http://localhost:8000/v1' } });
-    fireEvent.click(screen.getByText('Detailed Summary')); expect(useSettings.getState().aiCommit.promptStyle).toBe('detailed');
-    fireEvent.click(screen.getByText('Minimalist One-Liner')); expect(useSettings.getState().aiCommit.promptStyle).toBe('simple');
-    expect(useSettings.getState().aiCommit).toMatchObject({ model: 'my-model', apiKey: 'secret', endpoint: 'http://localhost:8000/v1' });
-  });
-  it('shows pending state and model output', async () => {
-    let resolve!: (result: any) => void;
-    mocks.api.generateAiCommitMessage.mockImplementation(() => new Promise(done => { resolve = done; }));
-    renderSection('ai');
-    fireEvent.click(screen.getByRole('button', { name: 'Test AI Model' }));
-    expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
-    await act(async () => resolve({ ok: true, message: 'feat: improve test coverage' }));
-    expect(screen.getByText('feat: improve test coverage')).toBeVisible();
-  });
-  it.each([{ ok: false, error: 'Invalid API key' }, { ok: false }, new Error('Server offline'), {}])('shows generation failures %s', async result => {
-    if (result instanceof Error || !('ok' in result)) mocks.api.generateAiCommitMessage.mockRejectedValue(result);
-    else mocks.api.generateAiCommitMessage.mockResolvedValue(result);
-    renderSection('ai'); fireEvent.click(screen.getByRole('button', { name: 'Test AI Model' }));
-    await screen.findByText(result instanceof Error ? result.message : 'ok' in result ? result.error || 'Failed to generate commit message' : 'Connection or generation failed');
-    expect(screen.getByRole('button', { name: 'Test AI Model' })).toBeEnabled();
+describe('AI settings integration', () => {
+  it('uses the shared secure form and explicitly saves without persisting a raw key', async () => {
+    renderSection('ai'); await screen.findByLabelText('Model provider');
+    fireEvent.change(screen.getByLabelText('Model provider'), { target: { value: 'groq' } });
+    await waitFor(() => expect(mocks.api.getAiSettings).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'groq' })));
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'fake-key' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' }));
+    await screen.findByText(/AI settings saved/);
+    expect(mocks.api.saveAiSettings).toHaveBeenCalledWith(expect.objectContaining({ provider: 'groq' }), 'fake-key');
+    expect(useSettings.getState().aiCommit.apiKey).toBe('');
+    expect(localStorage.getItem('git-workbench:settings:v1')).not.toContain('fake-key');
   });
 });

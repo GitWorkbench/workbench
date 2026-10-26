@@ -9,6 +9,12 @@ vi.mock('electron', () => ({
 // This is the expected public bridge contract, independent of implementation.
 // Changes to a route or its argument order must be reviewed as API changes.
 const routes = `
+getAiSettings ai:settings-get 1
+importAiSettings ai:settings-import 2
+saveAiSettings ai:settings-save 2
+testAiSettings ai:settings-test 1
+getSetupComplete app:setup-get 0
+completeSetup app:setup-complete 0
 getGitHubSignInState github-auth:get 0
 startGitHubSignIn github-auth:start 0
 cancelGitHubSignIn github-auth:cancel 1

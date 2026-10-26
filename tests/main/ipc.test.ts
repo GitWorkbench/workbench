@@ -36,6 +36,19 @@ beforeEach(async () => {
 afterEach(() => fs.rmSync(mock.home, { recursive: true, force: true }));
 
 describe('main-process repository boundary', () => {
+  it('uses a commit profile for author and committer without changing the repository identity', async () => {
+    mock.repo = repo;
+    fs.writeFileSync(path.join(repo, 'profile.txt'), 'profile content');
+    await call('git:stage', ['profile.txt']);
+    expect(await call('git:commit', 'profile commit', { name: ' Profile User ', email: ' profile@example.test ' })).toEqual({ ok: true });
+    expect(git(repo, 'log', '-1', '--format=%an <%ae> / %cn <%ce>')).toBe('Profile User <profile@example.test> / Profile User <profile@example.test>');
+    expect(git(repo, 'config', 'user.name')).toBe('Test'); expect(git(repo, 'config', 'user.email')).toBe('test@example.invalid');
+  });
+  it.each([null, {}, { name: 3, email: 'a@b' }, { name: 'User', email: 3 }, { name: '', email: 'a@b' }, { name: 'User', email: ' ' }, { name: 'x'.repeat(129), email: 'a@b' }, { name: 'User', email: 'x'.repeat(255) }, { name: 'User\nOther', email: 'a@b' }])('rejects invalid commit identity %j before touching Git', async author => {
+    mock.repo = repo; const before = git(repo, 'rev-parse', 'HEAD');
+    expect(await call('git:commit', 'invalid', author)).toMatchObject({ __error: expect.stringContaining('valid commit profile') });
+    expect(git(repo, 'rev-parse', 'HEAD')).toBe(before);
+  });
   it('registers unique channels and rejects Git operations without an open repository', async () => {
     expect(mock.handlers.size).toBeGreaterThan(150);
     const protectedChannels = ['git:status', 'git:branches', 'git:stashes', 'git:get-tags', 'git:get-remotes', 'git:get-worktrees', 'git:get-operation-state', 'git:restore-points:list', 'git:rewrite:list', 'git:sparse:get', 'git:stack:get', 'git:bisect-state', 'git:flow:get-config', 'git:reflog'];

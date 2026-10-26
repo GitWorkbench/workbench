@@ -150,7 +150,7 @@ describe('settings actions', () => {
       expect(persisted[key]).toEqual(value);
       expect(useSettings.getState()[key as keyof SettingsState]).toEqual(value);
     }
-    expect(persisted.aiCommit).toMatchObject({ provider: 'ollama', endpoint: 'http://localhost:11434', promptStyle: 'brief', model: 'openai' });
+    expect(persisted.aiCommit).toMatchObject({ provider: 'ollama', endpoint: 'http://localhost:11434', promptStyle: 'brief', model: 'heuristic', apiKey: '' });
   });
   it('merges column preferences without discarding other columns', async () => {
     const { useSettings } = await load();

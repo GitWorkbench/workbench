@@ -39,12 +39,13 @@ import {
 } from '../../store/settings';
 import { useApp } from '../../store';
 import { api } from '../../lib/api';
-import { AppUpdateState, CommitProfile, AiCommitConfig } from '../../../shared/types';
+import { AppUpdateState, CommitProfile } from '../../../shared/types';
 import { AppLogo } from '../Common/AppLogo';
 import { APP_VERSION } from '../../lib/appVersion';
 import { PullRequestProvidersSettings } from './PullRequestProvidersSettings';
 import { TypographySizeControl } from './TypographySizeControl';
 import { AboutPage } from './AboutPage';
+import { AiSetupForm } from './AiSetupForm';
 import { formatReleaseNotes } from '../../lib/releaseNotes';
 import './preferences.css';
 
@@ -89,8 +90,6 @@ export function SettingsPage() {
     setCommitProfiles,
     activeProfileId,
     setActiveProfileId,
-    aiCommit,
-    setAiCommit,
     resetDefaults,
     resetTypography,
     toastPosition,
@@ -112,11 +111,6 @@ export function SettingsPage() {
   const [newProfileEmail, setNewProfileEmail] = useState('');
   const [newProfileKey, setNewProfileKey] = useState('');
 
-  // AI commit tab state
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [testGenerating, setTestGenerating] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
-  const [testError, setTestError] = useState<string | null>(null);
   const [updateState, setUpdateState] = useState<AppUpdateState | null>(null);
   const [updateActionBusy, setUpdateActionBusy] = useState(false);
 
@@ -225,24 +219,6 @@ export function SettingsPage() {
     setCommitProfiles(remaining);
     if (current.activeProfileId === id) {
       setActiveProfileId(remaining[0].id);
-    }
-  };
-
-  const handleTestAi = async () => {
-    setTestGenerating(true);
-    setTestResult(null);
-    setTestError(null);
-    try {
-      const res = await api.generateAiCommitMessage(aiCommit);
-      if (res.ok && res.message) {
-        setTestResult(res.message);
-      } else {
-        setTestError(res.error || 'Failed to generate commit message');
-      }
-    } catch (err: any) {
-      setTestError(err.message || 'Connection or generation failed');
-    } finally {
-      setTestGenerating(false);
     }
   };
 
@@ -1099,226 +1075,11 @@ export function SettingsPage() {
               </div>
             )}
 
-            {/* TAB 4: AI COMMIT ASSISTANT */}
+            {/* AI credentials are saved by the main process, outside renderer preferences. */}
             {activeTab === 'ai' && (
-              <div className="space-y-6">
-                <div>
-                  <h2 className="text-base font-bold text-fg">AI Assistant</h2>
-                  <p className="text-xs text-dim mt-0.5">
-                    Configure the provider used for commit messages and code reviews.
-                  </p>
-                </div>
-
-                {/* Provider Selection */}
-                <div className="rounded-xl border border-edge bg-panel2/50 p-5 space-y-4">
-                  <div>
-                    <span className="text-xs font-semibold text-fg block">Model Provider</span>
-                    <span className="text-[11px] text-dim">
-                      Choose a hosted provider or a local Ollama model
-                    </span>
-                  </div>
-
-                  <div className="preferences-choice-grid">
-                    {[
-                      {
-                        id: 'local' as const,
-                        name: 'Smart Rule-Based',
-                        badge: 'Zero AI / Instant Offline',
-                        desc: 'Offline commit messages; no AI review'
-                      },
-                      {
-                        id: 'pollinations' as const,
-                        name: 'Pollinations.ai',
-                        badge: 'API Key Required',
-                        desc: 'Get your key at enter.pollinations.ai'
-                      },
-                      {
-                        id: 'openrouter' as const,
-                        name: 'OpenRouter Free',
-                        badge: 'Gemini, Llama 3.3',
-                        desc: 'Access free top-tier models'
-                      },
-                      {
-                        id: 'groq' as const,
-                        name: 'Groq Cloud',
-                        badge: 'Ultra Fast',
-                        desc: 'Llama 3.3 70B fast free tier'
-                      },
-                      {
-                        id: 'gemini' as const,
-                        name: 'Google Gemini',
-                        badge: 'Free Tier',
-                        desc: 'Google hosted models'
-                      },
-                      {
-                        id: 'ollama' as const,
-                        name: 'Ollama Local',
-                        badge: 'Offline / Private',
-                        desc: 'Runs on localhost:11434'
-                      },
-                      {
-                        id: 'custom' as const,
-                        name: 'Custom Endpoint',
-                        badge: 'OpenAI-Compatible',
-                        desc: 'vLLM, LM Studio, LocalAI'
-                      }
-                    ].map((p) => {
-                      const isSelected = aiCommit.provider === p.id;
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => {
-                            let defaultModel = aiCommit.model;
-                            if (p.id === 'local') defaultModel = 'heuristic';
-                            else if (p.id === 'pollinations') defaultModel = 'openai';
-                            else if (p.id === 'openrouter') defaultModel = 'openrouter/free';
-                            else if (p.id === 'groq') defaultModel = 'llama-3.3-70b-versatile';
-                            else if (p.id === 'gemini') defaultModel = 'gemini-2.5-flash';
-                            else if (p.id === 'ollama') defaultModel = 'qwen2.5-coder:7b';
-                            setAiCommit({ provider: p.id, model: defaultModel, endpoint: p.id === 'ollama' ? 'http://127.0.0.1:11434/v1' : '' });
-                          }}
-                          className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-accent bg-panel3 shadow-md ring-1 ring-accent/30'
-                              : 'border-edge/70 bg-panel2/60 hover:bg-panel2'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-semibold text-fg">{p.name}</span>
-                            <span className="text-[10px] font-mono text-accent bg-accent/15 px-1.5 py-0.5 rounded">
-                              {p.badge}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-dim">{p.desc}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Provider Parameters & Model */}
-                <div className="rounded-xl border border-edge bg-panel2/50 p-5 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs font-semibold text-fg block mb-1">Model Name</label>
-                      <input
-                        type="text"
-                        value={aiCommit.model}
-                        onChange={(e) => setAiCommit({ model: e.target.value })}
-                        placeholder="e.g. openai-fast, gemini-2.0-flash-exp"
-                        className="w-full text-xs font-mono bg-panel border border-edge rounded-lg px-3 py-1.5"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-fg block mb-1">API Key (Required for hosted providers)</label>
-                      <div className="relative">
-                        <input
-                          type={showApiKey ? 'text' : 'password'}
-                          value={aiCommit.apiKey || ''}
-                          onChange={(e) => setAiCommit({ apiKey: e.target.value })}
-                          placeholder="Leave blank for free endpoints"
-                          className="w-full text-xs font-mono bg-panel border border-edge rounded-lg px-3 py-1.5 pr-8"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-dim hover:text-fg text-xs"
-                        >
-                          {showApiKey ? 'Hide' : 'Show'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-fg block mb-1">API Endpoint URL</label>
-                    <input
-                      type="text"
-                      value={aiCommit.endpoint || ''}
-                      onChange={(e) => setAiCommit({ endpoint: e.target.value })}
-                      placeholder="e.g. http://localhost:11434/v1 or https://your-provider/v1"
-                      className="w-full text-xs font-mono bg-panel border border-edge rounded-lg px-3 py-1.5"
-                    />
-                  </div>
-                </div>
-
-                {/* Commit Style */}
-                <div className="rounded-xl border border-edge bg-panel2/50 p-5 space-y-3">
-                  <label className="text-xs font-semibold text-fg block">Commit Message Style</label>
-                  <div className="preferences-choice-grid">
-                    {[
-                      { id: 'conventional' as const, label: 'Conventional Commits', example: 'feat(auth): add OAuth2 token refresh' },
-                      { id: 'detailed' as const, label: 'Detailed Summary', example: 'Refactor diff parser with comprehensive breakdown' },
-                      { id: 'simple' as const, label: 'Minimalist One-Liner', example: 'Update build toolchain and deps' },
-                    ].map((s) => {
-                      const isSelected = aiCommit.promptStyle === s.id;
-                      return (
-                        <div
-                          key={s.id}
-                          onClick={() => setAiCommit({ promptStyle: s.id })}
-                          className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                            isSelected
-                              ? 'border-accent bg-accent/15 text-accent ring-1 ring-accent/30 font-semibold'
-                              : 'border-edge bg-panel2 hover:bg-panel3 text-fg'
-                          }`}
-                        >
-                          <span className="text-xs block mb-1">{s.label}</span>
-                          <span className="text-[10px] text-dim font-mono block truncate" title={s.example}>
-                            {s.example}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Test Generation */}
-                <div className="rounded-xl border border-edge bg-panel2/50 p-5 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="min-w-0 flex-1 basis-56">
-                      <span className="text-xs font-semibold text-fg block">Test Connection</span>
-                      <span className="text-[11px] text-dim">
-                        Validate that your model provider is responding properly
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={testGenerating}
-                      aria-busy={testGenerating}
-                      onClick={handleTestAi}
-                      className="btn-secondary min-h-8 !px-3.5 !py-2 !text-xs"
-                    >
-                      {testGenerating ? (
-                        <>
-                          <Loader2 size={13} className="animate-spin" aria-hidden="true" />
-                          <span>Testing...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles size={13} aria-hidden="true" />
-                          <span>Test AI Model</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {testResult && (
-                    <div className="p-3.5 rounded-xl bg-panel3/80 border border-edge space-y-1.5">
-                      <span className="text-[10px] font-semibold text-accent uppercase tracking-wider block font-mono">
-                        Sample Output
-                      </span>
-                      <pre className="text-xs font-mono text-fg whitespace-pre-wrap">{testResult}</pre>
-                    </div>
-                  )}
-
-                  {testError && (
-                    <div className="flex items-center gap-2 p-3.5 rounded-xl bg-del-bg/30 border border-del/30 text-xs text-del">
-                      <AlertCircle size={15} className="shrink-0" />
-                      <span>{testError}</span>
-                    </div>
-                  )}
-                </div>
+              <div className="space-y-5 max-w-3xl">
+                <div><h2 className="text-base font-bold text-fg">AI Assistant</h2><p className="text-xs text-dim mt-1">Choose a provider and explicitly save your configuration. Saved keys remain available after app updates.</p></div>
+                <div className="rounded-xl border border-edge bg-panel2/50 p-5"><AiSetupForm /></div>
               </div>
             )}
 

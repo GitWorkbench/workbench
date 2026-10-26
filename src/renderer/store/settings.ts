@@ -1,6 +1,8 @@
 import { create } from 'zustand';
-import { CommitProfile, AiCommitConfig } from '../../shared/types';
+import { CommitProfile, AiCommitConfig, AiPreferences } from '../../shared/types';
 import { readAppStorage } from '../lib/appStorage';
+import { api } from '../lib/api';
+import { OFFLINE_AI } from '../../shared/ai-preferences';
 
 export type ThemeId =
   | 'git-workbench-dark'
@@ -419,6 +421,12 @@ function normalizeGraphRowHeight(value: unknown): number {
 }
 
 export interface SettingsState {
+  setupCompleted: boolean;
+  aiHasApiKey: boolean;
+  aiSettingsError: string | null;
+  initializeAiSettings: () => Promise<void>;
+  saveAiPreferences: (config: AiPreferences, apiKey?: string) => Promise<void>;
+  finishSetup: () => Promise<void>;
   isSettingsOpen: boolean;
   settingsSection: SettingsSection;
   theme: ThemeId;
@@ -477,6 +485,7 @@ export interface SettingsState {
 const STORAGE_KEY = 'git-workbench:settings:v1';
 
 const DEFAULT_SETTINGS = {
+  setupCompleted: false,
   theme: 'git-workbench-dark' as ThemeId,
   uiFontSize: FONT_SIZE_LIMITS.ui.default as number,
   codeFontSize: FONT_SIZE_LIMITS.code.default as number,
@@ -502,13 +511,7 @@ const DEFAULT_SETTINGS = {
   ] as CommitProfile[],
   activeProfileId: 'default',
 
-  aiCommit: {
-    provider: 'pollinations' as const,
-    model: 'openai',
-    apiKey: '',
-    endpoint: '',
-    promptStyle: 'conventional' as const
-  } as AiCommitConfig
+  aiCommit: { ...OFFLINE_AI, apiKey: '' } as AiCommitConfig
 };
 
 function isSettingsRecord(value: unknown): value is Record<string, unknown> {
@@ -532,6 +535,8 @@ function normalizeStoredSettings(value: unknown): typeof DEFAULT_SETTINGS {
   return {
     ...DEFAULT_SETTINGS,
     ...parsed,
+    setupCompleted: parsed.setupCompleted === undefined || parsed.setupCompleted === true,
+    aiCommit: { ...DEFAULT_SETTINGS.aiCommit, ...(isSettingsRecord(parsed.aiCommit) ? parsed.aiCommit : {}), apiKey: '' },
     theme: typeof theme === 'string' && Object.prototype.hasOwnProperty.call(THEMES, theme)
       ? theme as ThemeId
       : DEFAULT_SETTINGS.theme,
@@ -568,6 +573,9 @@ function loadStoredSettings(): typeof DEFAULT_SETTINGS {
 }
 
 function saveSettings(settings: Partial<typeof DEFAULT_SETTINGS>) {
+  // Do not erase an older plaintext key until the encrypted import succeeds.
+  // While a keyring is locked, pending UI preferences remain in memory for retry.
+  if (legacyAiCredential) return;
   try {
     const current = loadStoredSettings();
     const updated = normalizeStoredSettings({ ...current, ...settings });
@@ -576,6 +584,14 @@ function saveSettings(settings: Partial<typeof DEFAULT_SETTINGS>) {
     // Ignore storage quota errors
   }
 }
+
+function readLegacyAiCredential(): AiCommitConfig | null {
+  try {
+    const saved = JSON.parse(readAppStorage('settings:v1') || '{}');
+    return typeof saved.aiCommit?.apiKey === 'string' && saved.aiCommit.apiKey.trim() ? saved.aiCommit : null;
+  } catch { return null; }
+}
+let legacyAiCredential = readLegacyAiCredential();
 
 export function applySettingsToDOM(settings: {
   theme: ThemeId;
@@ -661,9 +677,38 @@ if (typeof document !== 'undefined') {
 }
 
 export const useSettings = create<SettingsState>((set, get) => ({
+  aiHasApiKey: false,
+  aiSettingsError: null,
   isSettingsOpen: false,
   settingsSection: 'themes',
   ...initial,
+
+  initializeAiSettings: async () => {
+    try {
+      const snapshot = legacyAiCredential
+        ? await api.importAiSettings(legacyAiCredential, legacyAiCredential.apiKey)
+        : await api.getAiSettings();
+      legacyAiCredential = null;
+      set({ ...(snapshot.config ? { aiCommit: { ...snapshot.config, apiKey: '' } } : {}), aiHasApiKey: snapshot.hasApiKey, aiSettingsError: null });
+      saveSettings(get());
+    } catch {
+      set({ aiSettingsError: 'Secure AI settings could not be loaded. Unlock your system keyring and retry. Any previous key is preserved; preference changes wait until it is safely imported.' });
+    }
+  },
+  saveAiPreferences: async (config, apiKey) => {
+    if (legacyAiCredential) {
+      await get().initializeAiSettings();
+      if (legacyAiCredential) throw new Error('Unlock your system keyring to import your previous API key before saving new settings.');
+    }
+    const snapshot = await api.saveAiSettings(config, apiKey);
+    set({ aiCommit: { ...config, apiKey: '' }, aiHasApiKey: snapshot.hasApiKey, aiSettingsError: null });
+    saveSettings(get());
+  },
+  finishSetup: async () => {
+    await api.completeSetup();
+    set({ setupCompleted: true });
+    saveSettings({ setupCompleted: true });
+  },
 
   openSettings: (section = 'themes') => set({ isSettingsOpen: true, settingsSection: section }),
   closeSettings: () => set({ isSettingsOpen: false }),
@@ -786,7 +831,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
   },
 
   setAiCommit: (patch: Partial<AiCommitConfig>) => {
-    const aiCommit = { ...get().aiCommit, ...patch };
+    const aiCommit = { ...get().aiCommit, ...patch, apiKey: '' };
     set({ aiCommit });
     saveSettings({ aiCommit });
   },
@@ -809,8 +854,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
   },
 
   resetDefaults: () => {
-    set(DEFAULT_SETTINGS);
-    saveSettings(DEFAULT_SETTINGS);
-    applySettingsToDOM(DEFAULT_SETTINGS);
+    const defaults = { ...DEFAULT_SETTINGS, setupCompleted: get().setupCompleted, aiCommit: get().aiCommit };
+    set(defaults);
+    saveSettings(defaults);
+    applySettingsToDOM(defaults);
   }
 }));

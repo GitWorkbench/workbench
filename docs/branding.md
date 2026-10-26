@@ -25,6 +25,10 @@ The Electron profile and session data live at `<appData>/Git Workbench`. The app
 
 Credentials remain encrypted through Electron secure storage. Browser preferences use `git-workbench:*` keys; recent repositories are stored in `~/.config/git-workbench/recent-repos.json`.
 
+AI keys share the protected `hosted-git-credentials.enc` vault and are scoped to their provider and configured endpoint. Nonsecret model preferences live in `ai-settings.json`, and the first-run completion marker is `setup-completed`, both under the same Electron data directory. Neither path contains a version or installer directory. Updates, provider switches, blank key fields, and resetting UI preferences do not delete saved AI keys. Removing a key is an explicit action in Settings → AI Assistant.
+
+Older AI keys still present in browser preferences are imported into encrypted storage at startup without replacing a newer saved key. The old copy is cleared only after successful import. If the keyring is locked or import fails, the original is retained and pending preference changes wait in memory; unlock the keyring and use Retry secure storage in AI Assistant. Credentials that were already deleted cannot be reconstructed; re-enter those keys once. A reinstall that removes the app data directory or a different OS account does not retain credentials.
+
 Configuration and recovery records from separately named applications are not imported. Set preferences, reopen repositories, and reconnect providers in Git Workbench as needed. Installation does not delete those applications' data.
 
 ## Repository records

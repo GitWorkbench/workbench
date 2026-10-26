@@ -4,10 +4,10 @@ import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ app: {} as Record<string, any>, settings: {} as Record<string, any>, fetch: vi.fn(), setState: vi.fn() }));
+const mock = vi.hoisted(() => ({ app: {} as Record<string, any>, settings: {} as Record<string, any>, fetch: vi.fn(), setState: vi.fn(), setupGet: vi.fn(), setupComplete: vi.fn(), settingsSet: vi.fn() }));
 vi.mock('../../src/renderer/store', () => ({ useApp: Object.assign((select: (state: any) => any) => select(mock.app), { getState: () => mock.app, setState: mock.setState }) }));
-vi.mock('../../src/renderer/store/settings', () => ({ useSettings: Object.assign((select: (state: any) => any) => select(mock.settings), { getState: () => mock.settings }) }));
-vi.mock('../../src/renderer/lib/api', () => ({ api: { fetch: mock.fetch } }));
+vi.mock('../../src/renderer/store/settings', () => ({ useSettings: Object.assign((select: (state: any) => any) => select(mock.settings), { getState: () => mock.settings, setState: mock.settingsSet }) }));
+vi.mock('../../src/renderer/lib/api', () => ({ api: { fetch: mock.fetch, getSetupComplete: mock.setupGet, completeSetup: mock.setupComplete } }));
 
 // App tests exercise orchestration. Each child has its own interaction suite.
 const children = [
@@ -21,7 +21,7 @@ const children = [
   ['Repository', 'CreateRepoModal'], ['CommandPalette', 'CommandPalette'], ['TerminalDrawer', 'TerminalDrawer'],
   ['Help', 'ShortcutsModal'], ['Help', 'UsageGuideModal'], ['GitFlow', 'GitFlowModal'], ['Bisect', 'BisectModal'],
   ['Reflog', 'ReflogModal'], ['Reflog', 'RestorePointsModal'], ['Changelog', 'ChangelogModal'], ['Worktrees', 'WorktreesModal'],
-  ['PullRequests', 'PullRequestsModal'], ['Common', 'ToastContainer'], ['Updates', 'AppUpdateNotice']
+  ['PullRequests', 'PullRequestsModal'], ['Common', 'ToastContainer'], ['Updates', 'AppUpdateNotice'], ['Onboarding', 'SetupPage']
 ];
 let App: typeof import('../../src/renderer/App').App;
 beforeAll(async () => {
@@ -39,7 +39,9 @@ beforeEach(() => {
   Object.keys(mock.app).forEach(key => delete mock.app[key]); Object.keys(mock.settings).forEach(key => delete mock.settings[key]);
   Object.assign(mock.app, { activeTab: '/repo', homeOpen: false, usageGuideOpen: false, gitFlowModalOpen: false });
   for (const name of ['init', 'openUsageGuide', 'closeUsageGuide', 'closeGitFlowModal', 'refresh', 'openHome', 'toggleCommandPalette', 'toggleTerminalDrawer', 'toggleSidebar', 'toggleShortcutsModal', 'closeCommandPalette', 'closeDiff']) mock.app[name] = vi.fn().mockResolvedValue(undefined);
-  Object.assign(mock.settings, { isSettingsOpen: false, autoFetch: false, autoFetchInterval: 60, closeSettings: vi.fn(), openSettings: vi.fn() });
+  Object.assign(mock.settings, { setupCompleted: true, initializeAiSettings: vi.fn().mockResolvedValue(undefined), isSettingsOpen: false, autoFetch: false, autoFetchInterval: 60, closeSettings: vi.fn(), openSettings: vi.fn() });
+  mock.setupGet.mockReset().mockResolvedValue(false); mock.setupComplete.mockReset().mockResolvedValue(undefined);
+  mock.settingsSet.mockReset().mockImplementation(patch => Object.assign(mock.settings, patch));
   mock.fetch.mockReset().mockResolvedValue({ ok: true }); mock.setState.mockReset().mockImplementation(patch => Object.assign(mock.app, patch));
 });
 afterEach(() => vi.clearAllTimers());
@@ -49,6 +51,21 @@ const finishStartup = async () => { await advance(2400); await advance(450); };
 const key = (value: string, patch: Record<string, unknown> = {}) => fireEvent.keyDown(window, { key: value, ...patch });
 
 describe('application composition and startup', () => {
+  it('shows setup before Explore on a fresh installation and defers update prompts and shortcuts', async () => {
+    mock.settings.setupCompleted = false;
+    const { rerender } = render(<App />); await finishStartup();
+    expect(screen.getByTestId('SetupPage')).toBeVisible(); expect(screen.queryByTestId('Sidebar')).not.toBeInTheDocument();
+    expect(mock.app.openUsageGuide).not.toHaveBeenCalled(); expect(screen.getByTestId('AppUpdateNotice')).toHaveAttribute('data-ready', 'false');
+    key('k', { ctrlKey: true }); expect(mock.app.toggleCommandPalette).not.toHaveBeenCalled();
+    mock.settings.setupCompleted = true; rerender(<App />); await advance(450); expect(mock.app.openUsageGuide).toHaveBeenCalledOnce();
+  });
+  it('honors the durable setup marker after a renderer preference reset, and tolerates native startup errors', async () => {
+    mock.settings.setupCompleted = false; mock.setupGet.mockResolvedValue(true);
+    const first = render(<App />); await finishStartup(); expect(screen.queryByTestId('SetupPage')).not.toBeInTheDocument(); expect(mock.settings.setupCompleted).toBe(true); first.unmount();
+    mock.setupGet.mockRejectedValue(new Error('disk unavailable')); const second = render(<App />); await finishStartup(); expect(screen.getByTestId('AppLoadingScreen')).toHaveAttribute('data-ready', 'true'); second.unmount();
+    let finish!: (complete: boolean) => void; mock.setupGet.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+    const third = render(<App />); third.unmount(); await act(async () => finish(true));
+  });
   it('keeps the update notice available on Settings after startup, deferring it for active dialogs', async () => {
     mock.settings.isSettingsOpen = true; const { rerender } = render(<App />); await finishStartup();
     expect(screen.getByTestId('AppUpdateNotice')).toHaveAttribute('data-ready', 'true');

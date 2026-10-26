@@ -30,6 +30,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 | `src/main/git/ai-history.ts` | Commit-based message drafts, checked history rewrites and branch explanations |
 | `src/main/updater.ts` | Update checks, download/install state and release links |
 | `src/main/terminal.ts` | Repository-scoped pseudoterminals, bounded output and session cleanup |
+| `src/main/ai-settings.ts` | Durable AI preferences, encrypted-key resolution and first-run completion |
 | `src/preload/index.ts` | Restricted, typed `contextBridge` API and event subscriptions |
 | `src/shared/types.ts` | Cross-process contracts, including `GitWorkbenchApi` |
 | `src/shared/` | Shared pure logic and public GitHub App metadata |
@@ -71,6 +72,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 ## Authentication and hosting providers
 
 - Keep credentials and OAuth refresh logic in the main process using the existing secure-storage implementation. Never put tokens in renderer state, app preferences, browser storage, URLs, logs, fixtures, or commits.
+- AI keys live in the encrypted credential vault, scoped to provider and endpoint; model preferences and first-run completion live in the stable app data directory. Keep renderer settings redacted, preserve keys on blank saves, provider changes, updates and preference resets, and import older same-product keys only after encrypted storage succeeds. See [first-run setup and AI persistence](docs/first-run-setup.md).
 - `src/shared/github-app.json` contains public app metadata only. Private keys, client secrets, personal tokens, and downloaded `.pem` files must never be bundled or committed.
 - Preserve the distinct GitHub, GitLab, Bitbucket, and Gitea adapters, permissions, pagination, error handling, and supported host boundaries. Do not treat an arbitrary remote host as a trusted provider endpoint.
 - GitLab and Gitea connections are scoped to their normalized HTTPS instance URL, including port and base path. Pass the configured remote URL to the credential resolver for all hosted operations; never reuse another instance's token. Keep REST and GraphQL base paths consistent. Gitea uses its own API v1 adapter and never receives a GitLab token. See [GitLab connections](docs/gitlab-connections.md) and [Gitea connections](docs/gitea-connections.md).
@@ -87,6 +89,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 - Preserve resizable commit columns and their visibility/order settings. Keep relative time when the absolute date/time option is off.
 - Use the shared `AppLogo` with square dimensions and preserved aspect ratio. Use the shared loading progress component; keep one progress indicator and respect reduced-motion preferences.
 - Restoring repositories during startup must stay quiet. Clicking the checked-out branch should not open a redundant checkout dialog.
+- On a new installation, show skippable setup before Explore; existing installations keep their preferences. Do not cover setup with automatic guide or update prompts. Profile identity affects only app commits unless the user explicitly chooses to change global Git configuration. Gravatar preview is optional, debounced, and uses a normalized SHA-256 email identifier with a local fallback.
 - Keep List and Requests as separate sidebar views with independent filters; do not add placeholder Agents navigation. Connected request modals focus on browsing and creation; provider credentials belong in Settings. Sidebar request headings use Merge Requests for GitLab and Pull Requests for GitHub, Bitbucket, or Gitea. Request loading stays scoped to the active repository and selected remote, uses inline errors, and never pushes automatically. AI history actions generate drafts only on request; applying a message requires confirmation, an unchanged branch/HEAD, a clean linear checkout, and a restore point. Preserve file trees and author metadata when rewriting messages.
 - Include accessible labels for icon buttons, visible keyboard focus, keyboard navigation, appropriate dialog focus/Escape behavior, and clear loading, empty, error, and success states.
 - Keep user-facing copy concrete and professional. Update the built-in guide in `src/renderer/components/Help/usageGuideContent.ts` when a workflow changes.

@@ -5,7 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, exec } from 'node:child_process';
 import simpleGit from 'simple-git';
-import { generateCommitMessage } from './ai';
+import { generateCommitMessage, explainCodeChanges } from './ai';
+import { getAiSettings, saveAiSettings, getSetupComplete, completeSetup } from './ai-settings';
+import { gitWithEnvironment } from './git/advanced-process';
 import {
   GitWorkbenchApi,
   GitStatus,
@@ -124,7 +126,6 @@ import {
   removePullRequestCredential,
   savePullRequestCredential
 } from './git/provider-credentials';
-import { explainCodeChanges } from '../shared/ai';
 
 const isPullRequestProvider = (value: unknown): value is PullRequestProvider =>
   typeof value === 'string' && pullRequestProviders.includes(value as PullRequestProvider);
@@ -451,6 +452,12 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
     return { ok: true, diff };
   });
 
+  handle('ai:settings-get', async (target?: unknown) => getAiSettings(target));
+  handle('ai:settings-import', async (config: unknown, key: unknown) => saveAiSettings(config, key, true));
+  handle('ai:settings-save', async (config: unknown, key?: unknown) => saveAiSettings(config, key));
+  handle('ai:settings-test', async (config: import('../shared/types').AiPreferences) => generateCommitMessage({ ...config, diff: 'diff --git a/example.txt b/example.txt\n+Example connection check\n' }));
+  handle('app:setup-get', async () => getSetupComplete());
+  handle('app:setup-complete', async () => completeSetup());
   handle('ai:generate-commit', async (params?: any) => {
     let diff = params?.diff;
     if (!diff) {
@@ -479,10 +486,17 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
     mutate(() => discardFile(requireRepo(), p))
   );
   handle('git:commit', async (message: string, author?: { name: string; email: string }) => {
+    if (author !== undefined) {
+      if (!author || typeof author.name !== 'string' || typeof author.email !== 'string' || !author.name.trim() || !author.email.trim() ||
+          author.name.length > 128 || author.email.length > 254 || /[\r\n\0<>]/.test(author.name + author.email)) throw new Error('Enter a valid commit profile name and email.');
+      // A profile supplies both identities for this command, without changing any Git config.
+      await gitWithEnvironment(requireRepo(), {
+        GIT_AUTHOR_NAME: author.name.trim(), GIT_AUTHOR_EMAIL: author.email.trim(),
+        GIT_COMMITTER_NAME: author.name.trim(), GIT_COMMITTER_EMAIL: author.email.trim()
+      }).raw(['commit', '-m', message]);
+      return { ok: true };
+    }
     await withGit(requireRepo(), (g) => {
-      if (author && author.name && author.email) {
-        return g.commit(message, undefined, { '--author': `"${author.name} <${author.email}>"` });
-      }
       return g.commit(message);
     });
     return { ok: true };
