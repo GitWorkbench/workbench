@@ -39,6 +39,7 @@ describe('startup update notification', () => {
     mock.get.mockResolvedValue(available); const { rerender } = render(<AppUpdateNotice ready={false} />); await act(async () => {});
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); rerender(<AppUpdateNotice ready />);
     expect(screen.getByRole('dialog')).toHaveFocus(); expect(screen.getByText('Git Workbench v1.2.0 · Installed v1.1.0')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Update available' })).toHaveClass('text-fg');
     expect(screen.getByText('Improved terminal')).toBeInTheDocument(); expect(screen.queryByText('bad()')).not.toBeInTheDocument();
     fireEvent.click(screen.getByText('Skip for now')); expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     receive(available); expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); act(() => useAppUpdates.getState().show()); expect(screen.getByRole('dialog')).toBeVisible();

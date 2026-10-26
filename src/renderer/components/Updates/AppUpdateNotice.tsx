@@ -33,7 +33,7 @@ export function AppUpdateNotice({ ready }: { ready: boolean }) {
   }}>
     <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="app-update-title" aria-describedby="app-update-description" tabIndex={-1} className="w-full max-w-lg rounded-xl border border-edge bg-panel p-5 text-fg shadow-2xl outline-none">
       <div className="flex items-start justify-between gap-3">
-        <div><h2 id="app-update-title" className="text-base font-semibold">{downloaded ? 'Your update is ready' : 'Update available'}</h2>
+        <div><h2 id="app-update-title" className="text-base font-semibold text-fg">{downloaded ? 'Your update is ready' : 'Update available'}</h2>
           <p id="app-update-description" className="mt-1 text-sm text-dim">Git Workbench {update.availableVersion ? `v${update.availableVersion}` : 'update'} · Installed v{update.currentVersion}</p></div>
         <button className="btn-icon" aria-label="Close update notification" onClick={dismiss}><X size={16} /></button>
       </div>
