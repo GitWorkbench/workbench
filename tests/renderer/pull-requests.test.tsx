@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import './setup';
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HostedPullRequest, PullRequestContext } from '../../src/shared/types';
 
@@ -112,6 +112,16 @@ describe('hosted request context', () => {
 });
 
 describe('request browsing and creation', () => {
+  it.each([true, false])('shows the selected request status consistently when draft is %s', async draft => {
+    mocks.api.getPullRequestContext.mockResolvedValue(context({ pullRequests: [request({ sourceBranch: 'feature/new-work', draft })] }));
+    render(<PullRequestsModal />);
+    const review = await screen.findByRole('button', { name: 'Review changes, conversation & CI' });
+    const details = review.parentElement;
+    if (!details) throw new Error('Selected request details missing');
+    expect(within(details).getByText(draft ? 'Draft' : 'Open', { exact: true })).toBeVisible();
+    expect(within(details).getByRole('link', { name: 'Open on provider' })).toHaveAttribute('href', request().url);
+    expect(mocks.api.createHostedPullRequest).not.toHaveBeenCalled();
+  });
   it('ignores duplicate form submission and retains successful creation feedback after reloading', async () => {
     let finish!: (value: { ok: true; pullRequest: HostedPullRequest }) => void;
     mocks.api.createHostedPullRequest.mockImplementation(() => new Promise<{ ok: true; pullRequest: HostedPullRequest }>(resolve => { finish = resolve; }));
