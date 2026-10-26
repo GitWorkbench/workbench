@@ -166,7 +166,11 @@ describe('request browsing and creation', () => {
   });
   it('prevents empty titles or targeting the current branch', async () => {
     render(<PullRequestsModal />); await ready();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Target branch' }), { target: { value: 'feature/new-work' } }); expect(screen.getByRole('button', { name: 'Push branch & create pull request' })).toBeDisabled();
+    const targetBranch = screen.getByRole('textbox', { name: 'Target branch' });
+    await waitFor(() => expect(targetBranch).toHaveValue('main'));
+    fireEvent.change(targetBranch, { target: { value: 'feature/new-work' } });
+    expect(targetBranch).toHaveValue('feature/new-work');
+    expect(screen.getByRole('button', { name: 'Push branch & create pull request' })).toBeDisabled();
     fireEvent.change(screen.getByRole('textbox', { name: 'Target branch' }), { target: { value: 'main' } }); fireEvent.change(screen.getByRole('textbox', { name: 'Title' }), { target: { value: '  ' } }); expect(screen.getByRole('button', { name: 'Push branch & create pull request' })).toBeDisabled();
   });
 });

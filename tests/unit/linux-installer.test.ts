@@ -12,6 +12,7 @@ let bin: string;
 let home: string;
 let downloads: string;
 let calls: string;
+let curlCalls: string;
 
 const sha512 = (content: string) => createHash('sha512').update(content).digest('base64');
 
@@ -21,10 +22,12 @@ beforeEach(async () => {
   home = path.join(root, 'home with spaces');
   downloads = path.join(root, 'downloads');
   calls = path.join(root, 'calls.log');
+  curlCalls = path.join(root, 'curl-calls.log');
   await fs.mkdir(bin, { recursive: true });
   await fs.mkdir(home, { recursive: true });
   await fs.mkdir(downloads, { recursive: true });
   await executable('curl', [
+    'all_args="$*"',
     "output=''",
     "url=''",
     'while (($#)); do',
@@ -32,6 +35,7 @@ beforeEach(async () => {
     '  [[ \"$1\" == http* ]] && url=$1',
     '  shift',
     'done',
+    'echo "$url $all_args" >> "$CURL_CALL_LOG"',
     "name=$(awk -F/ '{print $NF}' <<< \"$url\")",
     'source_file=\"$TEST_DOWNLOADS_DIR/$name\"',
     '[[ -f \"$source_file\" ]] || exit 22',
@@ -81,6 +85,7 @@ async function run(options: { id: string; idLike?: string; arch?: string }) {
       HOME: home,
       TMPDIR: root,
       INSTALLER_CALL_LOG: calls,
+      CURL_CALL_LOG: curlCalls,
       TEST_DOWNLOADS_DIR: downloads,
       TEST_MACHINE_ARCH: options.arch ?? 'x86_64',
       TEST_UID: '1000',
@@ -104,6 +109,10 @@ async function callLog() {
   return fs.readFile(calls, 'utf8').catch(() => '');
 }
 
+async function curlLog() {
+  return fs.readFile(curlCalls, 'utf8').catch(() => '');
+}
+
 describe('Linux one-line installer', () => {
   it('selects and checksum-verifies the Debian package before asking apt to install it', async () => {
     const appImage = await addAsset('git-workbench-' + release + '-x64.AppImage', 'appimage archive');
@@ -113,7 +122,9 @@ describe('Linux one-line installer', () => {
     const output = await run({ id: 'ubuntu', idLike: 'debian' });
 
     expect(output).toContain('Verified Git Workbench 1.3.1 for x86_64 with SHA-512.');
+    expect(output).toContain('Downloading Git Workbench 1.3.1 (git-workbench-1.3.1-x64.deb)...');
     expect(await callLog()).toMatch(/sudo apt-get install .*\.deb/);
+    expect(await curlLog()).toMatch(/git-workbench-1\.3\.1-x64\.deb.*--progress-bar/);
   });
 
   it('parses folded SHA-512 values and the published Linux asset names', async () => {

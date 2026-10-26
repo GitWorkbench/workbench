@@ -148,8 +148,10 @@ expected_sha512=${asset_entry#*$'\t'}
 
 installer_file="$temporary_directory/$installer_name"
 installer_url="$RELEASES_URL/$installer_name"
-curl --fail --location --silent --show-error --retry 2 --connect-timeout 15 "$installer_url" --output "$installer_file" \
+printf 'Downloading Git Workbench %s (%s)...\n' "$version" "$installer_name"
+curl --fail --location --show-error --progress-bar --retry 2 --connect-timeout 15 "$installer_url" --output "$installer_file" \
   || fail "Could not download $installer_name. See https://github.com/$REPOSITORY/releases."
+printf '\n'
 
 actual_sha512=$(sha512sum -- "$installer_file" | awk '{ print $1 }')
 expected_hex=$(printf '%s' "$expected_sha512" | base64 --decode 2>/dev/null | od -An -v -tx1 | tr -d ' \n') \
