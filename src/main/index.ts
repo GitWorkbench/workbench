@@ -9,6 +9,13 @@ import { APP_NAME } from '../shared/appIdentity';
 
 configureAppIdentity();
 
+// Electron's native Wayland GPU process can SIGTRAP in Mesa/LLVM drivers on
+// some Linux distributions. Keep Wayland startup reliable with software
+// rendering while leaving X11 and other platforms hardware-accelerated.
+if (process.platform === 'linux' && (process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY))) {
+  app.disableHardwareAcceleration();
+}
+
 let mainWindow: BrowserWindow | null = null;
 let currentRepo: string | null = null;
 

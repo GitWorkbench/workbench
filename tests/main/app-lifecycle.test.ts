@@ -4,14 +4,14 @@ import path from 'node:path';
 
 const mock = vi.hoisted(() => ({
   handlers: new Map<string, (...args: any[]) => any>(), ipc: new Map<string, (...args: any[]) => any>(),
-  windows: [] as any[], register: vi.fn(), updater: vi.fn(), quit: vi.fn(), open: vi.fn(), identity: vi.fn(), menu: vi.fn(), ready: vi.fn(() => Promise.resolve())
+  windows: [] as any[], register: vi.fn(), updater: vi.fn(), quit: vi.fn(), open: vi.fn(), identity: vi.fn(), menu: vi.fn(), ready: vi.fn(() => Promise.resolve()), disableHardwareAcceleration: vi.fn()
 }));
 vi.mock('../../src/main/ipc', () => ({ registerIpc: mock.register }));
 vi.mock('../../src/main/updater', () => ({ registerUpdater: mock.updater }));
 vi.mock('../../src/main/terminal', () => ({ registerTerminal: mock.register }));
 vi.mock('../../src/main/app-identity', () => ({ configureAppIdentity: mock.identity, configureAppMenu: mock.menu }));
 vi.mock('electron', () => ({
-  app: { whenReady: mock.ready, on: (name: string, fn: (...args: any[]) => any) => mock.handlers.set(name, fn), quit: mock.quit },
+  app: { whenReady: mock.ready, on: (name: string, fn: (...args: any[]) => any) => mock.handlers.set(name, fn), quit: mock.quit, disableHardwareAcceleration: mock.disableHardwareAcceleration },
   ipcMain: { on: (name: string, fn: (...args: any[]) => any) => mock.ipc.set(name, fn) },
   shell: { openExternal: mock.open },
   BrowserWindow: class {
@@ -28,6 +28,7 @@ const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 beforeEach(() => {
   vi.resetModules(); mock.handlers.clear(); mock.ipc.clear(); mock.windows.length = 0;
   mock.register.mockReset(); mock.updater.mockReset(); mock.quit.mockReset(); mock.open.mockReset();
+  mock.disableHardwareAcceleration.mockReset();
   mock.identity.mockClear(); mock.menu.mockClear(); mock.ready.mockClear();
   vi.stubEnv('ELECTRON_RENDERER_URL', '');
 });
@@ -35,6 +36,19 @@ afterEach(() => { vi.unstubAllEnvs(); Object.defineProperty(process, 'platform',
 async function start() { await import('../../src/main/index'); await Promise.resolve(); }
 
 describe('Electron application lifecycle', () => {
+  it.each([
+    ['wayland', '', 'linux', true],
+    ['', 'wayland-0', 'linux', true],
+    ['x11', '', 'linux', false],
+    ['wayland', 'wayland-0', 'darwin', false]
+  ])('disables hardware acceleration only for Linux Wayland sessions (%s, %s, %s)', async (sessionType, display, platform, expected) => {
+    vi.stubEnv('XDG_SESSION_TYPE', sessionType);
+    vi.stubEnv('WAYLAND_DISPLAY', display);
+    Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+    await start();
+    expect(mock.disableHardwareAcceleration).toHaveBeenCalledTimes(expected ? 1 : 0);
+    if (expected) expect(mock.disableHardwareAcceleration.mock.invocationCallOrder[0]).toBeLessThan(mock.ready.mock.invocationCallOrder[0]);
+  });
   it('creates an isolated renderer, wires main services, and tracks the active repo', async () => {
     await start(); const win = mock.windows[0];
     expect(win.options).toMatchObject({ minWidth: 1024, minHeight: 640, title: 'Git Workbench', webPreferences: { contextIsolation: true, nodeIntegration: false } });
