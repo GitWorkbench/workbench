@@ -353,9 +353,11 @@ describe('commit identity profiles', () => {
 });
 
 describe('AI settings integration', () => {
-  it('uses the shared secure form and explicitly saves without persisting a raw key', async () => {
-    renderSection('ai'); await screen.findByLabelText('Model provider');
-    fireEvent.change(screen.getByLabelText('Model provider'), { target: { value: 'groq' } });
+  it('keeps the provider cards and test panel while explicitly saving keys securely', async () => {
+    renderSection('ai'); await screen.findByRole('heading', { name: 'Model provider' });
+    expect(screen.getByRole('heading', { name: 'Commit message style' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Test connection' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /Groq Cloud/ }));
     await waitFor(() => expect(mocks.api.getAiSettings).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'groq' })));
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'fake-key' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' }));
@@ -363,5 +365,50 @@ describe('AI settings integration', () => {
     expect(mocks.api.saveAiSettings).toHaveBeenCalledWith(expect.objectContaining({ provider: 'groq' }), 'fake-key');
     expect(useSettings.getState().aiCommit.apiKey).toBe('');
     expect(localStorage.getItem('git-workbench:settings:v1')).not.toContain('fake-key');
+
+    mocks.api.testAiSettings.mockResolvedValueOnce({ ok: true, message: 'feat: verified provider connection' });
+    fireEvent.click(screen.getByRole('button', { name: 'Test AI model' }));
+    await screen.findByText('feat: verified provider connection');
+    expect(mocks.api.testAiSettings).toHaveBeenCalledWith(expect.objectContaining({ provider: 'groq' }));
+  });
+
+  it('shows provider connection errors and keeps style selection keyboard accessible', async () => {
+    renderSection('ai'); await screen.findByRole('button', { name: /Google Gemini/ });
+    const gitmoji = screen.getByRole('button', { name: /Gitmoji/ });
+    fireEvent.click(gitmoji);
+    expect(gitmoji).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /Custom Endpoint/ }));
+    const endpoint = screen.getByLabelText('API endpoint URL');
+    fireEvent.change(endpoint, { target: { value: 'https://ai.example.test/v1' } });
+    mocks.api.saveAiSettings.mockResolvedValue({ config: null, hasApiKey: false });
+    mocks.api.testAiSettings.mockResolvedValueOnce({ ok: false, error: 'Connection refused' });
+    fireEvent.click(screen.getByRole('button', { name: 'Test AI model' }));
+    await screen.findByRole('alert');
+    expect(screen.getByText('Connection refused')).toBeVisible();
+    expect(mocks.api.saveAiSettings).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'custom', endpoint: 'https://ai.example.test/v1', promptStyle: 'gitmoji'
+    }), undefined);
+  });
+
+  it('supports secure API key removal and storage retry in the settings layout', async () => {
+    mocks.api.getAiSettings.mockResolvedValue({ config: null, hasApiKey: true });
+    renderSection('ai'); await screen.findByRole('button', { name: /Groq Cloud/ });
+    fireEvent.click(screen.getByRole('button', { name: /Groq Cloud/ }));
+    await screen.findByRole('button', { name: 'Remove saved API key' });
+    mocks.api.saveAiSettings.mockResolvedValueOnce({ config: null, hasApiKey: false });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove saved API key' }));
+    await screen.findByText('API key removed for this provider and endpoint.');
+    expect(mocks.api.saveAiSettings).toHaveBeenCalledWith(expect.objectContaining({ provider: 'groq' }), '');
+  });
+
+  it('shows keyring retry and model endpoint controls only for relevant providers', async () => {
+    renderSection('ai'); await screen.findByRole('button', { name: /Ollama Local/ });
+    fireEvent.click(screen.getByRole('button', { name: /Ollama Local/ }));
+    expect(screen.getByLabelText('API endpoint URL')).toHaveValue('http://127.0.0.1:11434/v1');
+    mocks.api.getAiSettings.mockRejectedValueOnce(new Error('keyring locked'));
+    fireEvent.click(screen.getByRole('button', { name: /OpenRouter/ }));
+    await screen.findByText('Could not read saved keys. Unlock your system keyring and retry.');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry secure storage' }));
+    await waitFor(() => expect(mocks.api.getAiSettings).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'openrouter' })));
   });
 });

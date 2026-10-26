@@ -1077,9 +1077,9 @@ export function SettingsPage() {
 
             {/* AI credentials are saved by the main process, outside renderer preferences. */}
             {activeTab === 'ai' && (
-              <div className="space-y-5 max-w-3xl">
-                <div><h2 className="text-base font-bold text-fg">AI Assistant</h2><p className="text-xs text-dim mt-1">Choose a provider and explicitly save your configuration. Saved keys remain available after app updates.</p></div>
-                <div className="rounded-xl border border-edge bg-panel2/50 p-5"><AiSetupForm /></div>
+              <div className="space-y-6">
+                <div><h2 className="text-base font-bold text-fg">AI Assistant</h2><p className="text-xs text-dim mt-1">Configure the provider used for commit messages and code reviews.</p></div>
+                <AiSetupForm variant="settings" />
               </div>
             )}
 
