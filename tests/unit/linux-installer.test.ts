@@ -116,6 +116,31 @@ describe('Linux one-line installer', () => {
     expect(await callLog()).toMatch(/sudo apt-get install .*\.deb/);
   });
 
+  it('parses folded SHA-512 values and the published Linux asset names', async () => {
+    const appImage = await addAsset('git-workbench-' + release + '-x86_64.AppImage', 'appimage archive');
+    const deb = await addAsset('git-workbench-' + release + '-amd64.deb', 'debian archive');
+    const appImageHash = appImage.checksum;
+    const debHash = deb.checksum;
+    const feed = [
+      'version: ' + release,
+      'files:',
+      '  - url: ' + appImage.name,
+      '    sha512: >-',
+      '      ' + appImageHash,
+      '    size: 19',
+      '  - url: ' + deb.name,
+      '    sha512: >-',
+      '      ' + debHash,
+      '    size: 14'
+    ].join('\n') + '\n';
+    await fs.writeFile(path.join(downloads, 'latest-linux.yml'), feed);
+
+    const output = await run({ id: 'ubuntu' });
+
+    expect(output).toContain('Verified Git Workbench 1.3.1 for x86_64 with SHA-512.');
+    expect(await callLog()).toMatch(/sudo apt-get install .*\.deb/);
+  });
+
   it('uses Fedora dnf for an RPM build', async () => {
     const rpm = await addAsset('git-workbench-' + release + '-x64.rpm', 'rpm archive');
     await addFeed('latest-linux.yml', [rpm]);

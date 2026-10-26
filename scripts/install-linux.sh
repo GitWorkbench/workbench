@@ -47,22 +47,22 @@ esac
 machine_arch=$(uname -m)
 case "$machine_arch" in
   x86_64|amd64)
-    asset_arch='x64'
+    asset_arch_pattern='(x64|x86_64|amd64)'
     feed_suffix=''
     native_arch='x86_64'
     ;;
   aarch64|arm64)
-    asset_arch='arm64'
+    asset_arch_pattern='(arm64|aarch64)'
     feed_suffix='-arm64'
     native_arch='aarch64'
     ;;
   armv7l|armv7*)
-    asset_arch='arm'
+    asset_arch_pattern='(arm|armv7l)'
     feed_suffix='-arm'
     native_arch='armv7l'
     ;;
   i386|i486|i586|i686)
-    asset_arch='ia32'
+    asset_arch_pattern='(ia32|i386|i486|i586|i686)'
     feed_suffix='-ia32'
     native_arch='i686'
     ;;
@@ -89,27 +89,55 @@ case "$package_format" in
 esac
 
 asset_entry=$(
-  awk -v version="$version" -v arch="$asset_arch" -v native_arch="$native_arch" -v format="$package_format" '
+  awk -v version="$version" -v arch="$asset_arch_pattern" -v native_arch="$native_arch" -v format="$package_format" '
+    function flush_entry() {
+      if (selected && checksum != "") {
+        print filename "\t" checksum
+        count++
+      }
+      selected = 0
+      checksum = ""
+      checksum_pending = 0
+    }
     /^  - url: / {
+      flush_entry()
       filename = $0
       sub(/^  - url: /, "", filename)
-      selected = 0
+      sub(/^"/, "", filename)
+      sub(/"$/, "", filename)
       if (format == "pacman") {
         selected = filename ~ ("^git-workbench-" version "-[0-9]+([.][0-9]+)?-" native_arch "[.]pkg[.]tar[.]zst$")
       } else {
         suffix = format == "AppImage" ? "AppImage" : format
-        selected = filename == ("git-workbench-" version "-" arch "." suffix)
+        selected = filename ~ ("^git-workbench-" version "-" arch "[.]" suffix "$")
       }
       next
     }
     selected && /^    sha512: / {
-      checksum = substr($0, 13)
-      gsub(/[\r"]/, "", checksum)
-      print filename "\t" checksum
-      count++
-      selected = 0
+      checksum = $0
+      sub(/^    sha512: */, "", checksum)
+      if (checksum ~ /^>[+-]?$/ || checksum ~ /^\|[+-]?$/) {
+        checksum = ""
+        checksum_pending = 1
+      } else {
+        gsub(/[[:space:]"\047]/, "", checksum)
+      }
+      next
     }
-    END { if (count != 1) exit 1 }
+    selected && checksum_pending && /^      / {
+      line = $0
+      sub(/^ +/, "", line)
+      gsub(/[[:space:]]/, "", line)
+      checksum = checksum line
+      next
+    }
+    selected && checksum_pending && !/^      / {
+      checksum_pending = 0
+    }
+    END {
+      flush_entry()
+      if (count != 1) exit 1
+    }
   ' "$feed_file"
 ) || fail "No matching $package_format installer is attached for $machine_arch. See https://github.com/$REPOSITORY/releases."
 
