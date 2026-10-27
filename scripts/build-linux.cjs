@@ -71,6 +71,7 @@ async function buildLinux(args = [], options = {}) {
             directories: { output: targetOutput },
             ...(target === 'pacman' ? { pacman: { compression: 'xz' } } : {}),
             afterPack: async context => {
+              if (target !== 'AppImage') await fs.chmod(path.join(context.appOutDir, 'chrome-sandbox'), 0o4755);
               packedResources = context.packager.getResourcesDir(context.appOutDir);
               const marker = path.join(packedResources, 'package-type');
               if (target === 'AppImage') await fs.rm(marker, { force: true });

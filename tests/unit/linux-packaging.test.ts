@@ -30,8 +30,10 @@ afterEach(async () => { await fs.rm(project, { recursive: true, force: true }); 
 
 function fakeBuilder(options: { wrongMarker?: boolean; wrongFeed?: boolean; fail?: boolean } = {}) {
   const markers: { target: string; marker: string }[] = [];
+  const sandboxModes: number[] = [];
   return {
     markers,
+    sandboxModes,
     Arch: { x64: 'x64', arm64: 'arm64', armv7l: 'armv7l', ia32: 'ia32' },
     Platform: { LINUX: { createTarget: (target: string, arch: string) => ({ target, arch }) } },
     build: vi.fn(async input => {
@@ -39,9 +41,11 @@ function fakeBuilder(options: { wrongMarker?: boolean; wrongFeed?: boolean; fail
       const output = input.config.directories.output;
       const resources = path.join(output, 'linux-unpacked', 'resources');
       await fs.mkdir(resources, { recursive: true });
+      await fs.writeFile(path.join(path.dirname(resources), 'chrome-sandbox'), 'sandbox', { mode: 0o755 });
       await fs.writeFile(path.join(resources, 'app-update.yml'), 'provider: github');
       await fs.writeFile(path.join(resources, 'package-type'), 'rpm');
       await input.config.afterPack({ appOutDir: path.dirname(resources), packager: { getResourcesDir: () => resources } });
+      sandboxModes.push((await fs.stat(path.join(path.dirname(resources), 'chrome-sandbox'))).mode & 0o7777);
       markers.push({ target, marker: await fs.readFile(path.join(resources, 'package-type'), 'utf8').catch(() => '') });
       if (options.fail) throw new Error('Packaging failed');
       if (options.wrongMarker) await fs.writeFile(path.join(resources, 'package-type'), 'incorrect');
@@ -59,10 +63,23 @@ function fakeBuilder(options: { wrongMarker?: boolean; wrongFeed?: boolean; fail
 }
 
 describe('isolated Linux packaging and updater feeds', () => {
+  it('uses a root-owned setuid Electron sandbox helper in package-manager installs', async () => {
+    const manifest = JSON.parse(await fs.readFile(path.resolve('package.json'), 'utf8'));
+    const installerTemplate = await fs.readFile(path.resolve('build/linux-after-install.tpl'), 'utf8');
+
+    for (const target of ['deb', 'rpm', 'pacman']) {
+      expect(manifest.build[target].afterInstall).toBe('build/linux-after-install.tpl');
+    }
+    expect(installerTemplate).toContain("chown root:root '/opt/${sanitizedProductName}/chrome-sandbox'");
+    expect(installerTemplate).toContain("chmod 4755 '/opt/${sanitizedProductName}/chrome-sandbox'");
+    expect(installerTemplate).not.toContain('unshare --user');
+  });
+
   it('builds each format in its own directory, retains the correct package marker and merges all four formats', async () => {
     const builder = fakeBuilder();
     await buildLinux(['--x64'], buildOptions(builder));
     expect(builder.markers).toEqual([{ target: 'AppImage', marker: '' }, { target: 'deb', marker: 'deb' }, { target: 'rpm', marker: 'rpm' }, { target: 'pacman', marker: 'pacman' }]);
+    if (process.platform !== 'win32') expect(builder.sandboxModes).toEqual([0o755, 0o4755, 0o4755, 0o4755]);
     expect(new Set(builder.build.mock.calls.map(([input]) => input.config.directories.output)).size).toBe(4);
     expect(builder.build.mock.calls.every(([input]) => input.publish === 'never')).toBe(true);
     const output = path.join(project, 'dist');

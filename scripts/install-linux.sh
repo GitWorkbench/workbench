@@ -10,7 +10,7 @@ fail() {
   exit 1
 }
 
-for utility in curl awk sha512sum base64 od tr mktemp; do
+for utility in curl awk sha512sum base64 od tr mktemp chmod; do
   command -v "$utility" >/dev/null 2>&1 || fail "Required command not found: $utility"
 done
 
@@ -176,8 +176,14 @@ run_privileged() {
 case "$package_format" in
   deb)
     if command -v apt-get >/dev/null 2>&1; then
+      # APT's _apt sandbox needs to traverse the temp directory and read the
+      # verified public release package; keep the directory non-writable.
+      chmod 0711 "$temporary_directory"
+      chmod 0644 "$installer_file"
       run_privileged apt-get install "$installer_file"
     elif command -v apt >/dev/null 2>&1; then
+      chmod 0711 "$temporary_directory"
+      chmod 0644 "$installer_file"
       run_privileged apt install "$installer_file"
     else
       fail 'No apt package manager was found. Install the downloaded .deb manually.'

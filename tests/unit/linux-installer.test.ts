@@ -55,6 +55,7 @@ beforeEach(async () => {
   for (const name of ['apt-get', 'apt', 'dnf', 'yum', 'zypper', 'pacman']) {
     await executable(name, 'echo \"' + name + ' $*\" >> \"$INSTALLER_CALL_LOG\"');
   }
+  await executable('chmod', 'echo \"chmod $*\" >> \"$INSTALLER_CALL_LOG\"');
 });
 
 afterEach(async () => {
@@ -136,6 +137,8 @@ linuxInstallerDescribe('Linux one-line installer', () => {
     expect(output).toContain('Verified Git Workbench 1.3.1 for x86_64 with SHA-512.');
     expect(output).toContain('Downloading Git Workbench 1.3.1 (git-workbench-1.3.1-x64.deb)...');
     expect(await callLog()).toMatch(/sudo apt-get install .*\.deb/);
+    expect(await callLog()).toMatch(/chmod 0711 .*git-workbench-install\.[^\s]+/);
+    expect(await callLog()).toMatch(/chmod 0644 .*git-workbench-1\.3\.1-x64\.deb/);
     expect(await curlLog()).toMatch(/git-workbench-1\.3\.1-x64\.deb.*--progress-bar/);
   });
 

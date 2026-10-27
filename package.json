@@ -1,7 +1,7 @@
 {
   "name": "git-workbench",
   "productName": "Git Workbench",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "A commit-graph-centric visual Git client for Linux, macOS, and Windows",
   "main": "out/main/index.js",
   "author": {
@@ -107,13 +107,16 @@
       "icon": "build/icon.png"
     },
     "deb": {
-      "packageName": "git-workbench"
+      "packageName": "git-workbench",
+      "afterInstall": "build/linux-after-install.tpl"
     },
     "rpm": {
-      "packageName": "git-workbench"
+      "packageName": "git-workbench",
+      "afterInstall": "build/linux-after-install.tpl"
     },
     "pacman": {
-      "packageName": "git-workbench"
+      "packageName": "git-workbench",
+      "afterInstall": "build/linux-after-install.tpl"
     },
     "win": {
       "target": [
