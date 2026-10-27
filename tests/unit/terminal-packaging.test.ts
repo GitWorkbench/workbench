@@ -17,7 +17,9 @@ describe('portable Node-API terminal packaging', () => {
     expect(manifest.build.npmRebuild).toBe(false);
     expect(manifest.build.asarUnpack).toContain('node_modules/node-pty/**');
     expect(manifest.scripts['verify:terminal']).toBe('node scripts/check-terminal.cjs');
-    expect('predev' in manifest.scripts).toBe(false); expect('prestart' in manifest.scripts).toBe(false);
+    expect(manifest.scripts['electron:install']).toBe('install-electron --no');
+    expect(manifest.scripts.predev).toBe('npm run electron:install');
+    expect(manifest.scripts.prestart).toBe('npm run electron:install');
   });
   it.each([['x64', 0x01000007], ['arm64', 0x0100000c]])('retains the %s Darwin module and executable helper in universal builds', (arch, cpu) => {
     for (const name of ['pty.node', 'spawn-helper']) {

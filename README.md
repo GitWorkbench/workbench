@@ -186,6 +186,15 @@ The installer detects Debian-based distributions, RPM-based distributions such a
 
 #### Build from source
 
+**Prerequisites:** Use Node.js 22 with npm and have Git available on `PATH`. Linux source builds also need Python 3 and a C/C++ build toolchain. On Debian or Ubuntu, install the toolchain with:
+
+```bash
+sudo apt update
+sudo apt install -y build-essential python3
+```
+
+`build-essential` provides the `make` and `g++` commands used to compile the terminal dependency. Installing CMake alone is not enough. These tools are needed for building from source; they are not needed to install the released Linux packages.
+
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/GitWorkbench/workbench.git git-workbench
@@ -196,6 +205,17 @@ The installer detects Debian-based distributions, RPM-based distributions such a
    ```bash
    npm ci
    ```
+
+   The first `npm run dev` or `npm run start` also downloads the Electron runtime if it is missing. Electron 42 and newer no longer download this binary during dependency installation; the project runs `npm run electron:install` automatically before starting the app. Run that command directly to fetch the runtime ahead of time. It requires network access to Electron's release downloads.
+
+   If a newer npm version reports that install scripts for `esbuild` or `node-pty` were skipped, their platform binary and native terminal module have not been prepared. Review and approve only those required packages, then rebuild them:
+   ```bash
+   npm install-scripts approve esbuild node-pty
+   npm rebuild esbuild node-pty
+   ```
+   npm records these version-pinned approvals in `package.json`'s `allowScripts` field. Review that change before committing it. Do not approve every dependency just to silence the warning.
+
+   Deprecation notices are warnings and do not by themselves mean installation failed. An `npm audit` vulnerability count is a separate dependency security report; inspect it with `npm audit` and avoid applying `npm audit fix --force` without reviewing the breaking-version changes.
 
 3. **Start the development server:**
    ```bash
@@ -267,7 +287,7 @@ Open the terminal with **Ctrl/Cmd+`** or its toolbar/status-bar action. It uses 
 
 Hiding the drawer keeps programs running. Each repository has its own session, restored with recent output when reopened (up to eight sessions per window). **Restart shell** explicitly stops the session's programs; closing the app ends all sessions. Terminal commands use normal local-account permissions and do not receive the app's restore-point safeguards. Status refreshes after command output settles or focus leaves the terminal; use Refresh for changes from long-running background tools.
 
-`node-pty` uses Node-API binaries that work in Node and Electron without an Electron-specific rebuild. Windows and macOS use the package’s architecture-specific prebuilds; Linux compiles its Node-API module during `npm ci` and needs Python and a C++ toolchain. Build Linux packages on a runner matching the target CPU architecture. The project’s postinstall restores executable permissions on both macOS spawn helpers. Packaging preserves the native files outside ASAR, and universal macOS builds retain both Darwin prebuild directories. `npm run verify:terminal` runs a real shell inside Electron to check the installed terminal dependency; release jobs run this before packaging. Windows requires Windows 10 version 1809 or newer.
+`node-pty` uses Node-API binaries that work in Node and Electron without an Electron-specific rebuild. Windows and macOS use the package’s architecture-specific prebuilds; Linux compiles its Node-API module during `npm ci` and needs Python, `make`, and a C++ compiler such as `g++` (`build-essential` on Debian/Ubuntu). CMake does not replace GNU Make or the compiler. Build Linux packages on a runner matching the target CPU architecture. The project’s postinstall restores executable permissions on both macOS spawn helpers. Packaging preserves the native files outside ASAR, and universal macOS builds retain both Darwin prebuild directories. `npm run verify:terminal` runs a real shell inside Electron to check the installed terminal dependency; release jobs run this before packaging. Windows requires Windows 10 version 1809 or newer.
 
 ### Publishing a release and its update files
 

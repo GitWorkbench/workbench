@@ -12,8 +12,11 @@
   "private": true,
   "scripts": {
     "postinstall": "node scripts/prepare-terminal.cjs",
+    "electron:install": "install-electron --no",
+    "predev": "npm run electron:install",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "prestart": "npm run electron:install",
     "start": "electron-vite preview",
     "demo:create": "node scripts/create-demo-repos.cjs",
     "test:features": "node scripts/test-features.cjs",
