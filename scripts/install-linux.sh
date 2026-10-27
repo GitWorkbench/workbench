@@ -18,8 +18,8 @@ done
 # shellcheck disable=SC1090
 . "$OS_RELEASE_FILE"
 
-distribution_id=${ID,,}
-distribution_like=${ID_LIKE:-}
+distribution_id=$(printf '%s' "$ID" | tr '[:upper:]' '[:lower:]')
+distribution_like=$(printf '%s' "${ID_LIKE:-}" | tr '[:upper:]' '[:lower:]')
 
 case "$distribution_id" in
   ubuntu|debian|linuxmint|pop|elementary|zorin|kali|raspbian)

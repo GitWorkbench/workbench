@@ -39,10 +39,18 @@ beforeEach(async () => {
     "name=$(awk -F/ '{print $NF}' <<< \"$url\")",
     'source_file=\"$TEST_DOWNLOADS_DIR/$name\"',
     '[[ -f \"$source_file\" ]] || exit 22',
-    'cp -- \"$source_file\" \"$output\"'
+    'cp \"$source_file\" \"$output\"'
   ].join('\n'));
   await executable('uname', 'echo \"$TEST_MACHINE_ARCH\"');
   await executable('id', 'echo \"$TEST_UID\"');
+  await executable('sha512sum', [
+    'while (($#)); do [[ \"$1\" == \'--\' ]] && { shift; break; }; shift; done',
+    `node -e 'const fs = require("node:fs"); const { createHash } = require("node:crypto"); const file = process.argv[1]; console.log(createHash("sha512").update(fs.readFileSync(file)).digest("hex") + "  " + file);' "$1"`
+  ].join('\n'));
+  await executable('base64', [
+    '[[ "${1:-}" == \'--decode\' ]] || exit 2',
+    `node -e 'let input = ""; process.stdin.setEncoding("utf8"); process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => process.stdout.write(Buffer.from(input.trim(), "base64")));'`
+  ].join('\n'));
   await executable('sudo', 'echo \"sudo $*\" >> \"$INSTALLER_CALL_LOG\"');
   for (const name of ['apt-get', 'apt', 'dnf', 'yum', 'zypper', 'pacman']) {
     await executable(name, 'echo \"' + name + ' $*\" >> \"$INSTALLER_CALL_LOG\"');
@@ -81,7 +89,7 @@ async function run(options: { id: string; idLike?: string; arch?: string }) {
     encoding: 'utf8',
     env: {
       ...process.env,
-      PATH: bin + ':' + (process.env.PATH ?? ''),
+      PATH: bin + path.delimiter + (process.env.PATH ?? ''),
       HOME: home,
       TMPDIR: root,
       INSTALLER_CALL_LOG: calls,
@@ -113,13 +121,17 @@ async function curlLog() {
   return fs.readFile(curlCalls, 'utf8').catch(() => '');
 }
 
-describe('Linux one-line installer', () => {
+// Git Bash on Windows does not provide the Linux package managers and filesystem
+// behavior this installer integration fixture is intended to exercise.
+const linuxInstallerDescribe = process.platform === 'win32' ? describe.skip : describe;
+
+linuxInstallerDescribe('Linux one-line installer', () => {
   it('selects and checksum-verifies the Debian package before asking apt to install it', async () => {
     const appImage = await addAsset('git-workbench-' + release + '-x64.AppImage', 'appimage archive');
     const deb = await addAsset('git-workbench-' + release + '-x64.deb', 'debian archive');
     await addFeed('latest-linux.yml', [appImage, deb]);
 
-    const output = await run({ id: 'ubuntu', idLike: 'debian' });
+    const output = await run({ id: 'UBUNTU', idLike: 'debian' });
 
     expect(output).toContain('Verified Git Workbench 1.3.1 for x86_64 with SHA-512.');
     expect(output).toContain('Downloading Git Workbench 1.3.1 (git-workbench-1.3.1-x64.deb)...');
