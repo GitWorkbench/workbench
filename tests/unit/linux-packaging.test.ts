@@ -24,7 +24,12 @@ const buildOptions = (builder = fakeBuilder()) => ({ project, builder, packageAr
 beforeEach(async () => {
   vi.spyOn(console, 'log').mockImplementation(() => {});
   project = await fs.mkdtemp(path.join(os.tmpdir(), 'git-workbench-linux-packaging-'));
-  await fs.writeFile(path.join(project, 'package.json'), JSON.stringify({ version: '1.2.3' }));
+  await fs.writeFile(path.join(project, 'package.json'), JSON.stringify({
+    name: 'git-workbench',
+    productName: 'Git Workbench',
+    version: '1.2.3',
+    build: { linux: { executableName: 'git-workbench' } }
+  }));
 });
 afterEach(async () => { await fs.rm(project, { recursive: true, force: true }); });
 
@@ -78,6 +83,8 @@ describe('isolated Linux packaging and updater feeds', () => {
   it('builds each format in its own directory, retains the correct package marker and merges all four formats', async () => {
     const builder = fakeBuilder();
     await buildLinux(['--x64'], buildOptions(builder));
+    expect(builder.build.mock.calls.every(([input]) => input.config.productName === 'git-workbench')).toBe(true);
+    expect(builder.build.mock.calls.every(([input]) => input.config.linux.desktop.Name === 'Git Workbench')).toBe(true);
     expect(builder.markers).toEqual([{ target: 'AppImage', marker: '' }, { target: 'deb', marker: 'deb' }, { target: 'rpm', marker: 'rpm' }, { target: 'pacman', marker: 'pacman' }]);
     if (process.platform !== 'win32') expect(builder.sandboxModes).toEqual([0o755, 0o4755, 0o4755, 0o4755]);
     expect(new Set(builder.build.mock.calls.map(([input]) => input.config.directories.output)).size).toBe(4);
@@ -108,6 +115,17 @@ describe('isolated Linux packaging and updater feeds', () => {
   it.each(['--publish=always', '--target=unknown'])('rejects unsupported packaging arguments %s', async arg => {
     const builder = fakeBuilder();
     await expect(buildLinux([arg], buildOptions(builder))).rejects.toThrow('Unsupported Linux build option');
+    expect(builder.build).not.toHaveBeenCalled();
+  });
+
+  it('rejects Linux install names that would break Chromium sandbox execution', async () => {
+    const manifestPath = path.join(project, 'package.json');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    manifest.build.linux.executableName = 'Git Workbench';
+    await fs.writeFile(manifestPath, JSON.stringify(manifest));
+    const builder = fakeBuilder();
+
+    await expect(buildLinux(['--x64'], buildOptions(builder))).rejects.toThrow('Linux executableName must be a lowercase, space-free install name.');
     expect(builder.build).not.toHaveBeenCalled();
   });
 

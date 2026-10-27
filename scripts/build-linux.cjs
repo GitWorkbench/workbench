@@ -47,6 +47,11 @@ async function buildLinux(args = [], options = {}) {
   if (arches.some(arch => !ARCHES.includes(arch))) throw new Error(`Unsupported Linux architecture: ${arches.join(', ')}`);
   const targets = [...new Set(selectedTargets.length ? selectedTargets : TARGETS)];
   const manifest = JSON.parse(await fs.readFile(path.join(project, 'package.json'), 'utf8'));
+  const linuxInstallName = manifest.build?.linux?.executableName;
+  if (typeof linuxInstallName !== 'string' || !/^[a-z0-9][a-z0-9.-]*$/.test(linuxInstallName)) {
+    throw new Error('Linux executableName must be a lowercase, space-free install name.');
+  }
+  const displayName = manifest.build?.productName || manifest.productName || manifest.name;
   const builder = options.builder || require('electron-builder');
   const output = path.join(project, 'dist');
   await fs.mkdir(output, { recursive: true });
@@ -68,6 +73,11 @@ async function buildLinux(args = [], options = {}) {
           targets: builder.Platform.LINUX.createTarget(target, builder.Arch[arch]),
           publish: 'never',
           config: {
+            // Chromium's setuid sandbox cannot launch from a path containing
+            // spaces on Ubuntu. Keep the Linux install directory space-free,
+            // while retaining the user-facing product name in the desktop menu.
+            productName: linuxInstallName,
+            linux: { desktop: { Name: displayName } },
             directories: { output: targetOutput },
             ...(target === 'pacman' ? { pacman: { compression: 'xz' } } : {}),
             afterPack: async context => {
