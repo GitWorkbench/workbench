@@ -145,8 +145,9 @@ describe('request browsing and creation', () => {
   });
   it('selects other requests without a current-branch default and handles dates omitted from provider results', async () => {
     mocks.api.getPullRequestContext.mockResolvedValue(context({ pullRequests: [request({ createdAt: undefined, updatedAt: undefined })] }));
-    render(<PullRequestsModal />); await ready(); expect(screen.getByText('1 open request')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: /Improve workflow/ })); expect(screen.getByRole('button', { name: 'Review changes, conversation & CI' })).toBeVisible();
+    render(<PullRequestsModal />); await ready(); expect(await screen.findByText('1 open request')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: /Improve workflow/ }));
+    expect(await screen.findByRole('button', { name: 'Review changes, conversation & CI' })).toBeVisible();
   });
   it.each(['github', 'gitlab', 'bitbucket', 'gitea'] as const)('pushes and creates a %s request with the edited fields', async provider => {
     mocks.api.getPullRequestContext.mockResolvedValue(context({ provider })); render(<PullRequestsModal />); await screen.findByRole('heading', { name: provider === 'gitlab' ? 'Merge Requests' : 'Pull Requests' });

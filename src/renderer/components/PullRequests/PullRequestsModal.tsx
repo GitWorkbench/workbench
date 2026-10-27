@@ -134,7 +134,6 @@ export function PullRequestsModal() {
   useEffect(() => {
     if (!context) return;
     setTargetBranch(context.defaultBranch || '');
-    setSelectedRequestId(null);
   }, [context?.remoteName, context?.provider, context?.defaultBranch]);
 
   useEffect(() => {
@@ -163,6 +162,7 @@ export function PullRequestsModal() {
 
   const selectRemote = (remoteName: string) => {
     setSelectedRemote(remoteName);
+    setSelectedRequestId(null);
     setContext(null);
     setProviderOverride(undefined);
     setMessage('');
@@ -172,6 +172,7 @@ export function PullRequestsModal() {
   const selectProvider = (nextProvider: PullRequestProvider | '') => {
     const value = nextProvider || undefined;
     setProviderOverride(value);
+    setSelectedRequestId(null);
     setContext(null);
     setMessage('');
     if (selectedRemote) void loadContext(selectedRemote, value, remotes);
