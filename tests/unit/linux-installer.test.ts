@@ -201,7 +201,7 @@ linuxInstallerDescribe('Linux one-line installer', () => {
 
     expect(output).toContain('Installed the AppImage for this user at ' + installed);
     expect(await fs.readFile(installed, 'utf8')).toBe('portable appimage');
-    expect(await fs.realpath(path.join(home, '.local/bin/git-workbench'))).toBe(installed);
+    expect(await fs.realpath(path.join(home, '.local/bin/git-workbench'))).toBe(await fs.realpath(installed));
     expect(await fs.readFile(desktopFile, 'utf8')).toContain('Exec=\"' + installed + '\" %U');
     expect(await callLog()).toBe('');
   });
