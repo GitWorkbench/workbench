@@ -85,6 +85,12 @@ const createMockApi = (): Api & GitWorkbenchApi => {
   ];
 
   const mock: Record<string, unknown> = {
+    listPlaygroundSessions: async () => ({ sessions: [], warnings: [] }),
+    createPlaygroundSession: async () => { throw new Error('Git Playground requires the desktop app and system Git.'); },
+    checkPlaygroundSession: async () => { throw new Error('Git Playground requires the desktop app and system Git.'); },
+    getPlaygroundLab: async () => { throw new Error('Guided Git lessons require the desktop app and system Git.'); },
+    runPlaygroundCommand: async () => { throw new Error('Guided Git lessons require the desktop app and system Git.'); },
+    savePlaygroundFile: async () => { throw new Error('Guided Git lessons require the desktop app and system Git.'); },
     getAppUpdateState: async () => ({
       status: 'unsupported',
       currentVersion: APP_VERSION,

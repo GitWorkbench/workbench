@@ -84,6 +84,7 @@ interface AppState {
   terminalDrawerHeight: number;
   shortcutsModalOpen: boolean;
   usageGuideOpen: boolean;
+  playgroundOpen: boolean;
   gitFlowModalOpen: boolean;
   bisectModalOpen: boolean;
   reflogModalOpen: boolean;
@@ -249,6 +250,7 @@ export const useApp = create<AppStore>((set, get) => ({
   terminalDrawerHeight: 220,
   shortcutsModalOpen: false,
   usageGuideOpen: false,
+  playgroundOpen: false,
   gitFlowModalOpen: false,
   bisectModalOpen: false,
   reflogModalOpen: false,

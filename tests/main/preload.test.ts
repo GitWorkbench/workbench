@@ -9,6 +9,12 @@ vi.mock('electron', () => ({
 // This is the expected public bridge contract, independent of implementation.
 // Changes to a route or its argument order must be reviewed as API changes.
 const routes = `
+listPlaygroundSessions playground:list 0
+createPlaygroundSession playground:create 1
+checkPlaygroundSession playground:check 1
+getPlaygroundLab playground:lab 1
+runPlaygroundCommand playground:command 2
+savePlaygroundFile playground:file 4
 getAiSettings ai:settings-get 1
 importAiSettings ai:settings-import 2
 saveAiSettings ai:settings-save 2
@@ -207,7 +213,7 @@ beforeEach(() => { mock.invoke.mockReset().mockResolvedValue({ ok: true }); mock
 
 describe('typed preload routes', () => {
   it.each(routes)('$name sends arguments unchanged to $channel', async ({ name, channel, count }) => {
-    const args = [{ value: 'one' }, ['two'], { value: 'three' }].slice(0, count);
+    const args = [{ value: 'one' }, ['two'], { value: 'three' }, { value: 'four' }].slice(0, count);
     await expect(api[name](...args)).resolves.toEqual({ ok: true });
     expect(mock.invoke).toHaveBeenCalledExactlyOnceWith(channel, ...args);
   });

@@ -11,6 +11,7 @@ vi.mock('../../src/renderer/lib/api', () => ({ api: { fetch: mock.fetch, getSetu
 
 // App tests exercise orchestration. Each child has its own interaction suite.
 const children = [
+  ['Playground', 'Playground'],
   ['TabBar', 'TabBar'], ['Toolbar', 'Toolbar'], ['Sidebar', 'Sidebar'], ['CommitGraph', 'CommitGraph'],
   ['CommitDetailPanel', 'CommitDetailPanel'], ['DiffViewer', 'DiffViewer'], ['StatusBar', 'StatusBar'], ['Home', 'Home'],
   ['Repository', 'LfsManagerModal'], ['Repository', 'SparseCheckoutModal'], ['Settings', 'SettingsPage'],
@@ -116,7 +117,7 @@ describe('first-launch guide', () => {
     localStorage.setItem('git-workbench:guide_completed', 'true'); await advance(450); expect(mock.app.openUsageGuide).not.toHaveBeenCalled(); second.unmount();
     render(<App />); await settle(); await finishStartup(); expect(mock.app.openUsageGuide).not.toHaveBeenCalled();
   });
-  it.each(['usageGuideOpen', 'conflictedFileToResolve', 'rebaseModalBaseCommit', 'createRepoModalOpen', 'commandPaletteOpen', 'pullRequestsModalOpen', 'commitSplitOpen', 'branchStackOpen', 'restorePointsOpen',
+  it.each(['usageGuideOpen', 'playgroundOpen', 'conflictedFileToResolve', 'rebaseModalBaseCommit', 'createRepoModalOpen', 'commandPaletteOpen', 'pullRequestsModalOpen', 'commitSplitOpen', 'branchStackOpen', 'restorePointsOpen',
     'resolutionMemoryOpen', 'rangeComparisonOpen', 'lfsManagerOpen', 'sparseCheckoutOpen', 'gitFlowModalOpen', 'bisectModalOpen', 'reflogModalOpen', 'changelogModalOpen', 'worktreesModalOpen', 'simulateMergeBranch', 'tagModalCommit', 'addRemoteModalOpen', 'shortcutsModalOpen', 'isOpeningRepo'])('does not cover the active %s workflow', async field => {
     mock.app[field] = true; render(<App />); await settle(); await finishStartup(); expect(mock.app.openUsageGuide).not.toHaveBeenCalled();
   });

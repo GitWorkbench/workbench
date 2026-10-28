@@ -41,6 +41,7 @@ import { PullRequestsModal } from './components/PullRequests/PullRequestsModal';
 import { ToastContainer } from './components/Common/ToastContainer';
 import { AppUpdateNotice } from './components/Updates/AppUpdateNotice';
 import { SetupPage } from './components/Onboarding/SetupPage';
+import { Playground } from './components/Playground/Playground';
 
 export function App() {
   const activeTab = useApp((s) => s.activeTab);
@@ -55,7 +56,7 @@ export function App() {
   const setupCompleted = useSettings(s => s.setupCompleted);
   const setupOpen = isReady && setupCompleted === false;
   const updatePromptBlocked = useApp(s => [
-    s.isOpeningRepo, s.usageGuideOpen, s.conflictedFileToResolve, s.rebaseModalBaseCommit,
+    s.isOpeningRepo, s.usageGuideOpen, s.playgroundOpen, s.conflictedFileToResolve, s.rebaseModalBaseCommit,
     s.createRepoModalOpen, s.commandPaletteOpen, s.pullRequestsModalOpen, s.commitSplitOpen,
     s.branchStackOpen, s.restorePointsOpen, s.resolutionMemoryOpen, s.rangeComparisonOpen,
     s.lfsManagerOpen, s.sparseCheckoutOpen, s.gitFlowModalOpen, s.bisectModalOpen,
@@ -103,7 +104,7 @@ export function App() {
     const timer = setTimeout(() => {
       const state = useApp.getState();
       const activeDialogs = [
-        state.usageGuideOpen, state.conflictedFileToResolve, state.rebaseModalBaseCommit,
+        state.usageGuideOpen, state.playgroundOpen, state.conflictedFileToResolve, state.rebaseModalBaseCommit,
         state.createRepoModalOpen, state.commandPaletteOpen, state.pullRequestsModalOpen,
         state.commitSplitOpen, state.branchStackOpen, state.restorePointsOpen,
         state.resolutionMemoryOpen, state.rangeComparisonOpen, state.lfsManagerOpen,
@@ -180,7 +181,7 @@ export function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (useSettings.getState().setupCompleted === false) return;
-      if (useApp.getState().usageGuideOpen) return;
+      if (useApp.getState().usageGuideOpen || useApp.getState().playgroundOpen) return;
       // The merge editor owns shortcuts while a draft is open.
       if (useApp.getState().conflictedFileToResolve) return;
       const isMod = e.ctrlKey || e.metaKey;
@@ -234,6 +235,7 @@ export function App() {
   return (
     <div className="h-full flex flex-col bg-base overflow-hidden border border-edge/50">
       <TabBar />
+      {isReady && !setupOpen && <Playground />}
       {setupOpen ? <SetupPage onComplete={openUsageGuide} /> : isSettingsOpen ? (
         <SettingsPage />
       ) : homeOpen || !activeTab ? (

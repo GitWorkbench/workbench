@@ -7,6 +7,8 @@ import { spawn, exec } from 'node:child_process';
 import simpleGit from 'simple-git';
 import { generateCommitMessage, explainCodeChanges } from './ai';
 import { getAiSettings, saveAiSettings, getSetupComplete, completeSetup } from './ai-settings';
+import { listPlaygroundSessions, createPlaygroundSession, checkPlaygroundSession } from './playground';
+import { getPlaygroundLab, runPlaygroundCommand, savePlaygroundFile } from './playground-lab';
 import { gitWithEnvironment } from './git/advanced-process';
 import {
   GitWorkbenchApi,
@@ -361,6 +363,13 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
   }
 
   handle('repo:recent', async () => readRecent());
+  const playgroundDirectory = () => path.join(app.getPath('userData'), 'playground');
+  handle('playground:list', async () => listPlaygroundSessions(playgroundDirectory()));
+  handle('playground:create', async challengeId => createPlaygroundSession(playgroundDirectory(), challengeId));
+  handle('playground:check', async id => checkPlaygroundSession(playgroundDirectory(), id));
+  handle('playground:lab', async id => getPlaygroundLab(playgroundDirectory(), id));
+  handle('playground:command', async (id, command) => runPlaygroundCommand(playgroundDirectory(), id, command));
+  handle('playground:file', async (id, file, content, expected) => savePlaygroundFile(playgroundDirectory(), id, file, content, expected));
   const dashboardDirectory = () => path.join(app.getPath('userData'), 'dashboard');
   const knownRepository = async (repo: string) => {
     if (typeof repo !== 'string' || ![...readRecent(), ...await pinnedRepositories(dashboardDirectory())].includes(repo)) throw new Error('Open this repository once before adding it to the dashboard.');

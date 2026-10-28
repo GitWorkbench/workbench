@@ -663,8 +663,42 @@ export interface TerminalApi {
   onTerminalEvent(cb: (event: TerminalEvent) => void): () => void;
 }
 
+export type PlaygroundChallengeId = 'git-basics' | 'first-commit' | 'unstage' | 'branches' | 'merge-branches' | 'merge-conflict' | 'stash-changes' | 'cherry-pick' | 'lost-commit' | 'bisect';
+export interface PlaygroundSession {
+  id: string;
+  challengeId: PlaygroundChallengeId;
+  path: string;
+  createdAt: string;
+  completedAt?: string;
+}
+export interface PlaygroundProgress {
+  session: PlaygroundSession;
+  checks: Array<{ label: string; passed: boolean }>;
+  observation: string;
+}
+export interface PlaygroundApi {
+  listPlaygroundSessions(): Promise<{ sessions: PlaygroundSession[]; warnings: string[] }>;
+  createPlaygroundSession(challengeId: PlaygroundChallengeId): Promise<PlaygroundSession>;
+  checkPlaygroundSession(id: string): Promise<PlaygroundProgress>;
+  getPlaygroundLab(id: string): Promise<PlaygroundLabSnapshot>;
+  runPlaygroundCommand(id: string, command: string): Promise<PlaygroundCommandResult>;
+  savePlaygroundFile(id: string, file: string, content: string, expectedContent: string | null): Promise<PlaygroundLabSnapshot>;
+}
+export interface PlaygroundLabSnapshot {
+  session: PlaygroundSession;
+  branch: string;
+  changed: string[];
+  staged: string[];
+  conflicts: string[];
+  files: Array<{ path: string; content: string; exists: boolean }>;
+  commits: Array<{ hash: string; subject: string }>;
+  steps: string[];
+  progress: PlaygroundProgress;
+}
+export interface PlaygroundCommandResult { ok: boolean; output: string; snapshot: PlaygroundLabSnapshot }
+
 // IPC API exposed via contextBridge
-export interface GitWorkbenchApi extends AdvancedGitApi, TerminalApi {
+export interface GitWorkbenchApi extends AdvancedGitApi, TerminalApi, PlaygroundApi {
   getAiSettings(target?: AiPreferences): Promise<AiSettingsSnapshot>;
   importAiSettings(config: AiPreferences, apiKey: string): Promise<AiSettingsSnapshot>;
   saveAiSettings(config: AiPreferences, apiKey?: string): Promise<AiSettingsSnapshot>;
@@ -679,6 +713,8 @@ export interface GitWorkbenchApi extends AdvancedGitApi, TerminalApi {
   openExternal(url: string): Promise<void>;
   onAppUpdateState(cb: (state: AppUpdateState) => void): () => void;
   openRepo(path: string): Promise<{ ok: boolean; repo?: RepoSummary; error?: string }>;
+  openRepoDialog(): Promise<{ ok: boolean; repo?: RepoSummary; error?: string }>;
+  setActiveRepo(path: string | null): void;
   initRepo(opts: InitRepoOptions): Promise<{ ok: boolean; repo?: RepoSummary; error?: string }>;
   selectDirectory(title?: string): Promise<{ ok: boolean; path?: string; error?: string }>;
   recentRepos(): Promise<string[]>;

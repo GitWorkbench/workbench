@@ -28,6 +28,14 @@ describe('native renderer bridge', () => {
 });
 
 describe('browser preview API', () => {
+  it('shows an empty Playground history and refuses fake filesystem operations', async () => {
+    expect(await client.api.listPlaygroundSessions()).toEqual({ sessions: [], warnings: [] });
+    await expect(client.api.createPlaygroundSession('first-commit')).rejects.toThrow('requires the desktop app');
+    await expect(client.api.checkPlaygroundSession('attempt')).rejects.toThrow('requires the desktop app');
+    await expect(client.api.getPlaygroundLab('attempt')).rejects.toThrow('require the desktop app');
+    await expect(client.api.runPlaygroundCommand('attempt', 'git status')).rejects.toThrow('require the desktop app');
+    await expect(client.api.savePlaygroundFile('attempt', 'file', 'text', null)).rejects.toThrow('require the desktop app');
+  });
   it('supports a browser-only setup marker but refuses to pretend that AI keys were saved securely', async () => {
     localStorage.removeItem('git-workbench:setup-completed');
     expect(await client.api.getSetupComplete()).toBe(false);

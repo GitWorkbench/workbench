@@ -60,6 +60,7 @@ An explicit request to skip validation applies to that task only and must be rep
 | Hosting providers | GitHub/GitLab/Bitbucket/Gitea context, scoped server connections, credential storage, sign-in device flow, review files/comments/checks, request creation/retargeting, review worktrees |
 | Repository size features | Sparse checkout preview and restore, ignored-file protection, LFS configuration, bounded transfers and cancellation |
 | Main process | Electron lifecycle, window commands, updater states/errors, preload contract, IPC argument routing, mutation serialization, process timeouts/output bounds |
+| Git Playground | Ten real Git lesson setups and solutions, command grammar and serialization, editor stale-write checks, incorrect solutions, durable milestones/completion, input/path validation, storage failures, coaching/quizzes, history, drafts, tracker and keyboard navigation |
 | Interface | Home dashboard, About/updates, guides, typography/settings, navigation, branch sidebar, graph canvas/hover/context actions, commit details, diffs, command palette, terminal and workflow dialogs |
 
 Renderer tests use jsdom and React Testing Library. Feature components normally keep their real rendering and interaction logic while mocking the Electron API boundary. The conflict editor suites use actual CodeMirror with DOM geometry shims. App orchestration tests replace child workspaces to isolate startup, shortcuts, and navigation.

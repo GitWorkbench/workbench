@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const app: Record<string, any> = {}, home: Record<string, any> = {};
-  return { app, home, openSettings: vi.fn(), openExternal: vi.fn(), useApp: Object.assign((selector: (state: any) => any) => selector(app), { getState: () => app }) };
+  return { app, home, openSettings: vi.fn(), openExternal: vi.fn(), useApp: Object.assign((selector: (state: any) => any) => selector(app), { getState: () => app, setState: vi.fn() }) };
 });
 vi.mock('../../src/renderer/store', () => ({ useApp: mocks.useApp }));
 vi.mock('../../src/renderer/store/settings', () => ({ useSettings: { getState: () => ({ openSettings: mocks.openSettings }) } }));
@@ -71,6 +71,7 @@ describe('Home workspace hub', () => {
     fireEvent.click(screen.getByRole('button', { name: /Connect your providers/ })); expect(mocks.openSettings).toHaveBeenCalledWith('providers');
     fireEvent.click(screen.getByRole('button', { name: /Preferences/ })); expect(mocks.openSettings).toHaveBeenCalledWith();
     fireEvent.click(screen.getByRole('button', { name: /Explore Git Workbench/ })); expect(mocks.app.openUsageGuide).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: /Git Playground/ })); expect(mocks.useApp.setState).toHaveBeenCalledWith({ playgroundOpen: true, usageGuideOpen: false });
   });
   it('deduplicates recent repositories, excludes pins, resumes open projects and pins/removes other recents', () => {
     mocks.app.recentRepos = ['/work/pinned', '/work/first', '/work/first', 'C:\\work\\second'];

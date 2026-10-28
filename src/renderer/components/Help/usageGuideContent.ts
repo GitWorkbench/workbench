@@ -519,5 +519,20 @@ export const guideTopics: GuideTopic[] = [
     caution: 'Commands execute with your local account’s access. Destructive or remote-changing commands need the same care as in your normal terminal; do not assume they receive the app’s restore-point protections.',
     actions: [{ id: 'palette', label: 'Open command palette' }, { id: 'terminal', label: 'Open terminal' }, { id: 'shortcuts', label: 'Show shortcuts' }],
     related: ['home-workspaces', 'commit-graph', 'sync-remotes', 'preferences']
+  },
+  {
+    id: 'playground', category: 'start', title: 'Practice with Git Playground',
+    summary: 'Learn Git through ten guided lessons with real commands, practice files, live state, hints, and understanding checks.',
+    minutes: 5, level: 'Essentials', keywords: ['playground', 'practice', 'learn', 'challenge', 'sandbox', 'game'],
+    location: 'Home → Quick access → Git Playground · Command palette → Git Playground',
+    prerequisites: ['The desktop app and system Git.'],
+    steps: [
+      { title: 'Follow the learning path', description: 'Begin with status, history, edits, and staging. Continue through branches, merges, cherry-picking, conflicts, stashing, recovery, and bisect. Each lesson explains the idea before the task.' },
+      { title: 'Practice at your own desk', description: 'Start guided lesson creates a real local repository. Suggested commands fill the prompt without running. Edit and save the practice files, run Git, and watch working files move into staging and history. Hints explain the next step.' },
+      { title: 'Check your understanding', description: 'Git state verifies your work. Finish the explained quiz, then continue to the next lesson. Milestones and completion survive restarts. Restart guided lesson creates another folder and preserves the old one.' },
+      { title: 'Try the full workspace', description: 'Open full workspace uses the normal graph, staging, merge editor, reflog, terminal, and bisect tools. A challenge tracker offers Check progress and a way back to the instructions.' }
+    ],
+    tips: ['Save or revert editor drafts before running a Git command or leaving the desk. Up/down arrows recall command history. The guided prompt accepts lesson Git commands and never runs shell programs or network operations.', 'In the bisect lesson, answer.txt is read-only and shows the current revision’s result: 42 is good, 41 is bad. Verify completion before resetting bisect.', 'No account or AI key is needed. Practice folders remain available until you remove them yourself.'],
+    related: ['staging-commits', 'conflict-editor', 'reflog', 'bisect']
   }
 ];

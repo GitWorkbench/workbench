@@ -84,6 +84,7 @@ describe('built-in command actions', () => {
     render(<CommandPalette />); selectText(title); expect(mock.state[name]).toHaveBeenCalledWith(...args);
   });
   it.each([
+    ['Git Playground…', { playgroundOpen: true, usageGuideOpen: false }],
     ['Split Commit…', { commitSplitOpen: true }], ['Stacked Branches & Requests…', { branchStackOpen: true }], ['Git LFS Manager…', { lfsManagerOpen: true }], ['Sparse Checkout…', { sparseCheckoutOpen: true }],
     ['Restore Points…', { restorePointsOpen: true }], ['Conflict Resolution Memory…', { resolutionMemoryOpen: true }], ['Rebase & Rewrite Comparison…', { rangeComparisonOpen: true, rangeComparisonId: null }]
   ])('%s opens the corresponding panel state', (title, state) => {

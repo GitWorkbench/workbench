@@ -46,6 +46,7 @@ Inspired by modern visual Git workflows, Git Workbench combines the responsivene
 | Feature | Where to open it |
 | --- | --- |
 | Pinned repository dashboard with changes, conflicts, ahead/behind and open requests | **Home → Pinned repositories** |
+| [Git Playground](docs/git-playground.md): ten guided Git lessons with real commands, editable files, live staging/history, hints, and quizzes | **Home → Quick access → Git Playground** |
 | Separate PR/MR review worktrees | Hosted review → **Open in worktree…** |
 | Visual commit splitting by file or hunk, with preview and restore point | Commit context menu or **Actions → Split Commit…** |
 | Stacked branch links, isolated restack previews and request retargeting | **Actions → Stacked Branches & Requests…** |

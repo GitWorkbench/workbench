@@ -8,138 +8,15 @@ const call = <T>(channel: string, ...args: unknown[]): Promise<T> =>
     return result as T;
   });
 
-export type Api = import('../shared/types').AdvancedGitApi & import('../shared/types').TerminalApi & {
-  getAppUpdateState(): Promise<import('../shared/types').AppUpdateState>;
-  checkForAppUpdates(): Promise<import('../shared/types').AppUpdateState>;
-  downloadAppUpdate(): Promise<import('../shared/types').AppUpdateState>;
-  installAppUpdate(): Promise<boolean>;
-  openAppReleasePage(): Promise<void>;
-  openExternal(url: string): Promise<void>;
-  onAppUpdateState(cb: (state: import('../shared/types').AppUpdateState) => void): () => void;
-  openRepo(path: string): Promise<{ ok: boolean; repo?: { path: string; name: string }; error?: string }>;
-  openRepoDialog(): Promise<{ ok: boolean; repo?: { path: string; name: string }; error?: string }>;
-  initRepo(opts: import('../shared/types').InitRepoOptions): Promise<{ ok: boolean; repo?: { path: string; name: string }; error?: string }>;
-  selectDirectory(title?: string): Promise<{ ok: boolean; path?: string; error?: string }>;
-  recentRepos(): Promise<string[]>;
-  removeRecentRepo(path: string): Promise<void>;
-  getGitConfig(scope?: 'local' | 'global'): Promise<{ name: string; email: string }>;
-  setGitConfig(config: { name?: string; email?: string; scope?: 'local' | 'global' }): Promise<{ ok: boolean; error?: string }>;
-  getStatus(): Promise<import('../shared/types').GitStatus>;
-  getLog(limit?: number): Promise<import('../shared/types').GraphResult>;
-  getReflog(): Promise<import('../shared/types').ReflogEntry[]>;
-  createRecoveryBranch(hash: string, branchName?: string): Promise<{ ok: boolean; branchName?: string; error?: string }>;
-  restoreHeadFromReflog(hash: string): Promise<{ ok: boolean; branchName?: string; backupBranch?: string; error?: string }>;
-  getBranches(): Promise<{ local: import('../shared/types').BranchInfo[]; remote: import('../shared/types').BranchInfo[] }>;
-  getStashes(): Promise<import('../shared/types').StashInfo[]>;
-  getCommitDetail(hash: string): Promise<import('../shared/types').CommitDetail | null>;
-  getFileDiff(
-    hash: string,
-    filePath: string,
-    opts?: { staged?: boolean; worktree?: boolean }
-  ): Promise<import('../shared/types').FileDiff | null>;
-  getStagedDiff(): Promise<{ ok: boolean; diff: string; error?: string }>;
-  generateAiCommitMessage(params?: Partial<import('../shared/types').AiCommitConfig>): Promise<{ ok: boolean; message?: string; error?: string }>;
-  stageFiles(paths: string[]): Promise<unknown>;
-  unstageFiles(paths: string[]): Promise<unknown>;
-  stageAll(): Promise<unknown>;
-  unstageAll(): Promise<unknown>;
-  discardFile(path: string): Promise<unknown>;
-  commit(message: string, author?: { name: string; email: string }): Promise<{ ok: boolean }>;
-  pull(): Promise<{ ok: boolean }>;
-  push(): Promise<{ ok: boolean }>;
-  fetch(remote?: string): Promise<{ ok: boolean }>;
-  rebaseBranch(upstream: string): Promise<{ ok: boolean }>;
-  mergeBranch(name: string): Promise<{ ok: boolean }>;
-  checkoutBranch(name: string): Promise<{ ok: boolean }>;
-  createBranch(name: string, atHash?: string): Promise<{ ok: boolean }>;
-  deleteBranch(name: string, opts?: { local?: boolean; remote?: boolean; remoteName?: string; force?: boolean }): Promise<{ ok: boolean }>;
-  renameBranch(name: string, newName: string): Promise<{ ok: boolean }>;
-  checkoutCommit(hash: string): Promise<{ ok: boolean }>;
-  createWorktree(hash: string, worktreePath: string): Promise<{ ok: boolean; error?: string }>;
-  resetBranchTo(hash: string, mode: 'soft' | 'mixed' | 'hard'): Promise<{ ok: boolean }>;
-  editCommitMessage(hash: string, message: string, expected?: import('../shared/types').CommitRewordSnapshot): Promise<{ ok: boolean; error?: string }>;
-  recomposeCommitMessage(hash: string, config?: Partial<import('../shared/types').AiCommitConfig>): Promise<import('../shared/types').AiCommitDraft>;
-  explainBranchChanges(base: string, tip: string, config?: Partial<import('../shared/types').AiCommitConfig>): Promise<import('../shared/types').BranchChangesExplanation>;
-  revertCommit(hash: string): Promise<{ ok: boolean }>;
-  dropCommit(hash: string): Promise<{ ok: boolean }>;
-  applyPatchCommit(hash: string): Promise<{ ok: boolean }>;
-  moveCommitDown(hash: string): Promise<{ ok: boolean }>;
-  setUpstream(branch: string, upstream: string): Promise<{ ok: boolean }>;
-  pushSetUpstream(branch: string): Promise<{ ok: boolean }>;
-  stash(message?: string): Promise<{ ok: boolean }>;
-  stashPop(index?: number): Promise<{ ok: boolean }>;
-  stashApply(index?: number): Promise<{ ok: boolean }>;
-  stashDrop(index?: number): Promise<{ ok: boolean }>;
-  stageHunk(filePath: string, hunkIndex: number): Promise<{ ok: boolean; error?: string }>;
-  unstageHunk(filePath: string, hunkIndex: number): Promise<{ ok: boolean; error?: string }>;
-  discardHunk(filePath: string, hunkIndex: number): Promise<{ ok: boolean; error?: string }>;
-  stageLines(filePath: string, hunkIndex: number, lineIndices: number[]): Promise<{ ok: boolean; error?: string }>;
-  unstageLines(filePath: string, hunkIndex: number, lineIndices: number[]): Promise<{ ok: boolean; error?: string }>;
-  discardLines(filePath: string, hunkIndex: number, lineIndices: number[]): Promise<{ ok: boolean; error?: string }>;
-  revertHunk(hash: string, filePath: string, hunkIndex: number): Promise<{ ok: boolean }>;
-  blame(filePath: string): Promise<string>;
-  getBlame(filePath: string): Promise<import('../shared/types').BlameLine[]>;
-  getFileHistory(filePath: string): Promise<import('../shared/types').FileHistoryEntry[]>;
-  getConflictFile(filePath: string): Promise<import('../shared/types').ConflictFileParsed>;
-  resolveConflictFile(filePath: string, content: string, options?: import('../shared/types').ConflictResolutionOptions): Promise<{ ok: boolean; error?: string }>;
-  getRepoOperationState(): Promise<import('../shared/types').RepoOperationState>;
-  abortOperation(): Promise<{ ok: boolean; error?: string }>;
-  continueOperation(): Promise<{ ok: boolean; error?: string }>;
-  cherryPick(hash: string): Promise<{ ok: boolean; hasConflicts?: boolean; error?: string }>;
-  getCommitsForRebase(baseHash: string): Promise<import('../shared/types').RebaseStep[]>;
-  executeInteractiveRebase(baseHash: string, steps: import('../shared/types').RebaseStep[]): Promise<{ ok: boolean; hasConflicts?: boolean; error?: string }>;
-  getTags(): Promise<import('../shared/types').TagInfo[]>;
-  createTag(name: string, commitHash?: string, message?: string): Promise<{ ok: boolean; error?: string }>;
-  deleteTag(name: string, deleteRemote?: boolean, remoteName?: string): Promise<{ ok: boolean; error?: string }>;
-  pushTag(name: string, remoteName?: string): Promise<{ ok: boolean; error?: string }>;
-  getRemotes(): Promise<import('../shared/types').RemoteInfo[]>;
-  getPullRequestCredentialStatus(): Promise<import('../shared/types').PullRequestCredentialStatus>;
-  savePullRequestCredential(provider: import('../shared/types').PullRequestProvider, credential: import('../shared/types').PullRequestCredential): Promise<{ ok: boolean; error?: string }>;
-  removePullRequestCredential(provider: import('../shared/types').PullRequestProvider, serverUrl?: string): Promise<{ ok: boolean; error?: string }>;
-  testGitLabConnection(serverUrl: string, token?: string): Promise<{ ok: boolean; username?: string; error?: string }>;
-  testGiteaConnection(serverUrl: string, token?: string): Promise<{ ok: boolean; username?: string; error?: string }>;
-  getPullRequestContext(remoteName?: string, providerOverride?: import('../shared/types').PullRequestProvider): Promise<import('../shared/types').PullRequestContext>;
-  createHostedPullRequest(params: { remoteName: string; title: string; description: string; targetBranch: string; providerOverride?: import('../shared/types').PullRequestProvider }): Promise<{ ok: boolean; pullRequest?: import('../shared/types').HostedPullRequest; error?: string }>;
-  addRemote(name: string, url: string): Promise<{ ok: boolean; error?: string }>;
-  renameRemote(oldName: string, newName: string): Promise<{ ok: boolean; error?: string }>;
-  setRemoteUrl(name: string, url: string): Promise<{ ok: boolean; error?: string }>;
-  removeRemote(name: string): Promise<{ ok: boolean; error?: string }>;
-  pruneRemote(name: string): Promise<{ ok: boolean; error?: string }>;
-  getSubmodules(): Promise<import('../shared/types').SubmoduleInfo[]>;
-  updateSubmodules(path?: string): Promise<{ ok: boolean; error?: string }>;
-  getWorktrees(): Promise<import('../shared/types').WorktreeInfo[]>;
-  removeWorktree(worktreePath: string, force?: boolean): Promise<{ ok: boolean; error?: string }>;
-  openTerminal(): Promise<{ ok: boolean; error?: string }>;
-  runCommand(command: string): Promise<{ ok: boolean; stdout?: string; stderr?: string; exitCode?: number; error?: string }>;
-  openInEditor(filePath: string): Promise<{ ok: boolean; error?: string }>;
-  setActiveRepo(path: string | null): void;
-  getGitFlowConfig(): Promise<import('../shared/types').GitFlowConfig>;
-  initGitFlow(config?: Partial<import('../shared/types').GitFlowConfig>): Promise<{ ok: boolean; error?: string }>;
-  startGitFlowBranch(params: import('../shared/types').GitFlowStartParams): Promise<{ ok: boolean; branchName?: string; error?: string }>;
-  finishGitFlowBranch(params: import('../shared/types').GitFlowFinishParams): Promise<{ ok: boolean; error?: string }>;
-  compareCommits(baseHash: string, targetHash: string): Promise<import('../shared/types').ComparisonResult | null>;
-  getComparisonFileDiff(baseHash: string, targetHash: string, filePath: string): Promise<import('../shared/types').FileDiff | null>;
-  getStashDetail(index: number): Promise<import('../shared/types').StashDetail | null>;
-  getStashFileDiff(index: number, filePath: string): Promise<import('../shared/types').FileDiff | null>;
-  applyStashFile(index: number, filePath: string): Promise<{ ok: boolean; error?: string }>;
-  simulateMerge(targetBranch: string): Promise<import('../shared/types').MergeSimulationResult>;
-  explainChanges(params: { diffText?: string; commitHash?: string; config?: Partial<import('../shared/types').AiCommitConfig> }): Promise<{ ok: boolean; explanation?: string; error?: string }>;
-  startBisect(badCommit: string, goodCommit: string): Promise<{ ok: boolean; state?: import('../shared/types').BisectState; error?: string }>;
-  stepBisect(verdict: 'good' | 'bad' | 'skip'): Promise<{ ok: boolean; state?: import('../shared/types').BisectState; error?: string }>;
-  resetBisect(): Promise<{ ok: boolean; error?: string }>;
-  getBisectState(): Promise<import('../shared/types').BisectState>;
-  generateChangelog(fromRef?: string, toRef?: string): Promise<import('../shared/types').ChangelogResult>;
-  exportPatch(commitHash: string, outputPath: string): Promise<{ ok: boolean; error?: string }>;
-  applyPatch(patchPath: string): Promise<{ ok: boolean; error?: string }>;
-  minimizeWindow(): Promise<boolean>;
-  maximizeWindow(): Promise<boolean>;
-  closeWindow(): Promise<boolean>;
-  isWindowMaximized(): Promise<boolean>;
-  onMaximizeChange(cb: (isMax: boolean) => void): () => void;
-  restartApp(): Promise<boolean>;
-};
+export type Api = import('../shared/types').GitWorkbenchApi;
 
 const api: Api = {
+  listPlaygroundSessions: () => call('playground:list'),
+  createPlaygroundSession: id => call('playground:create', id),
+  checkPlaygroundSession: id => call('playground:check', id),
+  getPlaygroundLab: id => call('playground:lab', id),
+  runPlaygroundCommand: (id, command) => call('playground:command', id, command),
+  savePlaygroundFile: (id, file, content, expected) => call('playground:file', id, file, content, expected),
   getGitHubSignInState: () => call('github-auth:get'),
   startGitHubSignIn: () => call('github-auth:start'),
   cancelGitHubSignIn: id => call('github-auth:cancel', id),

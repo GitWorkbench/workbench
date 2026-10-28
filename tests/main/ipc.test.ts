@@ -36,6 +36,21 @@ beforeEach(async () => {
 afterEach(() => fs.rmSync(mock.home, { recursive: true, force: true }));
 
 describe('main-process repository boundary', () => {
+  it('creates and checks Playground attempts independently of the active repository and validates IPC inputs', async () => {
+    expect(await call('playground:list')).toEqual({ sessions: [], warnings: [] });
+    expect(await call('playground:create', 'bad')).toMatchObject({ __error: expect.stringContaining('known Playground challenge') });
+    expect(await call('playground:check', '../escape')).toMatchObject({ __error: expect.stringContaining('valid Playground attempt') });
+    mock.repo = repo;
+    const session = await call('playground:create', 'first-commit');
+    expect(session.path).toContain(path.join('userdata', 'playground'));
+    expect((await call('playground:check', session.id)).checks.map((item: { passed: boolean }) => item.passed)).toEqual([false, false, true]);
+    expect((await call('playground:list')).sessions).toHaveLength(1); expect(mock.repo).toBe(repo);
+    expect((await call('playground:lab', session.id)).staged).toEqual([]);
+    expect((await call('playground:command', session.id, 'git status')).ok).toBe(true);
+    expect((await call('playground:file', session.id, 'mission.txt', 'edited', 'Welcome to Git Playground.\nI can build a focused commit.\n')).files[0].content).toBe('edited');
+    expect(await call('playground:command', session.id, 'git push')).toMatchObject({ __error: expect.stringContaining('outside this practice prompt') });
+    expect(git(repo, 'log', '-1', '--format=%s')).toBe('initial');
+  });
   it('uses a commit profile for author and committer without changing the repository identity', async () => {
     mock.repo = repo;
     fs.writeFileSync(path.join(repo, 'profile.txt'), 'profile content');

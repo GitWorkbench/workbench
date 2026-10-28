@@ -31,6 +31,9 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 | `src/main/updater.ts` | Update checks, download/install state and release links |
 | `src/main/terminal.ts` | Repository-scoped pseudoterminals, bounded output and session cleanup |
 | `src/main/ai-settings.ts` | Durable AI preferences, encrypted-key resolution and first-run completion |
+| `src/main/playground.ts` | Isolated practice repositories, challenge verification and durable completion |
+| `src/main/playground-lab.ts` | Serialized lesson commands, bounded practice files, live snapshots and milestones |
+| `src/shared/playground-learning.ts` | Guided Git curriculum, explanations, hints and understanding checks |
 | `src/preload/index.ts` | Restricted, typed `contextBridge` API and event subscriptions |
 | `src/shared/types.ts` | Cross-process contracts, including `GitWorkbenchApi` |
 | `src/shared/` | Shared pure logic and public GitHub App metadata |
@@ -89,6 +92,7 @@ Git Workbench is an Electron desktop Git client for Linux, macOS, and Windows. T
 - Preserve resizable commit columns and their visibility/order settings. Keep relative time when the absolute date/time option is off.
 - Use the shared `AppLogo` with square dimensions and preserved aspect ratio. Use the shared loading progress component; keep one progress indicator and respect reduced-motion preferences.
 - Restoring repositories during startup must stay quiet. Clicking the checked-out branch should not open a redundant checkout dialog.
+- Git Playground attempts live inside its application-data folder and use validated IDs. Starting fresh allocates a new repository and preserves previous attempts. Verify real Git state, keep checks scoped to their attempt, reject replaced/symlinked paths, and never execute project scripts or configure a remote during challenge setup. Keep the guided prompt an allowlisted Git argument grammar, serialize operations per attempt, bound file/output sizes, and reject stale editor saves. Record milestones in the main process from successful commands or repository evidence; renderer clicks never award completion.
 - On a new installation, show skippable setup before Explore; existing installations keep their preferences. Do not cover setup with automatic guide or update prompts. Profile identity affects only app commits unless the user explicitly chooses to change global Git configuration. Gravatar preview is optional, debounced, and uses a normalized SHA-256 email identifier with a local fallback.
 - Keep List and Requests as separate sidebar views with independent filters; do not add placeholder Agents navigation. Connected request modals focus on browsing and creation; provider credentials belong in Settings. Sidebar request headings use Merge Requests for GitLab and Pull Requests for GitHub, Bitbucket, or Gitea. Request loading stays scoped to the active repository and selected remote, uses inline errors, and never pushes automatically. AI history actions generate drafts only on request; applying a message requires confirmation, an unchanged branch/HEAD, a clean linear checkout, and a restore point. Preserve file trees and author metadata when rewriting messages.
 - Include accessible labels for icon buttons, visible keyboard focus, keyboard navigation, appropriate dialog focus/Escape behavior, and clear loading, empty, error, and success states.
@@ -152,3 +156,4 @@ Follow a later explicit user request to skip validation for that specific task, 
 - [Gitea connections](docs/gitea-connections.md)
 - [Application identity and data locations](docs/branding.md)
 - [Disposable demonstration repositories](docs/demo-repositories.md)
+- [Git Playground challenges and storage](docs/git-playground.md)
