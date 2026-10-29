@@ -35,6 +35,15 @@ export async function withGit<T>(repoPath: string, fn: (git: SimpleGit) => Promi
 }
 
 export function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message.split('\n').filter(Boolean).slice(-1)[0] || err.message;
-  return String(err);
+  const message = err instanceof Error ? err.message : String(err);
+  const lines = message.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+
+  // Git appends this generic footer after the useful remote failure. Returning
+  // the last line leaves users with no clue whether the remote name, URL, or
+  // credentials caused the operation to fail.
+  if (lines.some(line => /^and the repository exists\.?$/i.test(line))) {
+    return lines.find(line => /^(?:fatal|error):\s*/i.test(line)) ?? lines.at(-2) ?? lines[0];
+  }
+
+  return lines.at(-1) || message;
 }

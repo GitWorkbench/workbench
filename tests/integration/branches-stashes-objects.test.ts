@@ -29,7 +29,7 @@ describe('branch, stash and repository object workflows', () => {
     await fixture.write('feature.txt', 'keep this work\n');
     await fixture.commitAll('Feature work');
     await checkoutBranch(fixture.repo, 'main');
-    await expect(deleteBranchEx(fixture.repo, 'feature', { local: true })).rejects.toThrow('not fully merged');
+    await expect(deleteBranchEx(fixture.repo, 'feature', { local: true })).rejects.toThrow('Branch \'feature\' is not fully merged. Use "force delete" to discard its commits.');
     expect((await getBranches(fixture.repo)).local.some(branch => branch.name === 'feature')).toBe(true);
     await mergeBranch(fixture.repo, 'feature');
     expect(await fixture.read('feature.txt')).toBe('keep this work\n');

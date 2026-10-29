@@ -4,7 +4,7 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { withGit, errorMessage } from './core';
+import { withGit } from './core';
 
 const execFileP = promisify(execFile);
 
@@ -172,7 +172,8 @@ export async function deleteBranchEx(
       try {
         await git.deleteLocalBranch(name, !!opts.force);
       } catch (err) {
-        if (!opts.force && /not fully merged/i.test(errorMessage(err))) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!opts.force && /not fully merged/i.test(message)) {
           throw new Error(`Branch '${name}' is not fully merged. Use "force delete" to discard its commits.`);
         }
         throw err;
