@@ -109,7 +109,7 @@ export function CommandPalette() {
     if (!isOpen) return [];
 
     const list: PaletteItem[] = [
-      { id: 'cmd-playground', category: 'Commands', title: 'Git Playground…', subtitle: 'Ten guided Git lessons with real commands, practice files, and hints', icon: <Target size={14} />, action: () => { useSettings.getState().closeSettings(); useApp.setState({ playgroundOpen: true, usageGuideOpen: false }); } },
+      { id: 'cmd-playground', category: 'Commands', title: 'Git Playground…', subtitle: 'Ten guided Git lessons with real commands, practice files, and hints', icon: <Target size={14} />, action: () => { useSettings.getState().closeSettings(); useApp.getState().openPlayground(); } },
       // 1. Built-in Commands
       {
         id: 'cmd-fetch',

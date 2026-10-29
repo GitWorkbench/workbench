@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Circle, FlaskConical, Loader2, RotateCcw, Trophy, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, FlaskConical, Loader2, RotateCcw, Trophy } from 'lucide-react';
 import { playgroundChallenges } from '../../../shared/playground';
 import { playgroundLessons } from '../../../shared/playground-learning';
 import { PlaygroundLab } from './PlaygroundLab';
@@ -12,6 +12,7 @@ import './playground.css';
 
 export function Playground() {
   const open = useApp(s => s.playgroundOpen), activeRepo = useApp(s => s.activeTab);
+  const tabOpen = useApp(s => s.playgroundTabOpen);
   const home = useApp(s => s.homeOpen), opening = useApp(s => s.isOpeningRepo);
   const settings = useSettings(s => s.isSettingsOpen);
   const [sessions, setSessions] = useState<PlaygroundSession[]>([]);
@@ -20,9 +21,7 @@ export function Playground() {
   const [reports, setReports] = useState<Record<string, PlaygroundProgress>>({});
   const [loading, setLoading] = useState(true), [error, setError] = useState(''), [warnings, setWarnings] = useState<string[]>([]);
   const { busy, run } = useExclusiveTask();
-  const busyRef = useRef(false);
-  busyRef.current = busy || labLocked;
-  const dialog = useRef<HTMLDivElement>(null), alive = useRef(true), toolOpening = useRef(false);
+  const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const [reload, setReload] = useState(0);
   useEffect(() => {
@@ -34,27 +33,9 @@ export function Playground() {
     return () => { current = false; };
   }, [open, activeRepo, reload]);
   useEffect(() => {
-    if (!open) return;
-    const previous = document.activeElement;
-    toolOpening.current = false;
-    dialog.current?.focus();
-    const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault(); event.stopImmediatePropagation();
-        if (!busyRef.current) useApp.setState({ playgroundOpen: false });
-      } else if (event.key === 'Tab') {
-        const targets = dialog.current!.querySelectorAll<HTMLElement>('button:not([disabled]), summary, input:not([disabled]), textarea:not([disabled])');
-        const first = targets[0], last = targets[targets.length - 1];
-        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.current)) { event.preventDefault(); first.focus(); }
-      }
-    };
-    window.addEventListener('keydown', key, true);
-    return () => {
-      window.removeEventListener('keydown', key, true);
-      if (!toolOpening.current && previous instanceof HTMLElement && previous.isConnected) previous.focus();
-    };
-  }, [open]);
+    useApp.setState({ playgroundLocked: busy || labLocked });
+    return () => useApp.setState({ playgroundLocked: false });
+  }, [busy, labLocked]);
 
   const activeSession = sessions.find(s => s.path === activeRepo);
   const challenge = playgroundChallenges.find(c => c.id === selected)!;
@@ -82,7 +63,6 @@ export function Playground() {
     if (alive.current) { updateSession(session); setSelected(id); setLabSession(session); }
   });
   const launchTool = (session: PlaygroundSession) => {
-    toolOpening.current = true;
     useApp.setState({ playgroundOpen: false });
     const state = useApp.getState();
     if (session.challengeId === 'merge-conflict') useApp.setState({ conflictedFileToResolve: 'settings.json' });
@@ -92,19 +72,18 @@ export function Playground() {
   };
 
   return <>
-    {activeSession && !home && !settings && <section className="playground-tracker" aria-label="Playground challenge">
+    {activeSession && !home && !settings && !open && <section className="playground-tracker" aria-label="Playground challenge">
       <FlaskConical size={16} className="text-accent" />
       <div className="playground-tracker-copy"><strong>{playgroundChallenges.find(c => c.id === activeSession.challengeId)!.title}</strong><span>{activeSession.completedAt ? 'Challenge complete! Keep exploring or try another challenge.' : playgroundChallenges.find(c => c.id === activeSession.challengeId)!.goal}</span>
         {reports[activeSession.id]?.observation && <span role="status">{reports[activeSession.id].observation}</span>}
         {error && !open && <span role="alert" className="text-del">{error}</span>}
       </div>
-      <div className="playground-tracker-actions"><button className="btn-secondary" onClick={() => { setSelected(activeSession.challengeId); setLabSession(null); useApp.setState({ playgroundOpen: true }); }}>Challenge details</button><button className="btn-primary" disabled={busy} onClick={() => check(activeSession)}>{busy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}Check progress</button></div>
+      <div className="playground-tracker-actions"><button className="btn-secondary" onClick={() => { if (!busy && !labLocked) { setSelected(activeSession.challengeId); setLabSession(null); } useApp.getState().openPlayground(); }}>Challenge details</button><button className="btn-primary" disabled={busy} onClick={() => check(activeSession)}>{busy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}Check progress</button></div>
     </section>}
-    {open && <div className="playground-overlay">
-      <div ref={dialog} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="playground-title" className={`playground-dialog ${labSession ? 'playground-dialog-lab' : ''}`}>
-        <header className="playground-header"><FlaskConical size={21} className="text-accent" /><div><h1 id="playground-title">Git Playground</h1><p>Learn the idea. Try it with real Git. See what changed.</p></div><span className="playground-score"><Trophy size={15} />{completed.size} / {playgroundChallenges.length}</span><button className="btn-icon" aria-label="Close Git Playground" disabled={busy || labLocked} onClick={() => useApp.setState({ playgroundOpen: false })}><X size={17} /></button></header>
+    {tabOpen && <main hidden={!open || settings} aria-labelledby="playground-title" className="playground-page">
+        <header className="playground-header"><FlaskConical size={21} className="text-accent" /><div><h1 id="playground-title">Git Playground</h1><p>Learn the idea. Try it with real Git. See what changed.</p></div><span className="playground-score" aria-label={`${completed.size} of ${playgroundChallenges.length} lessons completed`}><Trophy size={15} />{completed.size} / {playgroundChallenges.length}</span><button className="btn-secondary" onClick={() => useApp.setState({ playgroundOpen: false })}><ArrowLeft size={13} />Back to workspace</button></header>
         {labSession && error && <div role="alert" className="playground-lab-error">{error}</div>}
-        {labSession ? <PlaygroundLab key={labSession.id} session={labSession} onBack={() => setLabSession(null)} onWorkspace={() => perform(async () => { await openSession(labSession); setLabSession(null); })} onProgress={updateSession} onLockChange={setLabLocked} onNext={() => {
+        {labSession ? <PlaygroundLab key={labSession.id} session={labSession} onBack={() => setLabSession(null)} onWorkspace={() => perform(() => openSession(labSession))} onProgress={updateSession} onLockChange={setLabLocked} onNext={() => {
           const next = playgroundLessons[playgroundLessons.findIndex(item => item.id === labSession.challengeId) + 1];
           if (next) openGuided(next.id); else setLabSession(null);
         }} /> : <>
@@ -123,9 +102,8 @@ export function Playground() {
             </div>}
           </section>
         </div>
-        <footer className="playground-footer"><p>Guided lessons include a practice editor, a Git prompt, and live feedback. Each attempt stays in its own local repository.</p><div className="playground-buttons"><button className="btn-secondary" disabled={loading || busy || opening} title="Create a new attempt in the full workspace" onClick={() => perform(async () => { const session = await unwrap(api.createPlaygroundSession(selected)); if (alive.current) { updateSession(session); await openSession(session); } })}><RotateCcw size={14} />{latest ? 'Start fresh attempt' : 'Start challenge'}</button>{latest && <button className="btn-secondary" disabled={loading || busy} onClick={() => openGuided(selected, true)}>Restart guided lesson</button>}<button className="btn-primary" disabled={loading || busy} onClick={() => openGuided(selected)}>{busy && <Loader2 size={14} className="animate-spin" />}{latest ? 'Resume guided lesson' : 'Start guided lesson'}</button></div></footer>
+        <footer className="playground-footer"><p>Your practice desk stays open while you visit other tabs. Each attempt has its own local repository.</p><div className="playground-buttons"><button className="btn-secondary" disabled={loading || busy || opening} title="Create a new attempt in the full workspace" onClick={() => perform(async () => { const session = await unwrap(api.createPlaygroundSession(selected)); if (alive.current) { updateSession(session); if (useApp.getState().playgroundOpen) await openSession(session); } })}><RotateCcw size={14} />{latest ? 'Start fresh attempt' : 'Start challenge'}</button>{latest && <button className="btn-secondary" disabled={loading || busy} onClick={() => openGuided(selected, true)}>Restart guided lesson</button>}<button className="btn-primary" disabled={loading || busy} onClick={() => openGuided(selected)}>{busy && <Loader2 size={14} className="animate-spin" />}{latest ? 'Resume guided lesson' : 'Start guided lesson'}</button></div></footer>
         </>}
-      </div>
-    </div>}
+    </main>}
   </>;
 }

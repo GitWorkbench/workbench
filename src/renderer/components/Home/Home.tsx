@@ -99,7 +99,7 @@ export function Home() {
             <button onClick={() => useSettings.getState().openSettings('providers')}><GitPullRequest size={16} /><span><strong>Connect your providers</strong><small>GitHub, GitLab, Bitbucket &amp; Gitea</small></span><ArrowRight size={13} /></button>
             <button onClick={() => useSettings.getState().openSettings()}><Settings2 size={16} /><span><strong>Preferences</strong><small>Themes, profiles &amp; Git settings</small></span><ArrowRight size={13} /></button>
             <button onClick={() => useApp.getState().openUsageGuide()}><BookOpen size={16} /><span><strong>Explore Git Workbench</strong><small>Guides for your Git workflows</small></span><ArrowRight size={13} /></button>
-            <button onClick={() => useApp.setState({ playgroundOpen: true, usageGuideOpen: false })}><FlaskConical size={16} /><span><strong>Git Playground</strong><small>Learn Git with guided, hands-on lessons</small></span><ArrowRight size={13} /></button>
+            <button onClick={() => useApp.getState().openPlayground()}><FlaskConical size={16} /><span><strong>Git Playground</strong><small>Learn Git with guided, hands-on lessons</small></span><ArrowRight size={13} /></button>
           </section>
         </aside>
       </div>

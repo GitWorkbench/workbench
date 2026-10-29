@@ -16,7 +16,7 @@ import { Home } from '../../src/renderer/components/Home/Home';
 
 const row = (patch = {}) => ({ branch: 'main', changed: 0, staged: 0, conflicts: 0, ahead: 0, behind: 0, checkedAt: '2026-10-19T10:00:00Z', ...patch });
 beforeEach(() => {
-  Object.assign(mocks.app, { recentRepos: [], tabs: [], isOpeningRepo: false, setActiveTab: vi.fn(), openRepo: vi.fn(), openRepoDialog: vi.fn(), openCreateRepoModal: vi.fn(), openUsageGuide: vi.fn() });
+  Object.assign(mocks.app, { recentRepos: [], tabs: [], isOpeningRepo: false, setActiveTab: vi.fn(), openRepo: vi.fn(), openRepoDialog: vi.fn(), openCreateRepoModal: vi.fn(), openUsageGuide: vi.fn(), openPlayground: vi.fn() });
   Object.assign(mocks.home, { pins: [], rows: {}, initializing: false, refreshing: null, pending: [], mutating: null, error: '', refresh: vi.fn(), reload: vi.fn(), pin: vi.fn(), removeRecent: vi.fn() });
   mocks.openSettings.mockReset(); mocks.openExternal.mockReset().mockResolvedValue(undefined);
 });
@@ -71,7 +71,7 @@ describe('Home workspace hub', () => {
     fireEvent.click(screen.getByRole('button', { name: /Connect your providers/ })); expect(mocks.openSettings).toHaveBeenCalledWith('providers');
     fireEvent.click(screen.getByRole('button', { name: /Preferences/ })); expect(mocks.openSettings).toHaveBeenCalledWith();
     fireEvent.click(screen.getByRole('button', { name: /Explore Git Workbench/ })); expect(mocks.app.openUsageGuide).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: /Git Playground/ })); expect(mocks.useApp.setState).toHaveBeenCalledWith({ playgroundOpen: true, usageGuideOpen: false });
+    fireEvent.click(screen.getByRole('button', { name: /Git Playground/ })); expect(mocks.app.openPlayground).toHaveBeenCalledOnce();
   });
   it('deduplicates recent repositories, excludes pins, resumes open projects and pins/removes other recents', () => {
     mocks.app.recentRepos = ['/work/pinned', '/work/first', '/work/first', 'C:\\work\\second'];

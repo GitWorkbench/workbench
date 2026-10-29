@@ -33,6 +33,17 @@ beforeEach(async () => {
 const state = () => useApp.getState();
 
 describe('repository opening and tab lifecycle', () => {
+  it('opens a persistent Playground tab, leaves it available across navigation, and closes only when its work is settled', async () => {
+    useApp.setState({ usageGuideOpen: true, commandPaletteOpen: true }); state().openPlayground();
+    expect(state()).toMatchObject({ playgroundOpen: true, playgroundTabOpen: true, usageGuideOpen: false, commandPaletteOpen: false });
+    state().openHome(); expect(state()).toMatchObject({ playgroundOpen: false, playgroundTabOpen: true, homeOpen: true });
+    state().openPlayground(); useApp.setState({ playgroundLocked: true }); state().closePlayground(); expect(state().playgroundTabOpen).toBe(true);
+    useApp.setState({ playgroundLocked: false }); state().closePlayground(); expect(state()).toMatchObject({ playgroundOpen: false, playgroundTabOpen: false });
+    state().openPlayground(); await state().openRepo('/repo'); expect(state()).toMatchObject({ playgroundOpen: false, playgroundTabOpen: true });
+    state().openPlayground(); state().setActiveTab('/repo'); expect(state().playgroundOpen).toBe(false);
+    state().openPlayground(); state().setActiveTab('/other'); expect(state().playgroundOpen).toBe(false);
+    await vi.runAllTimersAsync();
+  });
   it('loads recent repositories silently at startup and survives an unavailable recent list', async () => {
     mocks.api.recentRepos.mockResolvedValue(['/work/project']);
     await state().init();

@@ -46,6 +46,7 @@ import { Playground } from './components/Playground/Playground';
 export function App() {
   const activeTab = useApp((s) => s.activeTab);
   const homeOpen = useApp(s => s.homeOpen);
+  const playgroundOpen = useApp(s => s.playgroundOpen);
   const init = useApp((s) => s.init);
   const usageGuideOpen = useApp((s) => s.usageGuideOpen);
   const gitFlowModalOpen = useApp((s) => s.gitFlowModalOpen);
@@ -181,7 +182,8 @@ export function App() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
       if (useSettings.getState().setupCompleted === false) return;
-      if (useApp.getState().usageGuideOpen || useApp.getState().playgroundOpen) return;
+      if (useApp.getState().usageGuideOpen) return;
+      const inPlayground = useApp.getState().playgroundOpen && !useSettings.getState().isSettingsOpen;
       // The merge editor owns shortcuts while a draft is open.
       if (useApp.getState().conflictedFileToResolve) return;
       const isMod = e.ctrlKey || e.metaKey;
@@ -192,13 +194,13 @@ export function App() {
       } else if (isMod && (e.key === 'k' || e.key === 'p')) {
         e.preventDefault();
         useApp.getState().toggleCommandPalette();
-      } else if (isMod && (e.key === '`' || e.key === '~')) {
+      } else if (!inPlayground && isMod && (e.key === '`' || e.key === '~')) {
         e.preventDefault();
         useApp.getState().toggleTerminalDrawer();
-      } else if (isMod && e.key === 'b') {
+      } else if (!inPlayground && isMod && e.key === 'b') {
         e.preventDefault();
         useApp.getState().toggleSidebar();
-      } else if (isMod && e.key === 'f') {
+      } else if (!inPlayground && isMod && e.key === 'f') {
         e.preventDefault();
         const state = useApp.getState();
         const selector = state.homeOpen || !state.activeTab ? 'input[aria-label="Search repositories"]' : 'input[placeholder*="Filter commits"]';
@@ -223,7 +225,7 @@ export function App() {
           useApp.setState({ shortcutsModalOpen: false });
         } else if (useApp.getState().commandPaletteOpen) {
           useApp.getState().closeCommandPalette();
-        } else if (useApp.getState().openDiff) {
+        } else if (!inPlayground && useApp.getState().openDiff) {
           useApp.getState().closeDiff();
         }
       }
@@ -238,7 +240,7 @@ export function App() {
       {isReady && !setupOpen && <Playground />}
       {setupOpen ? <SetupPage onComplete={openUsageGuide} /> : isSettingsOpen ? (
         <SettingsPage />
-      ) : homeOpen || !activeTab ? (
+      ) : playgroundOpen ? null : homeOpen || !activeTab ? (
         <Home />
       ) : (
         <div key={activeTab} className="flex-1 flex flex-col min-h-0 animate-in fade-in duration-300">

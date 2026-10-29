@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { GitBranch, ArrowUp, ArrowDown, Archive, Check, ChevronDown, Home, Terminal, Search, ArrowDownToLine } from 'lucide-react';
+import { GitBranch, ArrowUp, ArrowDown, Archive, Check, ChevronDown, Home, Terminal, Search, ArrowDownToLine, FlaskConical } from 'lucide-react';
 import { useApp } from '../../store';
 import { api } from '../../lib/api';
 import { Dropdown } from '../ui/Dropdown';
@@ -26,6 +26,7 @@ export function StatusBar() {
   const openCommandPalette = useApp((s) => s.openCommandPalette);
   const activeTab = useApp((s) => s.activeTab);
   const homeOpen = useApp(s => s.homeOpen);
+  const onPlayground = useApp(s => s.playgroundOpen);
   const tabCount = useApp(s => s.tabs.length);
   const onHome = homeOpen || !activeTab;
   const ahead = status?.ahead ?? 0;
@@ -43,7 +44,7 @@ export function StatusBar() {
 
   return (
     <div className="flex items-center gap-1 bg-panel border-t border-edge px-2 py-0.5 text-xs text-dim shrink-0">
-      {onHome ? <span className="flex items-center gap-2 px-1.5 py-0.5"><Home size={11} /><span>Home</span><span className="text-faint">· {tabCount} {tabCount === 1 ? 'repository' : 'repositories'} open</span></span> : <>
+      {onPlayground ? <span className="flex items-center gap-2 px-1.5 py-0.5"><FlaskConical size={11} /><span>Git Playground</span><span className="text-faint">· Local practice</span></span> : onHome ? <span className="flex items-center gap-2 px-1.5 py-0.5"><Home size={11} /><span>Home</span><span className="text-faint">· {tabCount} {tabCount === 1 ? 'repository' : 'repositories'} open</span></span> : <>
       <Dropdown
         trigger={
           <button className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-panel3 text-fg/90">
@@ -113,7 +114,7 @@ export function StatusBar() {
 
       <span className="flex-1" />
 
-      {!onHome && (
+      {!onHome && !onPlayground && (
         <button
           onClick={() => toggleTerminalDrawer()}
           className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs select-none transition-colors ${

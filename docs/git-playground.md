@@ -2,6 +2,8 @@
 
 Open **Home → Quick access → Git Playground**, or search for it in the command palette. It works offline in the desktop app with system Git installed.
 
+Playground opens in its own full-page tab beside your repositories. There is no modal overlay or trapped keyboard focus. Switch to Home, a repository, or Settings and return through the **Git Playground** tab: your lesson, editor draft, command history, and output remain in place during the session. **Back to workspace** leaves the tab available. The tab’s close button waits for running operations and saved or reverted drafts; Escape does not close the learning workspace. Saved milestones and repository work also survive app restarts.
+
 Choose **Start guided lesson** to learn inside a practice desk. A coach explains each task and why it matters. Suggested commands fill the prompt; you choose when to run them. Edit and save practice files, then watch the working files, staging area, and history update from real Git state. Use the hints when stuck and review earlier steps at any time. Each completed lesson ends with an explained understanding check and a link to the next lesson.
 
 The learning path has three chapters. Lessons can also be opened individually.
@@ -23,7 +25,7 @@ The guided prompt accepts a small Git grammar for status, log, diff, add, restor
 
 Editor changes remain drafts until **Save file**. Git commands and navigation wait until the draft is saved or reverted. Saves reject changed disk content and replaced files rather than overwriting an external edit. The editor supports plain text up to 20 KB; bisect’s answer file is read-only in the desk so edits cannot change the test result. **Refresh practice state** reloads changes made in another app.
 
-**Open full workspace** opens the practice repository in a normal tab with a compact challenge tracker. Use the graph, staging, merge editor, reflog, terminal, and bisect tools, then **Check progress** for verification. **Start challenge / Start fresh attempt** opens this mode directly. Reading-command milestones in the introductory lesson are recorded through the guided prompt.
+**Open full workspace** opens the practice repository in a normal tab with a compact challenge tracker. Use the graph, staging, merge editor, reflog, terminal, and bisect tools, then **Check progress** for verification. Your Playground tab stays available; use **Refresh practice state** after making changes in the full workspace. **Start challenge / Start fresh attempt** opens this mode directly. Reading-command milestones in the introductory lesson are recorded through the guided prompt.
 
 Attempts, verified lesson milestones, and completion markers live under `playground/` in the stable application data directory described in [branding.md](branding.md). Every attempt has its own repository named after the challenge, immutable metadata, a progress file, and a completion marker earned by verification. They contain fictional data, a local commit identity, disabled hooks/signing, and no remote. No scripts or dependencies are executed by setup or verification.
 

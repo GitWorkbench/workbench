@@ -85,6 +85,8 @@ interface AppState {
   shortcutsModalOpen: boolean;
   usageGuideOpen: boolean;
   playgroundOpen: boolean;
+  playgroundTabOpen: boolean;
+  playgroundLocked: boolean;
   gitFlowModalOpen: boolean;
   bisectModalOpen: boolean;
   reflogModalOpen: boolean;
@@ -121,6 +123,8 @@ interface AppActions {
   closeTab(path: string): void;
   setActiveTab(path: string): void;
   openHome(): void;
+  openPlayground(): void;
+  closePlayground(): void;
   refresh(): Promise<void>;
   loadMoreCommits(): Promise<void>;
   selectCommit(hash: string | null): Promise<void>;
@@ -251,6 +255,8 @@ export const useApp = create<AppStore>((set, get) => ({
   shortcutsModalOpen: false,
   usageGuideOpen: false,
   playgroundOpen: false,
+  playgroundTabOpen: false,
+  playgroundLocked: false,
   gitFlowModalOpen: false,
   bisectModalOpen: false,
   reflogModalOpen: false,
@@ -306,7 +312,7 @@ export const useApp = create<AppStore>((set, get) => ({
       const repo = res.repo;
       const tabs = [...get().tabs.filter((t) => t.path !== repo.path), { path: repo.path, name: repo.name }];
       const reset = resetRepositoryView(false);
-      set({ ...reset, tabs, activeTab: repo.path, homeOpen: false, openingRepoName: repo.name, isOpeningRepo: true });
+      set({ ...reset, tabs, activeTab: repo.path, homeOpen: false, playgroundOpen: false, openingRepoName: repo.name, isOpeningRepo: true });
       await get().refresh();
       if (request === openingRequest && options?.notifyOnSuccess !== false) {
         pendingNotification = { kind: 'success', message: `Opened ${repo.name}` };
@@ -374,14 +380,23 @@ export const useApp = create<AppStore>((set, get) => ({
   },
 
   setActiveTab(p) {
-    if (get().activeTab === p) { set({ homeOpen: !p }); return; }
-    set({ ...resetRepositoryView(), activeTab: p, homeOpen: !p });
+    if (get().activeTab === p) { set({ homeOpen: !p, playgroundOpen: false }); return; }
+    set({ ...resetRepositoryView(), activeTab: p, homeOpen: !p, playgroundOpen: false });
     api.setActiveRepo(p);
     void get().refresh();
   },
 
   openHome() {
-    set({ homeOpen: true });
+    set({ homeOpen: true, playgroundOpen: false });
+  },
+
+  openPlayground() {
+    set({ playgroundOpen: true, playgroundTabOpen: true, usageGuideOpen: false, commandPaletteOpen: false });
+  },
+
+  closePlayground() {
+    if (get().playgroundLocked) return;
+    set({ playgroundOpen: false, playgroundTabOpen: false });
   },
 
   async refresh() {

@@ -7,7 +7,8 @@ import {
   Minus,
   Square,
   Copy,
-  Settings
+  Settings,
+  FlaskConical
 } from 'lucide-react';
 import { useApp } from '../../store';
 import { useSettings } from '../../store/settings';
@@ -15,7 +16,7 @@ import { api } from '../../lib/api';
 import { AppLogo } from '../Common/AppLogo';
 
 export function TabBar() {
-  const { tabs, activeTab, setActiveTab, closeTab, homeOpen, openHome } = useApp();
+  const { tabs, activeTab, setActiveTab, closeTab, homeOpen, openHome, playgroundOpen, playgroundTabOpen, playgroundLocked, openPlayground, closePlayground } = useApp();
   const openSettings = useSettings((s) => s.openSettings);
   const closeSettings = useSettings((s) => s.closeSettings);
   const isSettingsOpen = useSettings((s) => s.isSettingsOpen);
@@ -56,13 +57,13 @@ export function TabBar() {
 
       {/* 2. Tabs Section */}
       <div
-        className="flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0 py-1"
+        className="flex items-center gap-1 overflow-x-auto no-scrollbar min-w-0 py-1"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
         {/* Home combines recent repositories and the pinned dashboard. */}
         <button
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-            !isSettingsOpen && (homeOpen || !activeTab)
+          className={`flex shrink-0 items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            !isSettingsOpen && !playgroundOpen && (homeOpen || !activeTab)
               ? 'bg-panel2 text-accent shadow-sm border border-accent/40 font-semibold'
               : 'text-dim hover:text-fg hover:bg-panel2/60'
           }`}
@@ -71,7 +72,7 @@ export function TabBar() {
             openHome();
           }}
           title="Home — repositories and dashboard"
-          aria-current={!isSettingsOpen && (homeOpen || !activeTab) ? 'page' : undefined}
+          aria-current={!isSettingsOpen && !playgroundOpen && (homeOpen || !activeTab) ? 'page' : undefined}
         >
           <Home size={13} />
           <span>Home</span>
@@ -79,11 +80,11 @@ export function TabBar() {
 
         {/* Repository Tabs */}
         {tabs.map((t) => {
-          const isActive = !isSettingsOpen && !homeOpen && activeTab === t.path;
+          const isActive = !isSettingsOpen && !playgroundOpen && !homeOpen && activeTab === t.path;
           return (
             <div
               key={t.path}
-              className={`group relative flex items-center gap-2 pl-3 pr-2 py-1.5 text-xs font-medium rounded-md cursor-pointer transition-all max-w-[210px] ${
+              className={`group relative flex shrink-0 items-center gap-2 pl-3 pr-2 py-1.5 text-xs font-medium rounded-md cursor-pointer transition-all max-w-[210px] ${
                 isActive
                   ? 'bg-panel2 text-fg shadow-sm border border-edge font-semibold'
                   : 'text-dim hover:text-fg hover:bg-panel2/60'
@@ -119,6 +120,11 @@ export function TabBar() {
             </div>
           );
         })}
+
+        {playgroundTabOpen && <div className={`flex shrink-0 items-center rounded-md border text-xs ${!isSettingsOpen && playgroundOpen ? 'bg-panel2 text-accent border-accent/40' : 'text-dim border-transparent hover:bg-panel2/60'}`}>
+          <button className="flex items-center gap-1.5 px-3 py-1.5 font-medium" aria-label="Git Playground tab" aria-current={!isSettingsOpen && playgroundOpen ? 'page' : undefined} onClick={() => { closeSettings(); openPlayground(); }}><FlaskConical size={13} />Git Playground</button>
+          <button className="rounded p-1 mr-1 hover:bg-panel3 disabled:opacity-40" aria-label="Close Git Playground tab" disabled={playgroundLocked} title={playgroundLocked ? 'Save or revert your draft and wait for the current operation before closing. You can switch tabs freely.' : 'Close Git Playground tab'} onClick={closePlayground}><X size={11} /></button>
+        </div>}
 
         {/* Settings Tab (shows when active/open) */}
         {isSettingsOpen && (

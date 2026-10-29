@@ -21,9 +21,9 @@ import { useAppUpdates } from '../../src/renderer/store/appUpdates';
 
 beforeEach(() => {
   useAppUpdates.setState({ update: null, dialogOpen: false });
-  Object.assign(mocks.app, { tabs: [], activeTab: null, homeOpen: true, status: null, stashes: [], log: null, isLoadingMoreCommits: false, terminalDrawerOpen: false,
+  Object.assign(mocks.app, { tabs: [], activeTab: null, homeOpen: true, playgroundOpen: false, playgroundTabOpen: false, playgroundLocked: false, status: null, stashes: [], log: null, isLoadingMoreCommits: false, terminalDrawerOpen: false,
     branches: { local: [{ fullName: 'main', name: 'main', isCurrent: true }, { fullName: 'feature', name: 'feature', isCurrent: false }], remote: [] },
-    runAndRefresh: vi.fn(async (callback: () => any) => callback()), toggleTerminalDrawer: vi.fn(), openCommandPalette: vi.fn(), setActiveTab: vi.fn(), closeTab: vi.fn(), openHome: vi.fn() });
+    runAndRefresh: vi.fn(async (callback: () => any) => callback()), toggleTerminalDrawer: vi.fn(), openCommandPalette: vi.fn(), setActiveTab: vi.fn(), closeTab: vi.fn(), openHome: vi.fn(), openPlayground: vi.fn(), closePlayground: vi.fn() });
   Object.assign(mocks.settings, { isSettingsOpen: false, openSettings: vi.fn(), closeSettings: vi.fn() });
   for (const method of Object.values(mocks.api)) method.mockReset();
   mocks.unsubscribe.mockReset();
@@ -33,6 +33,11 @@ beforeEach(() => {
 });
 
 describe('StatusBar', () => {
+  it('shows local practice and hides real-repository mutation controls while learning', () => {
+    Object.assign(mocks.app, { playgroundOpen: true, activeTab: '/real-project', homeOpen: false }); render(<StatusBar />);
+    expect(screen.getByText('Git Playground')).toBeVisible(); expect(screen.getByText('· Local practice')).toBeVisible();
+    expect(screen.queryByTitle('Push 0 commit(s)')).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: 'Terminal' })).not.toBeInTheDocument();
+  });
   it('keeps update availability, progress, errors and restart reachable beside the app version', async () => {
     render(<StatusBar />); await screen.findByText('Git Workbench v1.2.3');
     const update = { currentVersion: '1.2.3', availableVersion: '1.3.0', status: 'available' as const, canInstallInApp: true };
@@ -87,6 +92,17 @@ describe('StatusBar', () => {
 });
 
 describe('TabBar', () => {
+  it('keeps the Playground tab available, selects it exclusively, and protects a draft from being closed', () => {
+    Object.assign(mocks.app, { playgroundTabOpen: true, playgroundOpen: true, activeTab: '/repo', homeOpen: false, tabs: [{ path: '/repo', name: 'Project' }] });
+    const { rerender } = render(<TabBar />); expect(screen.getByRole('button', { name: 'Git Playground tab' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Home', exact: true })).not.toHaveAttribute('aria-current'); expect(screen.getByTitle('/repo')).not.toHaveClass('font-semibold');
+    mocks.app.playgroundOpen = false; rerender(<TabBar />); expect(screen.getByRole('button', { name: 'Git Playground tab' })).not.toHaveAttribute('aria-current');
+    fireEvent.click(screen.getByRole('button', { name: 'Git Playground tab' })); expect(mocks.app.openPlayground).toHaveBeenCalledOnce();
+    mocks.app.playgroundLocked = true; rerender(<TabBar />); expect(screen.getByRole('button', { name: 'Close Git Playground tab' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Close Git Playground tab' })); expect(mocks.app.closePlayground).not.toHaveBeenCalled();
+    mocks.app.playgroundLocked = false; mocks.settings.isSettingsOpen = true; rerender(<TabBar />); expect(screen.getByRole('button', { name: 'Git Playground tab' })).not.toHaveAttribute('aria-current');
+    fireEvent.click(screen.getByRole('button', { name: 'Close Git Playground tab' })); expect(mocks.app.closePlayground).toHaveBeenCalledOnce();
+  });
   it('navigates Home and repositories, closes tabs without selecting them and toggles preferences', async () => {
     Object.assign(mocks.app, { tabs: [{ path: '/a', name: 'Repo A' }, { path: '/b', name: 'Repo B' }], activeTab: '/a', homeOpen: false });
     const { rerender, unmount } = render(<TabBar />);

@@ -22,12 +22,41 @@ const start = async () => { render(<Playground />); chooseFirst(); await waitFor
 beforeEach(() => {
   mock.list.mockReset().mockResolvedValue({ sessions: [], warnings: [] }); mock.create.mockReset().mockImplementation(async id => session('new', id)); mock.check.mockReset();
   mock.lab.mockReset(); mock.command.mockReset(); mock.save.mockReset();
-  useApp.setState({ ...initial, playgroundOpen: true, homeOpen: false, activeTab: null, isOpeningRepo: false,
+  useApp.setState({ ...initial, playgroundOpen: true, playgroundTabOpen: true, playgroundLocked: false, homeOpen: false, activeTab: null, isOpeningRepo: false,
     openRepo: vi.fn(async path => { useApp.setState({ activeTab: path }); }), selectCommit: vi.fn(), openReflogModal: vi.fn(), openBisectModal: vi.fn() }, true);
   useSettings.setState({ isSettingsOpen: false });
 });
 
 describe('Git Playground workspace', () => {
+  it('preserves a draft and command history while visiting Home, a repository, or Settings, and prevents closing a dirty tab', async () => {
+    useApp.setState({ activeTab: '/existing' });
+    const attempt = session('desk', 'git-basics'); mock.lab.mockResolvedValue(labState(attempt));
+    mock.command.mockResolvedValue({ ok: true, output: 'On branch main', snapshot: labState(attempt) });
+    render(<Playground />); await waitFor(() => expect(screen.getByRole('button', { name: 'Start guided lesson' })).toBeEnabled());
+    mock.create.mockResolvedValue(attempt); fireEvent.click(screen.getByRole('button', { name: 'Start guided lesson' }));
+    await waitFor(() => expect(screen.getByLabelText('Git practice command')).toBeEnabled());
+    fireEvent.change(screen.getByLabelText('Git practice command'), { target: { value: 'git status' } }); fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await screen.findByText('On branch main'); mock.list.mockResolvedValue({ sessions: [attempt], warnings: [] }); fireEvent.change(screen.getByLabelText('Edit notes.txt'), { target: { value: 'My unfinished lesson' } });
+    await act(async () => useApp.getState().openHome()); expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    await act(async () => useApp.getState().openPlayground()); expect(screen.getByLabelText('Edit notes.txt')).toHaveValue('My unfinished lesson'); expect(screen.getByText('On branch main')).toBeVisible();
+    await act(async () => useApp.getState().setActiveTab('/existing'));
+    await act(async () => useApp.getState().openPlayground());
+    await act(async () => useSettings.setState({ isSettingsOpen: true })); expect(screen.queryByRole('main')).not.toBeInTheDocument();
+    await act(async () => useSettings.setState({ isSettingsOpen: false })); expect(screen.getByLabelText('Edit notes.txt')).toHaveValue('My unfinished lesson');
+    await act(async () => useApp.setState({ activeTab: attempt.path, homeOpen: false, playgroundOpen: false }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Challenge details' })); expect(screen.getByLabelText('Edit notes.txt')).toHaveValue('My unfinished lesson');
+    await act(async () => useApp.getState().closePlayground()); expect(useApp.getState().playgroundTabOpen).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Revert draft' }));
+    await act(async () => useApp.getState().closePlayground()); expect(screen.queryByRole('main')).not.toBeInTheDocument(); expect(useApp.getState().playgroundTabOpen).toBe(false);
+  });
+  it('keeps a created attempt without taking focus back after the user switches away during setup', async () => {
+    let finish!: (value: PlaygroundSession) => void; mock.create.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    await start(); fireEvent.click(screen.getByRole('button', { name: 'Start challenge' }));
+    mock.list.mockResolvedValue({ sessions: [session('kept')], warnings: [] });
+    await act(async () => useApp.getState().openHome()); await act(async () => finish(session('kept')));
+    expect(useApp.getState().homeOpen).toBe(true); expect(useApp.getState().openRepo).not.toHaveBeenCalled();
+    await act(async () => useApp.getState().openPlayground()); expect(screen.getByText(session('kept').path)).toBeVisible();
+  });
   const labState = (attempt: PlaygroundSession) => ({ session: attempt, branch: 'main', changed: [], staged: [], conflicts: [], files: playgroundLessons.find(item => item.id === attempt.challengeId)!.files.map(path => ({ path, content: 'Starting text', exists: true })), commits: [], steps: [], progress: { session: attempt, checks: [], observation: '' } });
   it('starts the guided path, keeps editor drafts safe, resumes, restarts, and opens the practice repository on request', async () => {
     const attempt = session('new', 'git-basics'); mock.lab.mockResolvedValue(labState(attempt));
@@ -36,7 +65,7 @@ describe('Git Playground workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Start guided lesson' })); await screen.findByRole('complementary', { name: 'Lesson coach' });
     expect(useApp.getState().openRepo).not.toHaveBeenCalled(); expect(mock.create).toHaveBeenCalledWith('git-basics');
     await waitFor(() => expect(screen.getByLabelText('Edit notes.txt')).toBeEnabled());
-    fireEvent.change(screen.getByLabelText('Edit notes.txt'), { target: { value: 'draft' } }); expect(screen.getByRole('button', { name: 'Close Git Playground' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('Edit notes.txt'), { target: { value: 'draft' } }); expect(useApp.getState().playgroundLocked).toBe(true); useApp.getState().closePlayground(); expect(useApp.getState().playgroundTabOpen).toBe(true);
     fireEvent.keyDown(window, { key: 'Escape' }); expect(useApp.getState().playgroundOpen).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Revert draft' })); fireEvent.click(screen.getByRole('button', { name: 'Learning path' }));
     fireEvent.click(screen.getByRole('button', { name: 'Resume guided lesson' })); await screen.findByLabelText('Edit notes.txt'); expect(mock.create).toHaveBeenCalledOnce();
@@ -44,7 +73,7 @@ describe('Git Playground workspace', () => {
     mock.create.mockResolvedValueOnce(session('fresh', 'git-basics')); mock.lab.mockResolvedValueOnce(labState(session('fresh', 'git-basics')));
     fireEvent.click(screen.getByRole('button', { name: 'Restart guided lesson' })); await waitFor(() => expect(mock.lab).toHaveBeenLastCalledWith('fresh'));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open full workspace' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: 'Open full workspace' })); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Open full workspace' })); await waitFor(() => expect(screen.queryByRole('main')).not.toBeInTheDocument());
     expect(useApp.getState().openRepo).toHaveBeenCalledWith(session('fresh', 'git-basics').path, { notifyOnSuccess: false });
   });
   it('continues to the next lesson and returns to the path after the last lesson', async () => {
@@ -65,7 +94,7 @@ describe('Git Playground workspace', () => {
     let finish!: (value: PlaygroundSession) => void; mock.create.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
     fireEvent.click(screen.getByRole('button', { name: 'Start guided lesson' }));
     await act(async () => useApp.setState({ playgroundOpen: false })); await act(async () => finish(session('late', 'git-basics')));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
   });
   it('keeps workspace-opening and next-lesson failures visible in the practice desk', async () => {
     const attempt = session('ready', 'git-basics', true); mock.list.mockResolvedValue({ sessions: [attempt], warnings: [] }); mock.lab.mockResolvedValue(labState(attempt));
@@ -79,8 +108,7 @@ describe('Git Playground workspace', () => {
     expect(screen.getByRole('region', { name: 'Quick understanding check' })).toBeVisible();
   });
   it('offers ten lessons, hints, keyboard navigation and skippable local practice', async () => {
-    const trigger = document.createElement('button'); document.body.append(trigger); trigger.focus();
-    await start(); const dialog = screen.getByRole('dialog', { name: 'Git Playground' }); expect(dialog).toHaveFocus();
+    await start(); expect(screen.getByRole('main', { name: 'Git Playground' })).toBeVisible(); expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByText('0 / 10')).toBeVisible();
     for (const challenge of playgroundChallenges) {
       fireEvent.click(screen.getByRole('button', { name: new RegExp(challenge.title) }));
@@ -88,23 +116,18 @@ describe('Git Playground workspace', () => {
       expect(screen.getByText(challenge.goal)).toBeVisible();
       fireEvent.click(screen.getByText('Need a hint?')); expect(screen.getByText(challenge.hint)).toBeInTheDocument();
     }
-    const first = screen.getByRole('button', { name: 'Close Git Playground' }); const last = screen.getByRole('button', { name: 'Start guided lesson' });
-    fireEvent.keyDown(window, { key: 'Tab' }); expect(first).toHaveFocus();
-    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true }); expect(last).toHaveFocus();
-    fireEvent.keyDown(window, { key: 'Tab' }); expect(first).toHaveFocus();
-    dialog.focus(); fireEvent.keyDown(window, { key: 'Tab', shiftKey: true }); expect(last).toHaveFocus();
-    fireEvent.keyDown(window, { key: 'ArrowDown' }); expect(useApp.getState().playgroundOpen).toBe(true);
-    fireEvent.keyDown(window, { key: 'Escape' }); expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); expect(trigger).toHaveFocus(); trigger.remove();
+    fireEvent.keyDown(window, { key: 'Escape' }); expect(useApp.getState().playgroundOpen).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Back to workspace' })); expect(screen.queryByRole('main')).not.toBeInTheDocument(); expect(useApp.getState().playgroundTabOpen).toBe(true);
   });
   it('starts a real attempt through IPC, opens its repository quietly, and leaves the tracker visible', async () => {
     mock.list.mockResolvedValue({ sessions: [session('new')], warnings: [] });
     render(<Playground />); chooseFirst(); await waitFor(() => expect(screen.getByRole('button', { name: 'Start fresh attempt' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'Start fresh attempt' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('main')).not.toBeInTheDocument());
     expect(mock.create).toHaveBeenCalledWith('first-commit'); expect(useApp.getState().openRepo).toHaveBeenCalledWith(session('new').path, { notifyOnSuccess: false });
     expect(screen.getByRole('region', { name: 'Playground challenge' })).toHaveTextContent('One focused commit');
-    fireEvent.click(screen.getByRole('button', { name: 'Challenge details' })); expect(screen.getByRole('dialog')).toBeVisible();
-    fireEvent.click(screen.getByRole('button', { name: 'Close Git Playground' })); expect(useApp.getState().playgroundOpen).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Challenge details' })); expect(screen.getByRole('main')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to workspace' })); expect(useApp.getState().playgroundOpen).toBe(false);
   });
   it('shows persisted completion, resumes attempts and verifies progress from Git rather than button clicks', async () => {
     const attempt = session(); mock.list.mockResolvedValue({ sessions: [attempt, session('lost', 'lost-commit', true)], warnings: ['A damaged attempt was kept.'] });
@@ -124,7 +147,7 @@ describe('Git Playground workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: new RegExp(playgroundChallenges.find(c => c.id === id)!.title) }));
     await screen.findByText(attempt.path);
     fireEvent.click(screen.getByRole('button', { name: tool, exact: true }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByRole('main')).not.toBeInTheDocument();
     if (!['merge-conflict', 'lost-commit', 'bisect'].includes(id)) expect(useApp.getState().selectCommit).toHaveBeenCalledWith(WIP_HASH);
     if (id === 'merge-conflict') expect(useApp.getState().conflictedFileToResolve).toBe('settings.json');
     if (id === 'lost-commit') expect(useApp.getState().openReflogModal).toHaveBeenCalledOnce();
@@ -155,9 +178,9 @@ describe('Git Playground workspace', () => {
     let finish!: (value: PlaygroundSession) => void; mock.create.mockReturnValue(new Promise(resolve => { finish = resolve; }));
     await start(); const button = screen.getByRole('button', { name: 'Start challenge' });
     fireEvent.click(button); fireEvent.click(button); expect(mock.create).toHaveBeenCalledOnce();
-    fireEvent.keyDown(window, { key: 'Escape' }); expect(screen.getByRole('dialog')).toBeVisible(); expect(screen.getByRole('button', { name: 'Close Git Playground' })).toBeDisabled();
+    fireEvent.keyDown(window, { key: 'Escape' }); expect(screen.getByRole('main')).toBeVisible(); expect(useApp.getState().playgroundLocked).toBe(true); useApp.getState().closePlayground(); expect(useApp.getState().playgroundTabOpen).toBe(true);
     mock.list.mockResolvedValue({ sessions: [session('new')], warnings: [] });
-    await act(async () => finish(session('new'))); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await act(async () => finish(session('new'))); await waitFor(() => expect(screen.queryByRole('main')).not.toBeInTheDocument());
   });
   it('ignores stale list responses and checks after switching repository without showing another attempt’s results', async () => {
     let resolveList!: (value: { sessions: PlaygroundSession[]; warnings: string[] }) => void;
@@ -168,7 +191,7 @@ describe('Git Playground workspace', () => {
     let resolveCheck!: (value: unknown) => void; mock.check.mockReturnValue(new Promise(resolve => { resolveCheck = resolve; }));
     await act(async () => useApp.setState({ playgroundOpen: false })); fireEvent.click(screen.getByRole('button', { name: 'Check progress' }));
     await act(async () => useApp.setState({ activeTab: '/real/project' }));
-    await act(async () => resolveCheck({ session: session('new'), checks: [], observation: 'old observation' })); expect(screen.queryByText('old observation')).not.toBeInTheDocument();
+    await act(async () => resolveCheck({ session: session('new'), checks: [], observation: 'old observation' })); expect(screen.queryByText('old observation')).not.toBeVisible();
   });
   it('discards late list success, list failure, create, open, and check results after unmount', async () => {
     let resolveList!: (value: unknown) => void;

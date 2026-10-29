@@ -14,7 +14,7 @@ beforeEach(() => {
     branches: { local: [{ name: 'main', fullName: 'main', isCurrent: true }, { name: 'feature', fullName: 'feature', isCurrent: false, tracking: 'origin/feature' }], remote: [] },
     tags: [{ name: 'v1', hash: 'tag-commit', shortHash: 'tag1234', message: 'Release tag' }, { name: 'lightweight', hash: 'light-commit', shortHash: 'light12' }],
     log: { commits: [{ hash: 'abc123', shortHash: 'abc123', message: 'Improve routing', authorName: 'Alice', date: '2026-10-19T00:00:00Z' }] } });
-  for (const name of ['selectCommit', 'openFileDiff', 'toggleSidebar', 'toggleTerminalDrawer', 'openCreateTagModal', 'openAddRemoteModal', 'openCreateRepoModal', 'openRepoDialog', 'toggleShortcutsModal', 'refresh', 'openPullRequestsModal', 'openGitFlowModal', 'openUsageGuide', 'openBisectModal', 'openReflogModal', 'openHome', 'openChangelogModal', 'openWorktreesModal', 'notify']) mock.state[name] = vi.fn();
+  for (const name of ['selectCommit', 'openFileDiff', 'toggleSidebar', 'toggleTerminalDrawer', 'openCreateTagModal', 'openAddRemoteModal', 'openCreateRepoModal', 'openRepoDialog', 'toggleShortcutsModal', 'refresh', 'openPullRequestsModal', 'openGitFlowModal', 'openUsageGuide', 'openPlayground', 'openBisectModal', 'openReflogModal', 'openHome', 'openChangelogModal', 'openWorktreesModal', 'notify']) mock.state[name] = vi.fn();
   mock.state.runAndRefresh = vi.fn(async (run: () => any) => { await run(); return true; });
   mock.settings.openSettings.mockClear(); mock.settings.closeSettings.mockClear(); mock.setState.mockReset();
   for (const fn of Object.values(mock.api)) fn.mockReset().mockResolvedValue({ ok: true });
@@ -79,12 +79,11 @@ describe('built-in command actions', () => {
     ['Open Requests…', 'openPullRequestsModal', []], ['Create / Initialize Repository…', 'openCreateRepoModal', []], ['Open Repository…', 'openRepoDialog', []],
     ['Create Tag…', 'openCreateTagModal', ['HEAD']], ['Add Remote…', 'openAddRemoteModal', []], ['Toggle Terminal Drawer', 'toggleTerminalDrawer', []], ['Toggle Sidebar', 'toggleSidebar', []],
     ['Keyboard Shortcuts Cheatsheet…', 'toggleShortcutsModal', []], ['Refresh Repository', 'refresh', []], ['Git Flow Operations…', 'openGitFlowModal', []], ['Explore Git Workbench…', 'openUsageGuide', []],
-    ['Git Bisect Wizard…', 'openBisectModal', []], ['Reflog & Recovery…', 'openReflogModal', []], ['Generate Release Changelog…', 'openChangelogModal', []], ['Manage Git Worktrees…', 'openWorktreesModal', []]
+    ['Git Playground…', 'openPlayground', []], ['Git Bisect Wizard…', 'openBisectModal', []], ['Reflog & Recovery…', 'openReflogModal', []], ['Generate Release Changelog…', 'openChangelogModal', []], ['Manage Git Worktrees…', 'openWorktreesModal', []]
   ])('%s opens its workspace tool', (title, name, args) => {
     render(<CommandPalette />); selectText(title); expect(mock.state[name]).toHaveBeenCalledWith(...args);
   });
   it.each([
-    ['Git Playground…', { playgroundOpen: true, usageGuideOpen: false }],
     ['Split Commit…', { commitSplitOpen: true }], ['Stacked Branches & Requests…', { branchStackOpen: true }], ['Git LFS Manager…', { lfsManagerOpen: true }], ['Sparse Checkout…', { sparseCheckoutOpen: true }],
     ['Restore Points…', { restorePointsOpen: true }], ['Conflict Resolution Memory…', { resolutionMemoryOpen: true }], ['Rebase & Rewrite Comparison…', { rangeComparisonOpen: true, rangeComparisonId: null }]
   ])('%s opens the corresponding panel state', (title, state) => {

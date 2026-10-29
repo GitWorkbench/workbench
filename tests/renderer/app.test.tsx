@@ -52,6 +52,12 @@ const finishStartup = async () => { await advance(2400); await advance(450); };
 const key = (value: string, patch: Record<string, unknown> = {}) => fireEvent.keyDown(window, { key: value, ...patch });
 
 describe('application composition and startup', () => {
+  it('uses the content area for Playground without mounting Home or repository controls, and keeps Settings accessible', async () => {
+    mock.app.playgroundOpen = true; const { rerender } = render(<App />); await finishStartup();
+    expect(screen.getByTestId('Playground')).toBeVisible(); expect(screen.queryByTestId('Home')).not.toBeInTheDocument(); expect(screen.queryByTestId('Toolbar')).not.toBeInTheDocument();
+    mock.settings.isSettingsOpen = true; rerender(<App />); expect(screen.getByTestId('SettingsPage')).toBeVisible();
+    mock.settings.isSettingsOpen = false; mock.app.playgroundOpen = false; rerender(<App />); expect(screen.getByTestId('Toolbar')).toBeVisible();
+  });
   it('shows setup before Explore on a fresh installation and defers update prompts and shortcuts', async () => {
     mock.settings.setupCompleted = false;
     const { rerender } = render(<App />); await finishStartup();
@@ -165,6 +171,14 @@ describe('silent background fetching', () => {
 });
 
 describe('global keyboard shortcuts', () => {
+  it('allows workspace navigation and preferences while learning, leaving repository shortcuts and Escape out of the practice desk', async () => {
+    mock.app.playgroundOpen = true; mock.app.openDiff = {}; render(<App />); await settle();
+    key('t', { ctrlKey: true }); key('k', { ctrlKey: true }); key(',', { ctrlKey: true });
+    expect(mock.app.openHome).toHaveBeenCalledOnce(); expect(mock.app.toggleCommandPalette).toHaveBeenCalledOnce(); expect(mock.settings.openSettings).toHaveBeenCalledOnce();
+    for (const value of ['`', '~', 'b', 'f', 'Escape']) key(value, { ctrlKey: value !== 'Escape' });
+    expect(mock.app.toggleTerminalDrawer).not.toHaveBeenCalled(); expect(mock.app.toggleSidebar).not.toHaveBeenCalled(); expect(mock.app.closeDiff).not.toHaveBeenCalled();
+    mock.settings.closeSettings.mockClear(); mock.settings.isSettingsOpen = true; key('Escape'); expect(mock.settings.closeSettings).toHaveBeenCalledOnce();
+  });
   it.each([['t', 'openHome'], ['k', 'toggleCommandPalette'], ['p', 'toggleCommandPalette'], ['`', 'toggleTerminalDrawer'], ['~', 'toggleTerminalDrawer'], ['b', 'toggleSidebar']])('routes Ctrl/Cmd+%s to %s', async (value, action) => {
     render(<App />); await settle(); key(value, { ctrlKey: true }); key(value, { metaKey: true }); expect(mock.app[action]).toHaveBeenCalledTimes(2);
   });
