@@ -268,6 +268,18 @@ describe('workspace settings and modal actions', () => {
     state().setDiffActiveTab('blame'); state().setFilter('message'); state().setFilterAuthor('Alice'); state().setFilterDateRange('week'); state().setFilterFilePath('src');
     expect(state()).toMatchObject({ diffActiveTab: 'blame', filter: 'message', filterAuthor: 'Alice', filterDateRange: 'week', filterFilePath: 'src' });
   });
+  it('tracks milestone notices and ignores a timeout from an older milestone', () => {
+    state().celebrateMilestone('rebase');
+    const first = state().milestoneCelebration;
+    expect(first).toMatchObject({ kind: 'rebase' });
+    state().celebrateMilestone('conflicts-resolved');
+    const latest = state().milestoneCelebration;
+    expect(latest).toMatchObject({ kind: 'conflicts-resolved' });
+    state().clearMilestoneCelebration(first.id);
+    expect(state().milestoneCelebration).toEqual(latest);
+    state().clearMilestoneCelebration(latest.id);
+    expect(state().milestoneCelebration).toBeNull();
+  });
   it('uses a bounded diff size when window geometry is unavailable', () => {
     const browserWindow = window;
     vi.stubGlobal('window', undefined);

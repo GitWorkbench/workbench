@@ -13,6 +13,7 @@ vi.mock('../../src/renderer/store/settings', () => ({ DEFAULT_COMMIT_COLUMN_WIDT
 vi.mock('../../src/renderer/lib/api', () => ({ api: mock.api }));
 vi.mock('../../src/renderer/components/CommitGraph/gitgraph', () => ({ buildGitGraph: mock.build }));
 vi.mock('../../src/renderer/components/CommitGraph/GitGraphCanvas', () => ({ GitGraphCanvas: (props: any) => { mock.canvas = props; return <div data-testid="canvas" />; } }));
+vi.mock('../../src/renderer/components/CommitGraph/HistoryTimeMachine', () => ({ HistoryTimeMachine: ({ onClose }: { onClose: () => void }) => <div role="region" aria-label="Replay view"><button type="button" onClick={onClose}>Close replay</button></div> }));
 import { CommitGraph, consolidateRefs, RefPill } from '../../src/renderer/components/CommitGraph/CommitGraph';
 
 const branch = (label: string, extra: Partial<CommitRef> = {}): CommitRef => ({ label, kind: 'branch', ...extra });
@@ -51,6 +52,11 @@ describe('branch and tag consolidation', () => {
 });
 
 describe('commit graph rendering, metadata and selection', () => {
+  it('opens the branch replay view and returns to the graph from its close control', () => {
+    render(<CommitGraph />); fireEvent.click(screen.getByRole('button', { name: 'Open history time machine' }));
+    expect(screen.getByRole('region', { name: 'Replay view' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Close replay' })); expect(screen.getByTestId('canvas')).toBeVisible();
+  });
   it('uses bounded layout and lane colors when graph metadata is temporarily empty', () => {
     mock.settings.graphRowHeight = 0;
     mock.state.status.staged = [{ path: 'file', status: 'modified' }];

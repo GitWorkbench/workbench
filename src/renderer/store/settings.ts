@@ -444,6 +444,7 @@ export interface SettingsState {
   autoFetch: boolean;
   autoFetchInterval: number; // in seconds
   toastPosition: ToastPosition;
+  milestoneAnimations: boolean;
 
   // Commit Profile
   defaultAuthorName: string;
@@ -472,6 +473,7 @@ export interface SettingsState {
   setAutoFetch: (enabled: boolean) => void;
   setAutoFetchInterval: (seconds: number) => void;
   setToastPosition: (pos: 'top-center' | 'top-right' | 'bottom-center' | 'bottom-right') => void;
+  setMilestoneAnimations: (enabled: boolean) => void;
   setDefaultAuthorName: (name: string) => void;
   setDefaultAuthorEmail: (email: string) => void;
   setSigningKey: (key: string) => void;
@@ -501,6 +503,7 @@ const DEFAULT_SETTINGS = {
   autoFetch: true,
   autoFetchInterval: 60,
   toastPosition: 'top-center' as 'top-center' | 'top-right' | 'bottom-center' | 'bottom-right',
+  milestoneAnimations: true,
 
   defaultAuthorName: '',
   defaultAuthorEmail: '',
@@ -558,7 +561,8 @@ function normalizeStoredSettings(value: unknown): typeof DEFAULT_SETTINGS {
     commitColumnWidths: {
       ...DEFAULT_COMMIT_COLUMN_WIDTHS,
       ...(isSettingsRecord(parsed.commitColumnWidths) ? parsed.commitColumnWidths : {})
-    }
+    },
+    milestoneAnimations: typeof parsed.milestoneAnimations === 'boolean' ? parsed.milestoneAnimations : DEFAULT_SETTINGS.milestoneAnimations
   };
 }
 
@@ -803,6 +807,11 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setToastPosition: (toastPosition: 'top-center' | 'top-right' | 'bottom-center' | 'bottom-right') => {
     set({ toastPosition });
     saveSettings({ toastPosition });
+  },
+
+  setMilestoneAnimations: (milestoneAnimations: boolean) => {
+    set({ milestoneAnimations });
+    saveSettings({ milestoneAnimations });
   },
 
   setDefaultAuthorName: (defaultAuthorName: string) => {

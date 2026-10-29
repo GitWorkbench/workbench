@@ -39,6 +39,7 @@ import { ChangelogModal } from './components/Changelog/ChangelogModal';
 import { WorktreesModal } from './components/Worktrees/WorktreesModal';
 import { PullRequestsModal } from './components/PullRequests/PullRequestsModal';
 import { ToastContainer } from './components/Common/ToastContainer';
+import { MilestoneCelebration } from './components/Common/MilestoneCelebration';
 import { AppUpdateNotice } from './components/Updates/AppUpdateNotice';
 import { SetupPage } from './components/Onboarding/SetupPage';
 import { Playground } from './components/Playground/Playground';
@@ -284,6 +285,7 @@ export function App() {
       <AppLoadingScreen isReady={isReady} />
       <AppUpdateNotice ready={isReady && !setupOpen && !updatePromptBlocked} />
       <ToastContainer />
+      <MilestoneCelebration />
     </div>
   );
 }

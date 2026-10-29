@@ -1,0 +1,48 @@
+.history-time-machine {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-base);
+}
+
+.history-time-machine__body {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.75fr) minmax(0, 1.8fr);
+  overflow: hidden;
+}
+
+.history-time-machine__canvas {
+  position: relative;
+  transition: height 180ms ease-out;
+}
+
+.history-time-machine__inspection {
+  display: grid;
+  grid-template-rows: auto minmax(100px, 0.7fr) minmax(160px, 1.3fr);
+  overflow: hidden;
+}
+
+@media (max-width: 760px) {
+  .history-time-machine__body {
+    grid-template-columns: minmax(130px, 0.5fr) minmax(0, 1.5fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .history-time-machine__body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(150px, 0.65fr) minmax(0, 1.35fr);
+  }
+
+  .history-time-machine__graph {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-edge);
+  }
+
+  .history-time-machine__inspection {
+    grid-template-rows: auto minmax(75px, 0.5fr) minmax(120px, 1.5fr);
+  }
+}

@@ -73,6 +73,9 @@ describe('partial patch metadata boundaries', () => {
   it('uses an unknown author label when porcelain blame metadata is truncated', async () => {
     mock.raw.mockResolvedValue(`${'a'.repeat(40)} 1 1\n\tcontent\n`);
     expect(await getBlameLines('/repo', 'file')).toMatchObject([{ author: 'Unknown', content: 'content' }]);
+    expect(await getBlameLines('/repo', 'file', 'b'.repeat(40))).toMatchObject([{ author: 'Unknown', content: 'content' }]);
+    expect(mock.raw).toHaveBeenLastCalledWith(['blame', '--line-porcelain', 'b'.repeat(40), '--', 'file']);
+    expect(await getBlameLines('/repo', 'file', '--all')).toEqual([]);
   });
 });
 

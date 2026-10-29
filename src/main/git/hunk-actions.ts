@@ -185,10 +185,11 @@ export async function discardLines(repoPath: string, filePath: string, hunkIndex
 }
 
 /** Get structured git blame for a file */
-export async function getBlameLines(repoPath: string, filePath: string): Promise<BlameLine[]> {
+export async function getBlameLines(repoPath: string, filePath: string, revision?: string): Promise<BlameLine[]> {
   return withGit(repoPath, async (git) => {
     try {
-      const raw = await git.raw(['blame', '--line-porcelain', '--', filePath]);
+      if (revision !== undefined && !/^[0-9a-f]{40,64}$/i.test(revision)) return [];
+      const raw = await git.raw(['blame', '--line-porcelain', ...(revision ? [revision] : []), '--', filePath]);
       const lines = raw.split('\n');
       const result: BlameLine[] = [];
 

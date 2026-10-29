@@ -17,7 +17,7 @@ import { InteractiveRebaseModal, moveRebaseStep } from '../../src/renderer/compo
 const steps = [{ hash: 'commit-1', shortHash: 'c1', author: 'Alice', message: 'First', action: 'pick' }, { hash: 'commit-2', shortHash: 'c2', author: 'Bob', message: 'Second', action: 'pick' }, { hash: 'commit-3', shortHash: 'c3', author: 'Carol', message: 'Third', action: 'pick' }];
 beforeEach(() => {
   Object.assign(mocks.app, { worktreesModalOpen: true, activeTab: '/repo', worktrees: [{ path: '/repo', branch: 'main', hash: 'main-hash' }, { path: '/review', branch: '', hash: 'review-hash' }, { path: '/locked', branch: 'locked', hash: 'locked-hash', isLocked: true }],
-    closeWorktreesModal: vi.fn(), openRepo: vi.fn(), notify: vi.fn(), rebaseModalBaseCommit: 'base-commit', closeRebaseModal: vi.fn(), openConflictResolver: vi.fn(), refresh: vi.fn().mockResolvedValue(undefined) });
+    closeWorktreesModal: vi.fn(), openRepo: vi.fn(), notify: vi.fn(), celebrateMilestone: vi.fn(), rebaseModalBaseCommit: 'base-commit', closeRebaseModal: vi.fn(), openConflictResolver: vi.fn(), refresh: vi.fn().mockResolvedValue(undefined) });
   mocks.app.runAndRefresh = vi.fn(async (fn: () => any) => { try { await fn(); return true; } catch (error) { mocks.app.notify('error', String(error)); return false; } });
   mocks.useApp.setState.mockClear(); for (const method of Object.values(mocks.api)) method.mockReset();
   mocks.api.createWorktree.mockResolvedValue({ ok: true }); mocks.api.removeWorktree.mockResolvedValue({ ok: true });
@@ -81,6 +81,7 @@ describe('InteractiveRebaseModal', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Execute Rebase' }));
     await waitFor(() => expect(mocks.api.executeInteractiveRebase).toHaveBeenCalledWith('base-commit', [{ ...steps[0], action: 'reword', message: 'New first message' }, { ...steps[1], action: 'squash' }, steps[2]]));
     await waitFor(() => expect(mocks.app.notify).toHaveBeenCalledWith('success', 'Interactive rebase completed successfully')); expect(mocks.app.closeRebaseModal).toHaveBeenCalledOnce();
+    expect(mocks.app.celebrateMilestone).toHaveBeenCalledWith('rebase');
   });
   it('opens the recorded rewrite comparison after a successful history change', async () => {
     mocks.api.executeInteractiveRebase.mockResolvedValue({ ok: true, rewriteId: 'rewrite' }); render(<InteractiveRebaseModal />); await screen.findByText('First'); fireEvent.click(screen.getByRole('button', { name: 'Execute Rebase' }));

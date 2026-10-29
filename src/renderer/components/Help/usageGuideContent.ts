@@ -109,11 +109,24 @@ export const guideTopics: GuideTopic[] = [
       { title: 'Open the correct version', description: 'Select a file under a historical commit, Staged, or Unstaged. The source matters: a committed patch, an index patch, and uncommitted edits can show different changes for the same path.' },
       { title: 'Choose a reading mode', description: 'Switch between Unified and Split to read one combined patch or old/new sides. Maximize the diff for more room, or open the file in your external editor from the diff toolbar.' },
       { title: 'Act on a precise change', description: 'Use Stage Hunk or Discard Hunk for an unstaged patch, and Unstage Hunk for a staged one. In a historical patch, Revert Hunk applies an inverse change to the working tree; it is a modifying action, not a way to stage that old revision.' },
-      { title: 'Trace the reason for a line', description: 'Use Blame to inspect the commit and author associated with lines, and File History to follow earlier revisions of the file. Return to Diff to compare the patch you originally opened.' },
+      { title: 'Trace the reason for a line', description: 'Use Blame to inspect the commit and author associated with lines. File History now includes a revision scrubber: move through the file’s changes, read the author and commit message attached to each line, and open that revision’s diff.' },
       { title: 'Compare two revisions', description: 'Select a commit, right-click another, and choose Compare with selected. Inspect the resulting changed files; use Swap to reverse base and target when checking the opposite direction.' }
     ],
     tips: ['The path/tree controls in commit details let you switch between a flat list and folder hierarchy.', 'A missing or binary patch may need an external viewer; a small or empty text preview does not prove an asset is unchanged.'],
-    related: ['staging-commits', 'commit-graph', 'range-comparison']
+    related: ['staging-commits', 'commit-graph', 'history-time-machine', 'range-comparison']
+  },
+  {
+    id: 'history-time-machine', category: 'history', title: 'Replay a branch with the history time machine',
+    summary: 'Watch a branch graph grow from its oldest loaded commit and inspect each step without changing the checkout.',
+    minutes: 3, level: 'Intermediate', keywords: ['history', 'replay', 'time machine', 'branch', 'graph', 'commit', 'timeline'],
+    location: 'Commit graph → Replay', prerequisites: ['An open repository with at least one local or remote branch.'],
+    steps: [
+      { title: 'Choose a branch', description: 'Open Replay in the commit graph header and choose a local or remote branch. Replay reads its real commit ancestry and does not check out or move a ref.' },
+      { title: 'Scrub or play', description: 'Drag the slider or use Play to reveal the graph from oldest to newest. Pause at any point; click a visible graph node to jump to that commit.' },
+      { title: 'Inspect each step', description: 'Read the commit author, date, message, and changed-file list. Select a file to inspect its patch at that exact commit. Branch histories over 500 commits start at the oldest of the latest 500 loaded commits.' }
+    ],
+    tips: ['The replay never modifies your checkout. Close it to return to the normal graph at the same branch and revision.'],
+    related: ['commit-graph', 'diff-review', 'rebase-history']
   },
   {
     id: 'ai-assistant', category: 'daily', title: 'Generate and review commit messages',

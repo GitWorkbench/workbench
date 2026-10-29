@@ -472,7 +472,10 @@ function SidebarFull({
         icon: <RotateCcw size={13} />,
         disabled: isCurrent,
         onClick: () => {
-          void runAndRefresh(() => api.rebaseBranch(b.name), `Rebased ${currentBranchName} onto ${b.name}`);
+          void (async () => {
+            const completed = await runAndRefresh(() => api.rebaseBranch(b.name), `Rebased ${currentBranchName} onto ${b.name}`);
+            if (completed) useApp.getState().celebrateMilestone('rebase');
+          })();
         }
       },
       { label: '', divider: true },

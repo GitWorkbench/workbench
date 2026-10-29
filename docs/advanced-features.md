@@ -113,3 +113,11 @@ Apply saves a Git workspace restore point and a separate checkout-layout backup,
 Existing non-cone glob layouts are displayed without converting them silently. Restore a full checkout first before selecting folders; original rules are backed up. Restoring non-cone rules requires moving all ignored files aside, since the folder editor cannot predict arbitrary glob removals. Directory names containing control characters or backslashes require Git's command line. No tests, typecheck, or live sparse layout changes were run during this implementation.
 
 Reference: [Git sparse-checkout](https://git-scm.com/docs/git-sparse-checkout).
+
+## 11. Replay history and inspect file archaeology
+
+In the commit graph header, choose **Replay** to open the history time machine. Select a local or remote branch, then drag the timeline or choose **Play** to reveal its real commit graph from oldest to newest. Pause at any commit to read its author, date and message; select a changed file to inspect that commit's diff. Replay is read-only and does not check out a revision or change a branch. To keep playback responsive, histories over 500 commits replay the latest 500 loaded commits.
+
+For one file, open its **History** view from the diff toolbar. Scrub from the earliest revision to the latest to read each commit's message and metadata, then inspect line-by-line content and the author/commit message currently responsible for each line. Select a line's commit hash to locate it in the graph, or open that revision's diff. If a path did not exist at an older revision (for example, before a rename), the view explains that no snapshot is available for that step.
+
+Small milestone animations appear after a rebase completes or the final conflict is resolved. Turn **Subtle milestone animations** off in **Settings → Appearance & Themes** at any time. System reduced-motion preferences remove the movement while leaving the status message available.

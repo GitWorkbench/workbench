@@ -287,3 +287,36 @@ code {
   0%   { width: 100%; }
   100% { width: 0%; }
 }
+
+.milestone-celebration {
+  position: fixed;
+  z-index: 65;
+  left: 50%;
+  bottom: 34px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: min(90vw, 360px);
+  padding: 0.45rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--color-add) 35%, var(--color-edge));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-panel) 94%, transparent);
+  color: var(--color-fg);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 22%);
+  font-size: 11px;
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: milestone-arrive 1800ms ease-out both;
+}
+
+.milestone-celebration svg { color: var(--color-add); }
+
+@keyframes milestone-arrive {
+  0% { opacity: 0; transform: translate(-50%, 6px) scale(0.98); }
+  12%, 78% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -3px) scale(0.99); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .milestone-celebration { animation: none; }
+}

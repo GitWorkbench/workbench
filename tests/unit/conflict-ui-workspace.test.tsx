@@ -74,7 +74,7 @@ beforeEach(() => {
   mocks.refresh.mockResolvedValue(undefined); mocks.run.mockImplementation(async fn => { await fn(); return true; });
   mocks.state = {
     conflictedFileToResolve: null, activeTab: '/repo', closeConflictResolver: mocks.close, openConflictResolver: mocks.open,
-    notify: mocks.notify, refresh: mocks.refresh, runAndRefresh: mocks.run,
+    notify: mocks.notify, refresh: mocks.refresh, runAndRefresh: mocks.run, celebrateMilestone: vi.fn(),
     operationState: { inMerge: true, conflictedFiles: ['file.txt'] }, resolutionMemoryOpen: false
   };
   mocks.api.getResolutionSuggestion.mockResolvedValue({ snapshot: 'snapshot', enabled: false, content: null });
@@ -418,6 +418,14 @@ describe('safe saving and operation continuation', () => {
     await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
     expect(mocks.api.continueOperation).toHaveBeenCalledOnce();
     expect(mocks.run).toHaveBeenCalledWith(expect.any(Function), 'Merge continued');
+    if (continued) expect(mocks.state.celebrateMilestone).toHaveBeenCalledWith('conflicts-resolved');
+    else expect(mocks.state.celebrateMilestone).not.toHaveBeenCalled();
+  });
+  it('celebrates a completed rebase when continuing after its last conflict', async () => {
+    setState({ operationState: { inRebase: true, conflictedFiles: ['file.txt'] } });
+    mocks.api.getRepoOperationState.mockResolvedValue({ inRebase: true, conflictedFiles: [] });
+    await open(); click(/^Current$/); click('Apply & Continue Rebase');
+    await waitFor(() => expect(mocks.state.celebrateMilestone).toHaveBeenCalledWith('rebase'));
   });
   it('ignores save completion when the active repository changes', async () => {
     const save = deferred<{ ok: boolean }>(); mocks.api.resolveConflictFile.mockReturnValueOnce(save.promise);

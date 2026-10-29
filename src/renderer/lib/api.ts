@@ -153,6 +153,13 @@ const createMockApi = (): Api & GitWorkbenchApi => {
       hasMore: false,
       hasUncommittedChanges: true
     }),
+    getHistoryReplay: async (branch: string, remote = false) => ({
+      branch,
+      remote,
+      commits: mockCommits.slice(0, 500).map(commit => ({ hash: commit.hash, shortHash: commit.shortHash, parents: commit.parents, authorName: commit.authorName, authorEmail: commit.authorEmail, date: commit.date, summary: commit.message })),
+      totalCommits: mockCommits.length,
+      hasMore: mockCommits.length > 500
+    }),
 
     getPullReview: async () => { throw new Error('Hosted reviews require the desktop app and a configured provider.'); },
     listPinnedRepos: async () => [],
@@ -405,9 +412,9 @@ const createMockApi = (): Api & GitWorkbenchApi => {
     stashDrop: async () => ({ ok: true }),
 
     blame: async () => 'sample porcelain blame',
-    getBlame: async () => [
-      { lineNo: 1, commitHash: 'a1b2c3d', shortHash: 'a1b2c3d', author: 'Developer', authorEmail: 'dev@git-workbench.local', summary: 'feat', date: '2026-09-24', content: 'import React from "react";' },
-      { lineNo: 2, commitHash: 'b2c3d4e', shortHash: 'b2c3d4e', author: 'Developer', authorEmail: 'dev@git-workbench.local', summary: 'feat', date: '2026-09-24', content: 'import { useApp } from "../../store";' }
+    getBlame: async (_filePath: string, revision?: string) => [
+      { lineNo: 1, commitHash: revision || 'a1b2c3d', shortHash: (revision || 'a1b2c3d').slice(0, 7), author: 'Developer', authorEmail: 'dev@git-workbench.local', summary: 'feat', date: '2026-09-24', content: 'import React from "react";' },
+      { lineNo: 2, commitHash: revision || 'b2c3d4e', shortHash: (revision || 'b2c3d4e').slice(0, 7), author: 'Developer', authorEmail: 'dev@git-workbench.local', summary: 'feat', date: '2026-09-24', content: 'import { useApp } from "../../store";' }
     ],
     getFileHistory: async () => [
       { hash: 'a1b2c3d', shortHash: 'a1b2c3d', authorName: 'Developer', date: new Date().toISOString(), summary: 'Initial commit' }

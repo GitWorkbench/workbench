@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import './setup';
 import React from 'react';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
@@ -28,7 +28,7 @@ beforeEach(() => {
     worktrees: [{ path: '/repo', branch: 'main', hash: 'main-hash' }, { path: '/review', branch: '', hash: 'review-hash' }],
     stashes: [{ index: 0, message: 'Pending changes' }], selectedStashIndex: null,
     log: { commits: [{ hash: 'main-tip', refs: [{ label: 'main' }] }, { hash: 'feature-tip', refs: [{ label: 'feature' }] }, { hash: 'remote-tip', refs: [{ label: 'origin/remote-feature' }] }] } });
-  for (const name of ['notify', 'setFilter', 'setSidebarWidth', 'openCreateTagModal', 'openAddRemoteModal', 'openWorktreesModal', 'openSimulateMerge', 'openRepo', 'selectCommit', 'inspectStash', 'openPullRequestsModal']) mocks.app[name] = vi.fn();
+  for (const name of ['notify', 'setFilter', 'setSidebarWidth', 'openCreateTagModal', 'openAddRemoteModal', 'openWorktreesModal', 'openSimulateMerge', 'openRepo', 'selectCommit', 'inspectStash', 'openPullRequestsModal', 'celebrateMilestone']) mocks.app[name] = vi.fn();
   mocks.app.runAndRefresh = vi.fn(async (operation: () => any) => operation());
   mocks.useApp.setState.mockClear(); mocks.clipboard.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: mocks.clipboard } });
@@ -42,6 +42,15 @@ function context(kind: 'local' | 'remoteBranch' | 'tag' | 'remote' | 'submodule'
 }
 
 describe('Sidebar navigation, sizing and selection', () => {
+  it('celebrates a completed rebase from the branch actions and skips failed rebases', async () => {
+    render(<Sidebar />); fireEvent.contextMenu(branchButton('feature'));
+    fireEvent.click(screen.getByRole('button', { name: 'Rebase "main" onto "feature"' }));
+    await waitFor(() => expect(mocks.app.celebrateMilestone).toHaveBeenCalledWith('rebase'));
+    mocks.app.celebrateMilestone.mockClear(); mocks.app.runAndRefresh.mockResolvedValue(false);
+    fireEvent.contextMenu(branchButton('feature')); fireEvent.click(screen.getByRole('button', { name: 'Rebase "main" onto "feature"' }));
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.app.celebrateMilestone).not.toHaveBeenCalled();
+  });
   it.each(['onConfirmCheckout', 'onMoreActions'] as const)('ignores a queued %s after the checkout dialog closes', callback => {
     render(<Sidebar />); fireEvent.click(branchButton('feature'));
     const child = mocks.checkout; if (!child) throw new Error('Checkout dialog missing');

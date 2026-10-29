@@ -65,13 +65,17 @@ describe('browser preview API', () => {
     expect(await api.recentRepos()).toContain('/var/www/git-gui'); expect(await api.getGitConfig()).toHaveProperty('name');
     expect(await api.getStatus()).toMatchObject({ currentBranch: 'main', ahead: 1 });
     expect((await api.getLog()).commits).toHaveLength(4); expect((await api.getLog(1)).commits).toHaveLength(1);
+    expect(await api.getHistoryReplay('main')).toMatchObject({ branch: 'main', remote: false, totalCommits: 4 });
+    expect((await api.getHistoryReplay('main')).commits[0]).toMatchObject({ summary: expect.any(String), authorName: expect.any(String), parents: expect.any(Array) });
+    expect(await api.getHistoryReplay('origin/main', true)).toMatchObject({ branch: 'origin/main', remote: true });
     expect((await api.getBranches()).local[0].isCurrent).toBe(true); expect(await api.getStashes()).toHaveLength(1);
     expect(await api.getTags()).toHaveLength(2); expect(await api.getRemotes()).toHaveLength(2);
     expect(await api.getSubmodules()).toHaveLength(1); expect(await api.getWorktrees()).toHaveLength(2);
     expect(await api.getCommitDetail('abcdef1234')).toMatchObject({ hash: 'abcdef1234', shortHash: 'abcdef1' });
     expect(await api.getFileDiff('HEAD', 'file.txt')).toMatchObject({ oldPath: 'file.txt', newPath: 'file.txt', isBinary: false });
     expect(await api.getStagedDiff()).toMatchObject({ ok: true, diff: expect.stringContaining('diff --git') });
-    expect(await api.getBlame('file.txt')).toHaveLength(2); expect(await api.blame('file.txt')).toContain('blame');
+    expect(await api.getBlame('file.txt')).toHaveLength(2); const historicalBlame = await api.getBlame('file.txt', 'abc123456');
+    expect(historicalBlame).toHaveLength(2); expect(historicalBlame[0]).toMatchObject({ commitHash: 'abc123456', shortHash: 'abc1234' }); expect(await api.blame('file.txt')).toContain('blame');
     expect(await api.getFileHistory('file.txt')).toHaveLength(1);
     expect(await api.getConflictFile('file.txt')).toMatchObject({ filePath: 'file.txt', kind: 'text', totalConflicts: 0 });
     expect(await api.getRepoOperationState()).toMatchObject({ inMerge: false, inRebase: false, conflictedFiles: [] });

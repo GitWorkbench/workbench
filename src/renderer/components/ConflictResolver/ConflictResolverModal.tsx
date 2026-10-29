@@ -282,6 +282,9 @@ function MergeWorkspace({ data, onReload }: { data: ConflictFileParsed; onReload
           close();
           return;
         }
+        useApp.getState().celebrateMilestone(latest.inRebase ? 'rebase' : 'conflicts-resolved');
+      } else if (!latest.conflictedFiles.length) {
+        useApp.getState().celebrateMilestone('conflicts-resolved');
       }
       if (next) openFile(next); else close();
     } catch (reason) {

@@ -88,6 +88,7 @@ getGitConfig git:config-get 1
 setGitConfig git:config-set 1
 getStatus git:status 0
 getLog git:log 1
+getHistoryReplay git:history-replay 2
 getReflog git:reflog 0
 createRecoveryBranch git:reflog-recover-branch 2
 restoreHeadFromReflog git:reflog-restore-head 1
@@ -136,7 +137,7 @@ unstageLines git:unstage-lines 3
 discardLines git:discard-lines 3
 revertHunk git:revert-hunk 3
 blame git:blame 1
-getBlame git:get-blame 1
+getBlame git:get-blame 2
 getFileHistory git:get-file-history 1
 getConflictFile git:get-conflict-file 1
 resolveConflictFile git:resolve-conflict-file 3

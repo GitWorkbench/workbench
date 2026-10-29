@@ -49,6 +49,8 @@ describe('Preferences navigation and basic controls', () => {
     const { unmount } = renderSection('themes');
     await waitFor(() => expect(mocks.api.getAppUpdateState).toHaveBeenCalledOnce());
     expect(screen.getByRole('heading', { name: 'Appearance & Themes', level: 2 })).toBeVisible();
+    const celebrations = screen.getByRole('checkbox', { name: /Subtle milestone animations/ });
+    expect(celebrations).toBeChecked(); fireEvent.click(celebrations); expect(useSettings.getState().milestoneAnimations).toBe(false);
     fireEvent.click(screen.getByText('Clean Studio Light'));
     expect(useSettings.getState().theme).toBe('light');
     fireEvent.click(screen.getByText('Bottom Right'));

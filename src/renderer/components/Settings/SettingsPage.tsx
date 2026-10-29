@@ -93,7 +93,9 @@ export function SettingsPage() {
     resetDefaults,
     resetTypography,
     toastPosition,
-    setToastPosition
+    setToastPosition,
+    milestoneAnimations,
+    setMilestoneAnimations
   } = useSettings();
 
   const notify = useApp((s) => s.notify);
@@ -322,7 +324,7 @@ export function SettingsPage() {
     : '';
 
   const categories = [
-    { id: 'themes' as const, label: 'Appearance & Themes', icon: <Palette size={16} />, desc: 'Color palettes, UI accents & toast position' },
+    { id: 'themes' as const, label: 'Appearance & Themes', icon: <Palette size={16} />, desc: 'Color palettes, UI accents, celebrations & toast position' },
     { id: 'typography' as const, label: 'Typography & Density', icon: <Type size={16} />, desc: 'Independent text sizes, fonts & graph row density' },
     { id: 'profiles' as const, label: 'Commit Profiles & GPG', icon: <User size={16} />, desc: 'Git credentials, signing keys & identities' },
     { id: 'ai' as const, label: 'AI Assistant', icon: <Sparkles size={16} />, desc: 'Code reviews, commit messages & providers' },
@@ -609,6 +611,13 @@ export function SettingsPage() {
                     })}
                   </div>
                 </div>
+                <label className="flex items-start gap-3 rounded-xl border border-edge bg-panel2/50 p-4 cursor-pointer">
+                  <input type="checkbox" className="mt-0.5 accent-sky-500" checked={milestoneAnimations} onChange={(event) => setMilestoneAnimations(event.target.checked)} />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold text-fg">Subtle milestone animations</span>
+                    <span className="mt-1 block text-[11px] leading-relaxed text-dim">Show a brief, low-key animation after a rebase completes or the last conflict is resolved.</span>
+                  </span>
+                </label>
               </div>
             )}
 

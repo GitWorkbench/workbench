@@ -165,20 +165,85 @@ describe('blame annotations', () => {
 describe('file revision history', () => {
   const entries = [{ hash: 'a1', shortHash: 'a1', authorName: 'Alice', date: '2026-10-19T12:00:00Z', summary: 'First revision' }, { hash: 'b2', shortHash: 'b2', authorName: 'Bob', date: '2026-10-18T12:00:00Z', summary: 'Older revision' }];
   it('shows each revision, highlights the selected diff and opens file/commit actions', async () => {
-    mock.state.openDiff = { commitHash: 'a1' }; mock.api.getFileHistory.mockResolvedValue(entries); render(<FileHistoryView filePath="file.txt" />);
-    expect(screen.getByText('Loading file revision history...')).toBeVisible(); await screen.findByText('First revision');
-    expect(screen.getByText('2 commits')).toBeVisible(); expect(screen.getByText('2026-10-19')).toBeVisible();
-    fireEvent.click(screen.getAllByRole('button', { name: 'View Diff at Commit' })[0]); expect(mock.state.openFileDiff).toHaveBeenCalledWith({ commitHash: 'a1', filePath: 'file.txt' });
-    fireEvent.click(screen.getAllByRole('button', { name: 'Go to Commit' })[1]); expect(mock.state.selectCommit).toHaveBeenCalledWith('b2');
+    mock.state.openDiff = { commitHash: 'a1' }; mock.api.getFileHistory.mockResolvedValue(entries); mock.api.getBlame.mockResolvedValue(blame).mockResolvedValueOnce(blame).mockResolvedValueOnce([]); render(<FileHistoryView filePath="file.txt" />);
+    expect(screen.getByText('Loading file history…')).toBeVisible(); await screen.findByText('Older revision');
+    expect(screen.getByText('2 revisions')).toBeVisible(); expect(screen.getAllByText('Bob').length).toBeGreaterThan(0);
+    await waitFor(() => expect(mock.api.getBlame).toHaveBeenCalledWith('file.txt', 'b2'));
+    fireEvent.click(screen.getByRole('button', { name: 'Diff' })); expect(mock.state.openFileDiff).toHaveBeenCalledWith({ commitHash: 'b2', filePath: 'file.txt' });
+    fireEvent.click(screen.getByRole('button', { name: 'Go to commit' })); expect(mock.state.selectCommit).toHaveBeenCalledWith('b2');
+    fireEvent.click(screen.getByRole('button', { name: 'Next file revision' })); await screen.findByText('First revision');
+    await waitFor(() => expect(mock.api.getBlame).toHaveBeenLastCalledWith('file.txt', 'a1'));
   });
   it('handles empty results, errors, and responses settling after unmount', async () => {
     mock.api.getFileHistory.mockResolvedValueOnce([]); const first = render(<FileHistoryView filePath="empty" />);
     await screen.findByText('No historical commits found for this file.'); first.unmount();
-    vi.spyOn(console, 'error').mockImplementation(() => {}); mock.api.getFileHistory.mockRejectedValueOnce(new Error('missing'));
-    const second = render(<FileHistoryView filePath="missing" />); await screen.findByText('No historical commits found for this file.'); second.unmount();
+    mock.api.getFileHistory.mockRejectedValueOnce(new Error('missing'));
+    const second = render(<FileHistoryView filePath="missing" />); await screen.findByText('missing'); second.unmount();
+    mock.api.getFileHistory.mockRejectedValueOnce('offline');
+    render(<FileHistoryView filePath="offline" />); await screen.findByText('Could not load this file’s history.');
     let resolve!: (data: any) => void; mock.api.getFileHistory.mockReturnValueOnce(new Promise(done => { resolve = done; }));
     const stale = render(<FileHistoryView filePath="old" />); stale.unmount(); await act(async () => resolve(entries));
     let reject!: (error: Error) => void; mock.api.getFileHistory.mockReturnValueOnce(new Promise((_done, fail) => { reject = fail; }));
     const failed = render(<FileHistoryView filePath="old" />); failed.unmount(); await act(async () => reject(new Error('late')));
+  });
+
+  it('scrubs revisions, searches line ownership and handles snapshots without text or blame failures', async () => {
+    mock.api.getFileHistory.mockResolvedValue(entries);
+    mock.api.getBlame.mockResolvedValue(blame).mockResolvedValueOnce(blame).mockResolvedValueOnce([]);
+    render(<FileHistoryView filePath="file.txt" />);
+    await screen.findByText('alpha code');
+    const search = screen.getByRole('searchbox', { name: 'Filter historical lines' });
+    fireEvent.change(search, { target: { value: 'bob' } });
+    expect(screen.getByText('1/3 lines')).toBeVisible(); expect(screen.getByText('beta code')).toBeVisible();
+    fireEvent.change(search, { target: { value: 'not present' } }); expect(screen.getByText('No lines match this filter.')).toBeVisible();
+    fireEvent.change(search, { target: { value: '' } });
+    fireEvent.change(screen.getByRole('slider', { name: 'Scrub file history' }), { target: { value: '1' } });
+    await screen.findByText(/This file has no text lines/);
+    fireEvent.click(screen.getByRole('button', { name: 'Previous file revision' })); await screen.findByText('alpha code');
+    fireEvent.click(screen.getByRole('button', { name: 'Go to commit' })); expect(mock.state.selectCommit).toHaveBeenCalledWith('b2');
+  });
+
+  it('shows snapshot errors and ignores stale blame and history responses after the file changes', async () => {
+    mock.api.getFileHistory.mockResolvedValue(entries);
+    mock.api.getBlame.mockRejectedValueOnce(new Error('revision unavailable'));
+    const { unmount } = render(<FileHistoryView filePath="file.txt" />);
+    expect(await screen.findByText('revision unavailable')).toBeVisible();
+    unmount();
+
+    let resolveBlame!: (lines: any[]) => void;
+    mock.api.getBlame.mockReset().mockResolvedValue(blame).mockImplementationOnce(() => new Promise(resolve => { resolveBlame = resolve; }));
+    const pendingBlame = render(<FileHistoryView filePath="pending.txt" />);
+    await waitFor(() => expect(mock.api.getBlame).toHaveBeenCalledOnce());
+    pendingBlame.unmount();
+    await act(async () => resolveBlame([{ ...blame[0], content: 'stale line' }]));
+    expect(screen.queryByText('stale line')).not.toBeInTheDocument();
+
+    let resolveHistory!: (data: any[]) => void;
+    mock.api.getFileHistory.mockReturnValueOnce(new Promise(resolve => { resolveHistory = resolve; }));
+    const waiting = render(<FileHistoryView filePath="waiting.txt" />);
+    waiting.unmount(); await act(async () => resolveHistory(entries));
+  });
+
+  it('uses metadata fallbacks for a sparse snapshot and selects its owning commit', async () => {
+    mock.api.getFileHistory.mockResolvedValue([
+      { hash: 'old', shortHash: 'old', authorName: '', authorEmail: '', date: '', summary: '' },
+      { hash: 'new', shortHash: 'new', authorName: '', authorEmail: '', date: '', summary: '' }
+    ]);
+    mock.api.getBlame.mockResolvedValue([{ lineNo: 1, commitHash: 'owner', shortHash: 'own', author: '', authorEmail: '', date: '', summary: '', content: '' }]);
+    render(<FileHistoryView filePath="sparse.txt" />);
+    await screen.findByText('Unknown author');
+    expect(screen.getByText('Unknown date')).toBeVisible();
+    expect(screen.getAllByText('(no message)').length).toBeGreaterThan(0);
+    expect(screen.getByText('Oldest')).toBeVisible(); expect(screen.getByText('Newest')).toBeVisible();
+    await waitFor(() => expect(mock.api.getBlame).toHaveBeenCalledWith('sparse.txt', 'new'));
+    fireEvent.click(await screen.findByTitle('Inspect commit own'));
+    expect(mock.state.selectCommit).toHaveBeenCalledWith('owner');
+  });
+
+  it('uses a generic message when historical blame rejects a non-Error value', async () => {
+    mock.api.getFileHistory.mockResolvedValue(entries);
+    mock.api.getBlame.mockRejectedValueOnce('offline');
+    render(<FileHistoryView filePath="file.txt" />);
+    expect(await screen.findByText('Could not inspect this revision.')).toBeVisible();
   });
 });

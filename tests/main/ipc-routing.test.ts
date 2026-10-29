@@ -9,6 +9,7 @@ vi.mock('simple-git', () => ({ default: () => mock.git }));
 const modules: Record<string, string> = {
   'core': 'isValidRepo errorMessage withGit',
   'log': 'getLog repoDisplayName',
+  'history-explorer': 'getHistoryReplay',
   'status-diff': 'getStatus unstageFiles discardFile',
   'commit-detail': 'getCommitDetail getFileDiff getCommitDiffText compareCommits getComparisonFileDiff',
   'branch-stash': 'getBranches getStashes checkoutBranch createBranch deleteBranch renameBranch stash stashPop stashApply stashDrop revertHunk mergeBranch getStashDetail getStashFileDiff applyStashFile',
@@ -87,7 +88,7 @@ git:stashes getStashes 0
 git:commit-detail getCommitDetail 1
 git:file-diff getFileDiff 3
 git:reflog getReflog 0
-git:get-blame getBlameLines 1
+git:get-blame getBlameLines 2
 git:get-file-history getFileHistory 1
 git:get-conflict-file getConflictFile 1
 git:get-operation-state getRepoOperationState 0
@@ -190,6 +191,7 @@ describe('main process feature routing', () => {
     await call('git:branch-delete', 'old', { remote: true }); expect(mock.functions.deleteBranchEx).toHaveBeenCalledWith(root, 'old', { local: true, remote: true }); await call('git:worktree-create', 'hash', '/worktree'); expect(mock.functions.createWorktree).toHaveBeenCalledWith(root, '/worktree', 'hash');
   });
   it('captures status for log limits and still loads history when status fails', async () => { await call('git:log'); expect(mock.functions.getLog).toHaveBeenCalledWith(root, { staged: [], unstaged: [] }, 300); mock.functions.getStatus.mockRejectedValue(new Error('status failed')); await call('git:log', 50); expect(mock.functions.getLog).toHaveBeenCalledWith(root, null, 50); });
+  it('loads branch replay history with a validated local/remote selector', async () => { expect(await call('git:history-replay', 'origin/feature/ui', true)).toBe('response'); expect(mock.functions.getHistoryReplay).toHaveBeenCalledWith(root, 'origin/feature/ui', true); expect(await call('git:history-replay', 'main')).toBe('response'); expect(mock.functions.getHistoryReplay).toHaveBeenLastCalledWith(root, 'main', false); expect(await call('git:history-replay', 'main', 'remote')).toHaveProperty('__error', 'Choose whether this is a local or remote branch.'); });
   it('returns recovery metadata and obtains commit patches before reversing hunks', async () => { mock.functions.createRecoveryBranch.mockResolvedValue({ branchName: 'recovered' }); mock.functions.restoreHeadFromReflog.mockResolvedValue({ backupBranch: 'backup' }); expect(await call('git:reflog-recover-branch', 'hash', 'saved')).toEqual({ ok: true, branchName: 'recovered' }); expect(await call('git:reflog-restore-head', 'hash')).toEqual({ ok: true, backupBranch: 'backup' }); await call('git:revert-hunk', 'hash', 'file', 2); expect(mock.functions.getCommitDiffText).toHaveBeenCalledWith(root, 'hash', 'file'); expect(mock.functions.revertHunk).toHaveBeenCalledWith(root, 'response', 2); });
   it.each(['github', 'gitlab', 'bitbucket', 'gitea'])('manages %s credentials and only invalidates GitHub sign-in for GitHub', async provider => {
     const credential = { token: 'fake-test-token' }; expect(await call('git:pull-requests:save-credential', provider, credential)).toEqual({ ok: true }); expect(mock.functions.savePullRequestCredential).toHaveBeenCalledWith(provider, credential); expect(await call('git:pull-requests:remove-credential', provider)).toEqual({ ok: true }); expect(mock.functions.removePullRequestCredential).toHaveBeenCalledWith(provider, undefined); expect(mock.functions.cancelGitHubSignIn).toHaveBeenCalledTimes(provider === 'github' ? 2 : 0); expect(mock.functions.githubCredentialsChanged).toHaveBeenCalledTimes(provider === 'github' ? 2 : 0); expect(await call('git:pull-requests:credentials')).toBe('response');

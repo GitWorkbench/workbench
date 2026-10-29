@@ -34,10 +34,12 @@ import {
   X,
   Filter,
   Calendar,
-  Copy
+  Copy,
+  History
 } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { AiHistoryDialog } from './AiHistoryDialog';
+import { HistoryTimeMachine } from './HistoryTimeMachine';
 
 const DOT_R = 5;
 const MESSAGE_MIN_W = 250;
@@ -568,6 +570,7 @@ function CommitRow({
 
 export function CommitGraph() {
   const activeRepo = useApp(s => s.activeTab);
+  const [historyReplayOpen, setHistoryReplayOpen] = useState(false);
   const [aiAction, setAiAction] = useState<{ kind: 'reword' | 'explain'; commit: Commit; repo: string } | null>(null);
   const log = useApp((s) => s.log);
   const filter = useApp((s) => s.filter);
@@ -707,6 +710,8 @@ export function CommitGraph() {
   if (!log) {
     return <div className="flex-1 flex items-center justify-center text-dim text-sm">Open a repository to view the commit graph</div>;
   }
+
+  if (historyReplayOpen) return <HistoryTimeMachine onClose={() => setHistoryReplayOpen(false)} />;
 
   const wip = status && (status.staged.length > 0 || status.unstaged.length > 0);
   const graphW = Math.max(graphData.width, 40);
@@ -1059,8 +1064,11 @@ export function CommitGraph() {
         className="sticky top-0 z-10 flex items-center bg-panel border-b border-edge text-[11px] font-semibold tracking-wider text-dim select-none h-7"
         style={{ minWidth: rowMinWidth }}
       >
-        <div className="pl-3" style={{ width: BRANCH_W }}>
-          BRANCH / TAG
+        <div className="flex items-center justify-between gap-1 pl-3 pr-1" style={{ width: BRANCH_W }}>
+          <span>BRANCH / TAG</span>
+          <button type="button" className="btn-secondary !flex !items-center !gap-1 !px-1.5 !py-0.5 text-[10px] normal-case tracking-normal" aria-label="Open history time machine" title="Replay this branch’s history" onClick={() => setHistoryReplayOpen(true)}>
+            <History size={11} /> Replay
+          </button>
         </div>
         <div className="pl-1" style={{ width: graphW }}>
           GRAPH

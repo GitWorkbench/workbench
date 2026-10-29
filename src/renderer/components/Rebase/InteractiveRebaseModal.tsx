@@ -86,6 +86,7 @@ export function InteractiveRebaseModal() {
       await useApp.getState().refresh();
       if (res.ok) {
         notify('success', 'Interactive rebase completed successfully');
+        useApp.getState().celebrateMilestone('rebase');
         close();
         const rewriteId = (res as { rewriteId?: string }).rewriteId;
         if (rewriteId) useApp.setState({ rangeComparisonOpen: true, rangeComparisonId: rewriteId });

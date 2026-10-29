@@ -45,6 +45,9 @@ export interface ToastItem {
   timestamp: number;
 }
 
+export type MilestoneKind = 'rebase' | 'conflicts-resolved';
+export interface MilestoneCelebration { id: number; kind: MilestoneKind }
+
 interface AppState {
   tabs: { path: string; name: string }[];
   activeTab: string | null;
@@ -114,6 +117,7 @@ interface AppState {
   isLoadingMoreCommits: boolean;
   isOpeningRepo: boolean;
   openingRepoName: string | null;
+  milestoneCelebration: MilestoneCelebration | null;
 }
 
 interface AppActions {
@@ -181,12 +185,15 @@ interface AppActions {
   notify(kind: 'info' | 'error' | 'success' | 'warn', text: string, title?: string, duration?: number): void;
   dismissToast(id: string): void;
   clearToasts(): void;
+  celebrateMilestone(kind: MilestoneKind): void;
+  clearMilestoneCelebration(id: number): void;
   runAndRefresh(fn: () => Promise<unknown>, successMsg?: string): Promise<boolean>;
 }
 
 export type AppStore = AppState & AppActions;
 
 export const WIP_HASH = '0000000-wip';
+let milestoneId = 0;
 
 // Invalidate in-flight reads when their selection, repository, or newer request changes.
 let repositoryEpoch = 0;
@@ -284,6 +291,7 @@ export const useApp = create<AppStore>((set, get) => ({
   isLoadingMoreCommits: false,
   isOpeningRepo: false,
   openingRepoName: null,
+  milestoneCelebration: null,
 
   async init() {
     const recent = (await unwrap(api.recentRepos()).catch(() => [])) as string[];
@@ -841,6 +849,14 @@ export const useApp = create<AppStore>((set, get) => ({
 
   clearToasts() {
     set({ toasts: [], toast: null });
+  },
+
+  celebrateMilestone(kind) {
+    set({ milestoneCelebration: { id: ++milestoneId, kind } });
+  },
+
+  clearMilestoneCelebration(id) {
+    if (get().milestoneCelebration?.id === id) set({ milestoneCelebration: null });
   },
 
   async runAndRefresh(fn, successMsg) {

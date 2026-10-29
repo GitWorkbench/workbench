@@ -25,6 +25,7 @@ import {
 } from '../shared/types';
 import { isValidRepo, errorMessage, withGit } from './git/core';
 import { getLog, repoDisplayName } from './git/log';
+import { getHistoryReplay } from './git/history-explorer';
 import { getStatus, unstageFiles, discardFile } from './git/status-diff';
 import { getCommitDetail, getFileDiff, getCommitDiffText, compareCommits, getComparisonFileDiff } from './git/commit-detail';
 import {
@@ -446,6 +447,10 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
     const st = await getStatus(repo).catch(() => null);
     return getLog(repo, st, limit ?? 300);
   });
+  handle('git:history-replay', async (branch: string, remote?: boolean) => {
+    if (remote !== undefined && typeof remote !== 'boolean') throw new Error('Choose whether this is a local or remote branch.');
+    return getHistoryReplay(requireRepo(), branch, remote ?? false);
+  });
   handle('git:branches', async () => getBranches(requireRepo()));
   handle('git:stashes', async (): Promise<StashInfo[]> => getStashes(requireRepo()));
   handle('git:commit-detail', async (hash: string): Promise<CommitDetail | null> =>
@@ -714,8 +719,8 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
   handle('git:blame', async (filePath: string) => {
     return withGit(requireRepo(), (g) => g.raw(['blame', '--date=short', '--', filePath]));
   });
-  handle('git:get-blame', async (filePath: string) => {
-    return getBlameLines(requireRepo(), filePath);
+  handle('git:get-blame', async (filePath: string, revision?: string) => {
+    return getBlameLines(requireRepo(), filePath, revision);
   });
   handle('git:file-history', async (filePath: string) => {
     return withGit(requireRepo(), (g) =>

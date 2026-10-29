@@ -482,6 +482,24 @@ export interface FileHistoryEntry {
   summary: string;
 }
 
+export interface HistoryReplayCommit {
+  hash: string;
+  shortHash: string;
+  parents: string[];
+  authorName: string;
+  authorEmail: string;
+  date: string;
+  summary: string;
+}
+
+export interface HistoryReplay {
+  branch: string;
+  remote: boolean;
+  commits: HistoryReplayCommit[];
+  totalCommits: number;
+  hasMore: boolean;
+}
+
 export interface ConflictSection {
   id: string;
   startLine: number;
@@ -771,8 +789,9 @@ export interface GitWorkbenchApi extends AdvancedGitApi, TerminalApi, Playground
   stashDrop(index?: number): Promise<{ ok: boolean; error?: string }>;
   revertHunk(hash: string, filePath: string, hunkIndex: number): Promise<{ ok: boolean; error?: string }>;
   blame(filePath: string): Promise<string>;
-  getBlame(filePath: string): Promise<BlameLine[]>;
+  getBlame(filePath: string, revision?: string): Promise<BlameLine[]>;
   getFileHistory(filePath: string): Promise<FileHistoryEntry[]>;
+  getHistoryReplay(branch: string, remote?: boolean): Promise<HistoryReplay>;
   getConflictFile(filePath: string): Promise<ConflictFileParsed>;
   resolveConflictFile(filePath: string, content: string, options?: ConflictResolutionOptions): Promise<{ ok: boolean; error?: string }>;
   getRepoOperationState(): Promise<RepoOperationState>;

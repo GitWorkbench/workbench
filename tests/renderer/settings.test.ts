@@ -18,7 +18,7 @@ beforeEach(() => {
 describe('settings persistence and normalization', () => {
   it('loads defaults and writes normalized storage without exposing store methods', async () => {
     const { useSettings } = await load();
-    expect(useSettings.getState()).toMatchObject({ theme: 'git-workbench-dark', uiFontSize: 13, codeFontSize: 12, homeFontSize: 13, guideFontSize: 13, graphRowHeight: 26 });
+    expect(useSettings.getState()).toMatchObject({ theme: 'git-workbench-dark', uiFontSize: 13, codeFontSize: 12, homeFontSize: 13, guideFontSize: 13, graphRowHeight: 26, milestoneAnimations: true });
     expect(JSON.parse(localStorage.getItem(storageKey)!)).not.toHaveProperty('openSettings');
     expect(document.documentElement).toHaveAttribute('data-theme', 'git-workbench-dark');
   });
@@ -36,10 +36,10 @@ describe('settings persistence and normalization', () => {
   });
   it('normalizes invalid theme, fonts, density and nested objects', async () => {
     const { useSettings } = await load({ theme: 'unknown', uiFontSize: -20, codeFontSize: 100, homeFontSize: null, guideFontSize: 19.7,
-      graphRowHeight: 'giant', uiFontFamily: 3, codeFontFamily: false, customUiFont: [], customCodeFont: {}, commitColumns: [], commitColumnWidths: null });
+      graphRowHeight: 'giant', uiFontFamily: 3, codeFontFamily: false, customUiFont: [], customCodeFont: {}, commitColumns: [], commitColumnWidths: null, milestoneAnimations: 'yes' });
     expect(useSettings.getState()).toMatchObject({ theme: 'git-workbench-dark', uiFontSize: 11, codeFontSize: 18, homeFontSize: 13, guideFontSize: 20,
       graphRowHeight: 26, uiFontFamily: 'Inter', codeFontFamily: 'JetBrains Mono', customUiFont: '', customCodeFont: '',
-      commitColumns: { author: true, date: false, sha: true }, commitColumnWidths: { author: 150, date: 200, sha: 100 } });
+      commitColumns: { author: true, date: false, sha: true }, commitColumnWidths: { author: 150, date: 200, sha: 100 }, milestoneAnimations: true });
   });
   it('continues without local storage access or quota', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
@@ -138,7 +138,7 @@ describe('settings actions', () => {
     const state = useSettings.getState();
     const patches: Array<[keyof SettingsState, unknown]> = [
       ['setTheme', 'light'], ['setUiFontFamily', 'custom'], ['setCustomUiFont', 'Readable'], ['setCodeFontFamily', 'custom'], ['setCustomCodeFont', 'Code'],
-      ['setAutoFetch', false], ['setAutoFetchInterval', 120], ['setToastPosition', 'bottom-right'], ['setDefaultAuthorName', 'Alice'], ['setDefaultAuthorEmail', 'alice@example.test'],
+      ['setAutoFetch', false], ['setAutoFetchInterval', 120], ['setToastPosition', 'bottom-right'], ['setMilestoneAnimations', false], ['setDefaultAuthorName', 'Alice'], ['setDefaultAuthorEmail', 'alice@example.test'],
       ['setSigningKey', 'ABCDEF'], ['setCommitProfiles', [{ id: 'work', name: 'Work', authorName: 'Alice', authorEmail: 'alice@example.test', signingKey: 'key' }]], ['setActiveProfileId', 'work']
     ];
     for (const [action, value] of patches) (state[action] as (value: unknown) => void)(value);
@@ -162,13 +162,13 @@ describe('settings actions', () => {
   it('resets typography independently and resets all saved preferences on request', async () => {
     const { useSettings } = await load();
     const state = useSettings.getState();
-    state.setTheme('light'); state.setDefaultAuthorName('Alice'); state.setAutoFetch(false);
+    state.setTheme('light'); state.setDefaultAuthorName('Alice'); state.setAutoFetch(false); state.setMilestoneAnimations(false);
     state.setUiFontSize(16); state.setCodeFontSize(18); state.setHomeFontSize(18); state.setGuideFontSize(20); state.setGraphRowHeight(30);
     state.setUiFontFamily('custom'); state.setCustomUiFont('One'); state.setCodeFontFamily('custom'); state.setCustomCodeFont('Two');
     state.resetTypography();
     expect(useSettings.getState()).toMatchObject({ theme: 'light', defaultAuthorName: 'Alice', autoFetch: false, uiFontSize: 13, codeFontSize: 12, homeFontSize: 13, guideFontSize: 13, graphRowHeight: 26, uiFontFamily: 'Inter', codeFontFamily: 'JetBrains Mono', customUiFont: '', customCodeFont: '' });
     state.resetDefaults();
-    expect(useSettings.getState()).toMatchObject({ theme: 'git-workbench-dark', defaultAuthorName: '', autoFetch: true });
+    expect(useSettings.getState()).toMatchObject({ theme: 'git-workbench-dark', defaultAuthorName: '', autoFetch: true, milestoneAnimations: true });
     expect(JSON.parse(localStorage.getItem(storageKey)!)).toMatchObject({ theme: 'git-workbench-dark', defaultAuthorName: '' });
   });
 });
