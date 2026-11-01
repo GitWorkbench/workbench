@@ -84,7 +84,7 @@ describe('isolated Linux packaging and updater feeds', () => {
     const builder = fakeBuilder();
     await buildLinux(['--x64'], buildOptions(builder));
     expect(builder.build.mock.calls.every(([input]) => input.config.productName === 'git-workbench')).toBe(true);
-    expect(builder.build.mock.calls.every(([input]) => input.config.linux.desktop.Name === 'Git Workbench')).toBe(true);
+    expect(builder.build.mock.calls.every(([input]) => input.config.linux.desktop.entry.Name === 'Git Workbench')).toBe(true);
     expect(builder.markers).toEqual([{ target: 'AppImage', marker: '' }, { target: 'deb', marker: 'deb' }, { target: 'rpm', marker: 'rpm' }, { target: 'pacman', marker: 'pacman' }]);
     if (process.platform !== 'win32') expect(builder.sandboxModes).toEqual([0o755, 0o4755, 0o4755, 0o4755]);
     expect(new Set(builder.build.mock.calls.map(([input]) => input.config.directories.output)).size).toBe(4);

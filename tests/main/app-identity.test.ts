@@ -71,11 +71,13 @@ describe('Git Workbench identity', () => {
     expect(packageLock.packages[''].name).toBe(packageJson.name);
     expect(packageLock.version).toBe(packageJson.version);
     expect(packageJson.build.productName).toBe(APP_NAME);
+    expect(packageJson.desktopName).toBe('git-workbench');
     expect(packageJson.build.appId).toBe('dev.gitworkbench.app');
     expect(packageJson.build).not.toHaveProperty('nsis.guid');
     expect(packageJson.build.publish).toMatchObject({ provider: 'github', owner: 'GitWorkbench', repo: 'workbench' });
     expect(packageJson.build.linux.executableName).toBe('git-workbench');
-    expect(packageJson.build.linux.desktop.StartupWMClass).toBe('git-workbench');
+    expect(packageJson.build.linux.syncDesktopName).toBe(true);
+    expect(packageJson.build.linux.desktop.entry.StartupWMClass).toBe('git-workbench');
     for (const target of ['deb', 'rpm', 'pacman'] as const) expect(packageJson.build[target].packageName).toBe('git-workbench');
     expect(packageJson.build.artifactName).toBe('git-workbench-${version}-${arch}.${ext}');
     expect(packageJson.build.win.artifactName).toBe('git-workbench-setup-${version}.${ext}');

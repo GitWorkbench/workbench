@@ -5,7 +5,7 @@ import path from 'node:path';
 const mock = vi.hoisted(() => ({ handlers: new Map<string, (...a: any[]) => any>(), functions: {} as Record<string, any>, git: {} as Record<string, any>, repo: '' as string | null, win: null as any, exec: vi.fn(), spawn: vi.fn(), send: vi.fn(), open: vi.fn(), external: vi.fn(), reveal: vi.fn() }));
 vi.mock('electron', () => ({ app: { once: vi.fn(), getPath: () => mock.repo, relaunch: vi.fn(), exit: vi.fn() }, ipcMain: { handle: (channel: string, fn: any) => mock.handlers.set(channel, fn) }, dialog: { showOpenDialog: vi.fn() }, shell: { openPath: mock.open, openExternal: mock.external, showItemInFolder: mock.reveal } }));
 vi.mock('node:child_process', () => ({ exec: mock.exec, spawn: mock.spawn }));
-vi.mock('simple-git', () => ({ default: () => mock.git }));
+vi.mock('simple-git', () => ({ simpleGit: () => mock.git }));
 const modules: Record<string, string> = {
   'core': 'isValidRepo errorMessage withGit',
   'log': 'getLog repoDisplayName',

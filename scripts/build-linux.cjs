@@ -77,7 +77,7 @@ async function buildLinux(args = [], options = {}) {
             // spaces on Ubuntu. Keep the Linux install directory space-free,
             // while retaining the user-facing product name in the desktop menu.
             productName: linuxInstallName,
-            linux: { desktop: { Name: displayName } },
+            linux: { desktop: { entry: { Name: displayName } } },
             directories: { output: targetOutput },
             ...(target === 'pacman' ? { pacman: { compression: 'xz' } } : {}),
             afterPack: async context => {
@@ -99,7 +99,7 @@ async function buildLinux(args = [], options = {}) {
         const names = await fs.readdir(targetOutput);
         const packages = names.filter(name => name.endsWith(`.${target}`));
         if (packages.length !== 1) throw new Error(`Expected one ${target} installer, found ${packages.length}.`);
-        // Builder 25 emits an XZ-compressed .pacman intermediary. Only the
+        // electron-builder emits an XZ-compressed .pacman intermediary. Only the
         // standard Zstandard archive is copied to dist and advertised to clients.
         let artifact = path.join(targetOutput, packages[0]);
         if (target === 'pacman') artifact = await (options.packageArch || createArchPackage)(artifact, arch);
@@ -118,7 +118,7 @@ async function buildLinux(args = [], options = {}) {
         artifacts.push({ source: artifact, name });
         for (const blockmap of names.filter(name => name.endsWith('.blockmap'))) artifacts.push({ source: path.join(targetOutput, blockmap), name: blockmap });
       }
-      // Builder 25 doesn't generate Pacman update entries. Include every built
+      // electron-builder doesn't generate Pacman update entries. Include every built
       // format, with hashes from the actual archives, in one per-architecture feed.
       const first = files[0];
       const suffix = arch === 'x64' ? '' : `-${arch === 'armv7l' ? 'arm' : arch}`;

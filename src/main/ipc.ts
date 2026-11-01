@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn, exec } from 'node:child_process';
-import simpleGit from 'simple-git';
+import { simpleGit } from 'simple-git';
 import { generateCommitMessage, explainCodeChanges } from './ai';
 import { getAiSettings, saveAiSettings, getSetupComplete, completeSetup } from './ai-settings';
 import { listPlaygroundSessions, createPlaygroundSession, checkPlaygroundSession } from './playground';
