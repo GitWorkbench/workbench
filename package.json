@@ -2,7 +2,7 @@
   "name": "git-workbench",
   "productName": "Git Workbench",
   "desktopName": "git-workbench",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "A commit-graph-centric visual Git client for Linux, macOS, and Windows",
   "main": "out/main/index.js",
   "author": {
