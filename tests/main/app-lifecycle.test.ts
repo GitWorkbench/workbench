@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const mock = vi.hoisted(() => ({
-  handlers: new Map<string, (...args: any[]) => any>(), ipc: new Map<string, (...args: any[]) => any>(),
+  handlers: new Map<string, (...args: any[]) => any>(), power: new Map<string, (...args: any[]) => any>(), ipc: new Map<string, (...args: any[]) => any>(),
   windows: [] as any[], register: vi.fn(), updater: vi.fn(), quit: vi.fn(), open: vi.fn(), identity: vi.fn(), menu: vi.fn(), ready: vi.fn(() => Promise.resolve()), disableHardwareAcceleration: vi.fn()
 }));
 vi.mock('../../src/main/ipc', () => ({ registerIpc: mock.register }));
@@ -12,12 +12,14 @@ vi.mock('../../src/main/terminal', () => ({ registerTerminal: mock.register }));
 vi.mock('../../src/main/app-identity', () => ({ configureAppIdentity: mock.identity, configureAppMenu: mock.menu }));
 vi.mock('electron', () => ({
   app: { whenReady: mock.ready, on: (name: string, fn: (...args: any[]) => any) => mock.handlers.set(name, fn), quit: mock.quit, disableHardwareAcceleration: mock.disableHardwareAcceleration },
+  powerMonitor: { on: (name: string, fn: (...args: any[]) => any) => mock.power.set(name, fn) },
   ipcMain: { on: (name: string, fn: (...args: any[]) => any) => mock.ipc.set(name, fn) },
   shell: { openExternal: mock.open },
   BrowserWindow: class {
     options: unknown;
     events = new Map<string, (...args: any[]) => any>();
-    webContents = { send: vi.fn() };
+    webContents = { send: vi.fn(), isCrashed: vi.fn(() => false), isLoading: vi.fn(() => false), executeJavaScript: vi.fn(() => Promise.resolve(undefined)), reload: vi.fn() };
+    isDestroyed = vi.fn(() => false);
     loadFile = vi.fn(); loadURL = vi.fn();
     constructor(options: unknown) { this.options = options; mock.windows.push(this); }
     on(name: string, fn: (...args: any[]) => any) { this.events.set(name, fn); }
@@ -26,13 +28,13 @@ vi.mock('electron', () => ({
 }));
 const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!;
 beforeEach(() => {
-  vi.resetModules(); mock.handlers.clear(); mock.ipc.clear(); mock.windows.length = 0;
+  vi.resetModules(); mock.handlers.clear(); mock.power.clear(); mock.ipc.clear(); mock.windows.length = 0;
   mock.register.mockReset(); mock.updater.mockReset(); mock.quit.mockReset(); mock.open.mockReset();
   mock.disableHardwareAcceleration.mockReset();
   mock.identity.mockClear(); mock.menu.mockClear(); mock.ready.mockClear();
   vi.stubEnv('ELECTRON_RENDERER_URL', '');
 });
-afterEach(() => { vi.unstubAllEnvs(); Object.defineProperty(process, 'platform', originalPlatform); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); Object.defineProperty(process, 'platform', originalPlatform); });
 async function start() { await import('../../src/main/index'); await Promise.resolve(); }
 
 describe('Electron application lifecycle', () => {
@@ -68,6 +70,20 @@ describe('Electron application lifecycle', () => {
     expect(win.webContents.send.mock.calls).toEqual([['window:maximize-change', true], ['window:maximize-change', false]]);
     win.events.get('closed')!(); expect(getWindow()).toBeNull(); expect(getTerminalWindow()).toBeNull();
     win.events.get('maximize')!(); win.events.get('unmaximize')!(); expect(win.webContents.send).toHaveBeenCalledTimes(2);
+  });
+  it('registers wake and renderer-process recovery hooks', async () => {
+    await start();
+    expect(mock.power.has('resume')).toBe(true);
+    expect(mock.power.has('unlock-screen')).toBe(true);
+    expect(mock.handlers.has('child-process-gone')).toBe(true);
+    expect(mock.handlers.has('render-process-gone')).toBe(true);
+    const win = mock.windows[0];
+    mock.handlers.get('child-process-gone')!({}, { type: 'Utility' });
+    vi.useFakeTimers();
+    mock.handlers.get('render-process-gone')!({}, win.webContents, { reason: 'crashed' });
+    await vi.advanceTimersByTimeAsync(0);
+    vi.useRealTimers();
+    expect(win.webContents.reload).toHaveBeenCalledOnce();
   });
   it('loads a development URL only when one is configured', async () => {
     vi.stubEnv('ELECTRON_RENDERER_URL', 'http://localhost:5173'); await start();

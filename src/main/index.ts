@@ -1,10 +1,11 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, powerMonitor, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { registerIpc } from './ipc';
 import { registerUpdater } from './updater';
 import { registerTerminal } from './terminal';
 import { configureAppIdentity, configureAppMenu } from './app-identity';
+import { registerWindowRecovery } from './window-recovery';
 import { APP_NAME } from '../shared/appIdentity';
 
 configureAppIdentity();
@@ -67,6 +68,14 @@ app.whenReady().then(() => {
   );
   registerUpdater(() => mainWindow);
   registerTerminal(() => mainWindow, () => currentRepo);
+  registerWindowRecovery(() => mainWindow, {
+    onWake: listener => {
+      powerMonitor.on('resume', listener);
+      powerMonitor.on('unlock-screen', listener);
+    },
+    onChildProcessGone: listener => app.on('child-process-gone', (_event, details) => listener(details.type)),
+    onRendererGone: listener => app.on('render-process-gone', (_event, contents) => listener(contents))
+  });
 
   // Track the active repo path (sent from renderer when a tab is focused)
   ipcMain.on('repo:set-active', (_e, repoPath: string | null) => {

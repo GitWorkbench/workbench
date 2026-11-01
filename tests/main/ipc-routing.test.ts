@@ -217,12 +217,41 @@ describe('mutation safety and process boundaries', () => {
   it('provides staged diffs, staging commands, and explicit commit authors', async () => {
     expect(await call('git:staged-diff')).toEqual({ ok: true, diff: 'git-result' }); expect(mock.git.diff).toHaveBeenCalledWith(['--cached']); for (const [channel, args] of [['git:stage', [['file']]], ['git:unstage', [['file']]], ['git:stage-all', []], ['git:unstage-all', []], ['git:discard', ['file']]] as const) expect(await call(channel, ...args)).toEqual({ staged: [], unstaged: [] }); await call('git:commit', 'message', { name: 'Alice', email: 'alice@example.invalid' }); expect(mock.functions.gitWithEnvironment).toHaveBeenCalledWith(root, { GIT_AUTHOR_NAME: 'Alice', GIT_AUTHOR_EMAIL: 'alice@example.invalid', GIT_COMMITTER_NAME: 'Alice', GIT_COMMITTER_EMAIL: 'alice@example.invalid' }); expect(mock.functions.profileCommit).toHaveBeenCalledWith(['commit', '-m', 'message']); await call('git:commit', 'plain'); expect(mock.git.commit).toHaveBeenCalledWith('plain'); await call('git:rebase-branch', 'develop'); expect(mock.git.rebase).toHaveBeenCalledWith(['develop']);
   });
+  it('keeps file staging available when resolution-memory capture fails', async () => {
+    mock.functions.captureResolutionMemory.mockRejectedValue(new Error('rerere unavailable'));
+    expect(await call('git:stage', ['file.txt'])).toEqual({ staged: [], unstaged: [] });
+    expect(mock.functions.captureResolutionMemory).toHaveBeenCalledTimes(2);
+  });
+  it('continues a queued dashboard pin after an earlier write failed', async () => {
+    mock.functions.pinnedRepositories.mockResolvedValue([root]);
+    mock.functions.pinRepository.mockRejectedValueOnce(new Error('disk full'));
+    expect(await call('dashboard:pin', root, true)).toEqual({ __error: 'disk full' });
+    expect(await call('dashboard:pin', root, true)).toBe('response');
+    expect(mock.functions.pinRepository).toHaveBeenCalledTimes(2);
+  });
   it('falls back from staged to unstaged changes for AI and supports supplied diffs', async () => { mock.git.diff.mockResolvedValueOnce('').mockResolvedValueOnce('working diff'); expect(await call('ai:generate-commit', { tone: 'short' })).toBe('response'); expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ tone: 'short', diff: 'working diff' }); await call('ai:generate-commit', { diff: 'supplied' }); expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ diff: 'supplied' }); mock.git.diff.mockRejectedValue(new Error('no diff')); await call('ai:generate-commit'); expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ diff: '' }); });
+  it('uses a non-empty staged diff without reading the worktree diff', async () => {
+    mock.git.diff.mockResolvedValueOnce('staged patch');
+    expect(await call('ai:generate-commit')).toBe('response');
+    expect(mock.git.diff).toHaveBeenCalledExactlyOnceWith(['--cached']);
+    expect(mock.functions.generateCommitMessage).toHaveBeenCalledWith({ diff: 'staged patch' });
+  });
+  it('routes AI commit rewording and branch explanations through their feature boundaries', async () => {
+    expect(await call('ai:recompose-commit', 'abc123', { model: 'local' })).toBe('response');
+    expect(mock.functions.recomposeCommitMessage).toHaveBeenCalledWith(root, 'abc123', { model: 'local' });
+    expect(await call('ai:explain-branch', 'main', 'feature', { model: 'local' })).toBe('response');
+    expect(mock.functions.explainBranchChanges).toHaveBeenCalledWith(root, 'main', 'feature', { model: 'local' });
+  });
   it('explains supplied or loaded patches and reports missing/failed diffs', async () => { expect(await call('ai:explain-changes', {})).toEqual({ ok: false, error: 'No diff content found to explain' }); await call('ai:explain-changes', { diffText: 'diff', config: { model: 'model' } }); expect(mock.functions.explainCodeChanges).toHaveBeenCalledWith('diff', { model: 'model' }); await call('ai:explain-changes', { commitHash: 'hash' }); expect(mock.functions.getCommitDiffText).toHaveBeenCalledWith(root, 'hash'); mock.functions.getCommitDiffText.mockRejectedValue(new Error('missing commit')); expect(await call('ai:explain-changes', { commitHash: 'missing' })).toEqual({ ok: false, error: 'missing commit' }); });
   it('pulls without upstream using the current branch and explains unsafe local changes', async () => {
     mock.git.pull.mockRejectedValueOnce(new Error('no tracking information')); expect(await call('git:pull')).toEqual({ ok: true }); expect(mock.git.pull).toHaveBeenCalledWith('origin', 'main'); mock.git.pull.mockRejectedValueOnce(new Error('local changes to the following files')); expect(await call('git:pull')).toHaveProperty('__error', expect.stringContaining('stash or commit')); mock.git.status.mockResolvedValue({ current: null }); mock.git.pull.mockRejectedValueOnce(new Error('no upstream')); expect(await call('git:pull')).toEqual({ __error: 'no upstream' });
   });
   it('pushes with an inferred upstream and refuses missing remotes', async () => { mock.git.push.mockRejectedValueOnce(new Error('no upstream branch')); expect(await call('git:push')).toEqual({ ok: true }); expect(mock.git.push).toHaveBeenCalledWith(['--set-upstream', 'origin', 'main']); mock.git.getRemotes.mockResolvedValue([]); expect(await call('git:push')).toHaveProperty('__error', expect.stringContaining('No remote repository')); mock.git.getRemotes.mockResolvedValue([{}]); mock.git.push.mockRejectedValueOnce(new Error('--set-upstream')); await call('git:push'); expect(mock.git.push).toHaveBeenCalledWith(['--set-upstream', 'origin', 'main']); mock.git.status.mockResolvedValue({ current: null }); mock.git.push.mockRejectedValueOnce(new Error('no upstream branch')); expect(await call('git:push')).toHaveProperty('__error'); });
+  it('preserves unrelated push failures without attempting upstream setup', async () => {
+    mock.git.push.mockRejectedValueOnce(new Error('remote unavailable'));
+    expect(await call('git:push')).toEqual({ __error: 'remote unavailable' });
+    expect(mock.git.status).not.toHaveBeenCalled();
+  });
   it('fetches a selected remote or all configured remotes and ignores only missing-remote errors', async () => { expect(await call('git:fetch', 'upstream')).toEqual({ ok: true }); expect(mock.git.fetch).toHaveBeenCalledWith('upstream'); await call('git:fetch'); expect(mock.git.fetch).toHaveBeenCalledWith(['--all']); mock.git.getRemotes.mockResolvedValue([]); mock.git.fetch.mockClear(); await call('git:fetch'); expect(mock.git.fetch).not.toHaveBeenCalled(); mock.git.fetch.mockRejectedValueOnce(new Error('No remote repository specified')); expect(await call('git:fetch', 'origin')).toEqual({ ok: true }); mock.git.fetch.mockRejectedValueOnce(new Error('offline')); expect(await call('git:fetch', 'origin')).toEqual({ __error: 'offline' }); });
   it('returns bounded command output and numeric exit codes from the process callback', async () => { mock.exec.mockImplementation((_cmd, _opts, done) => done(null, Buffer.from('out'), Buffer.from('err'))); expect(await call('app:run-command', 'git status')).toEqual({ ok: true, stdout: 'out', stderr: 'err', exitCode: 0, error: undefined }); expect(mock.exec).toHaveBeenCalledWith('git status', { cwd: root, maxBuffer: 10 * 1024 * 1024 }, expect.any(Function)); mock.exec.mockImplementation((_cmd, _opts, done) => done(Object.assign(new Error('failed'), { code: 2 }), '', '')); expect(await call('app:run-command', 'bad')).toMatchObject({ ok: false, exitCode: 2, stdout: '', stderr: '', error: 'failed' }); mock.exec.mockImplementation((_cmd, _opts, done) => done(new Error('failed'), null, null)); expect(await call('app:run-command', 'bad')).toHaveProperty('exitCode', 1); });
   it('uses explicit Git blame/history arguments and absolute editor/reveal paths', async () => { await call('git:blame', 'file'); expect(mock.git.raw).toHaveBeenCalledWith(['blame', '--date=short', '--', 'file']); await call('git:file-history', 'file'); expect(mock.git.log).toHaveBeenCalledWith(['--pretty=format:%h%x09%s%x09%an', '--', 'file']); await call('app:open-in-editor', root); expect(mock.open).toHaveBeenCalledWith(root); await call('app:reveal-in-folder', root); expect(mock.reveal).toHaveBeenCalledWith(root); });
