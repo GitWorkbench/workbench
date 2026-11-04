@@ -158,7 +158,7 @@ describe('safe branch cleanup dialog', () => {
     render(<BranchCleanupDialog onClose={onClose} />);
     const dialog = await screen.findByRole('dialog', { name: 'Safe branch cleanup' });
     expect(within(dialog).getByText('the current branch')).toBeVisible();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete 1 selected' }));
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Delete 1 selected' }));
     expect(mocks.api.deleteBranch).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });

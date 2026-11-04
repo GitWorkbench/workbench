@@ -30,6 +30,7 @@ beforeEach(async () => {
   mock.openDialog.mockReset(); mock.openPath.mockReset(); mock.reveal.mockReset(); mock.exit.mockReset(); mock.relaunch.mockReset();
   repo = path.join(mock.home, 'repository'); fs.mkdirSync(repo);
   git(repo, 'init', '-b', 'main'); git(repo, 'config', 'user.name', 'Test'); git(repo, 'config', 'user.email', 'test@example.invalid');
+  git(repo, 'config', 'core.autocrlf', 'false'); git(repo, 'config', 'core.eol', 'lf');
   fs.writeFileSync(path.join(repo, 'file.txt'), 'initial\n'); git(repo, 'add', '.'); git(repo, 'commit', '-m', 'initial');
   const { registerIpc } = await import('../../src/main/ipc'); registerIpc(() => mock.window, () => mock.repo);
 });
