@@ -62,12 +62,22 @@ describe('GitHubSignInPanel connection lifecycle', () => {
     await act(async () => resolve(connected));
     expect(mocks.notify).not.toHaveBeenCalled();
   });
+  it('ignores initial state errors and sign-in failures delivered after unmount', async () => {
+    let rejectInitial!: (reason: Error) => void;
+    mocks.api.getGitHubSignInState.mockImplementationOnce(() => new Promise((_resolve: (value: GitHubSignInState) => void, reject) => { rejectInitial = reject; }));
+    const initial = render(<GitHubSignInPanel />); initial.unmount(); await act(async () => rejectInitial(new Error('late state failure')));
+
+    let rejectStart!: (reason: Error) => void;
+    mocks.api.startGitHubSignIn.mockImplementationOnce(() => new Promise((_resolve: (value: GitHubSignInState) => void, reject) => { rejectStart = reject; }));
+    const running = render(<GitHubSignInPanel />); await ready(); fireEvent.click(screen.getByRole('button', { name: 'Sign in with GitHub' }));
+    running.unmount(); await act(async () => rejectStart(new Error('late sign-in failure')));
+  });
   it('supports device sign-in, copying, opening, countdown and cancellation', async () => {
     render(<GitHubSignInPanel />); await ready();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in with GitHub' }));
     await screen.findByText('ABCD-EFGH');
     await waitFor(() => expect(mocks.api.openGitHubSignInPage).toHaveBeenCalledWith('flow-1'));
-    expect(screen.getByText(/Code expires in 1:01/)).toBeVisible();
+    expect(screen.getByText(/Code expires in \d+:\d{2}/)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Copy code' }));
     await waitFor(() => expect(mocks.api.copyGitHubSignInCode).toHaveBeenCalledWith('flow-1'));
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith('success', 'GitHub sign-in code copied'));

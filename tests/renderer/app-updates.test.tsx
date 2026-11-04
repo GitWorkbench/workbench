@@ -70,6 +70,30 @@ describe('startup update notification', () => {
     fireEvent.keyDown(first, { key: 'Tab', shiftKey: true }); expect(last).toHaveFocus(); fireEvent.keyDown(first, { key: 'Tab' }); fireEvent.keyDown(dialog, { key: 'x' });
     fireEvent.click(first); expect(button).toHaveFocus(); button.remove();
   });
+  it('does not force focus wrapping from the first control and tolerates a detached opener', async () => {
+    const opener = document.createElement('button'); document.body.append(opener); opener.focus();
+    render(<AppUpdateNotice ready />); await act(async () => {}); receive(available);
+    const first = screen.getByLabelText('Close update notification');
+    first.focus();
+    fireEvent.keyDown(first, { key: 'Tab' });
+    expect(first).toHaveFocus();
+    opener.remove();
+    fireEvent.click(first);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    opener.remove();
+  });
+  it('dismisses safely when there was no focusable element before the prompt', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(document, 'activeElement');
+    Object.defineProperty(document, 'activeElement', { configurable: true, value: null });
+    try {
+      render(<AppUpdateNotice ready />); await act(async () => {}); receive(available);
+      fireEvent.click(screen.getByLabelText('Close update notification'));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    } finally {
+      if (descriptor) Object.defineProperty(document, 'activeElement', descriptor);
+      else delete (document as Partial<Document>).activeElement;
+    }
+  });
   it('shows checking, update errors and a changed up-to-date result without starting a second action', async () => {
     render(<AppUpdateNotice ready />); await act(async () => {}); receive(available);
     receive({ ...available, status: 'checking' }); expect(screen.getByText('Checking…')).toBeDisabled();
@@ -89,6 +113,22 @@ describe('explicit update actions', () => {
     mock.install.mockRejectedValueOnce(new Error('permission denied')); await useAppUpdates.getState().act(); expect(useAppUpdates.getState().actionError).toBe('permission denied');
     mock.install.mockRejectedValueOnce(null); await useAppUpdates.getState().act(); expect(useAppUpdates.getState().actionError).toContain('action failed');
     mock.check.mockResolvedValueOnce({ ...initial, status: 'not-available' }); receive({ ...available, status: 'error', errorStage: 'download' }); await useAppUpdates.getState().act(); expect(mock.download).toHaveBeenCalledOnce();
+  });
+  it('downloads after a retry check finds an available update', async () => {
+    receive({ ...available, status: 'error', errorStage: 'download' });
+    mock.check.mockResolvedValueOnce(available);
+    await useAppUpdates.getState().act();
+    expect(mock.check).toHaveBeenCalledOnce();
+    expect(mock.download).toHaveBeenCalledOnce();
+    expect(useAppUpdates.getState().update).toMatchObject({ status: 'downloaded' });
+  });
+  it('does not download when a retry check reports no update', async () => {
+    receive({ ...available, status: 'error', errorStage: 'download' });
+    mock.check.mockResolvedValueOnce({ ...initial, status: 'not-available' });
+    await useAppUpdates.getState().act();
+    expect(mock.check).toHaveBeenCalledOnce();
+    expect(mock.download).not.toHaveBeenCalled();
+    expect(useAppUpdates.getState().update).toMatchObject({ status: 'not-available' });
   });
   it('keeps connection failures quiet and cancels unresolved snapshots on unmount', async () => {
     mock.get.mockRejectedValueOnce(new Error('IPC unavailable')); const first = connectAppUpdates(); await Promise.resolve(); first(); expect(useAppUpdates.getState().dialogOpen).toBe(false);

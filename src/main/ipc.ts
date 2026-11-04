@@ -200,7 +200,7 @@ export function registerIpc(getWin: () => BrowserWindow | null, getRepo: () => s
           const admission = writeAdmissions.catch(() => {}).then(async () => {
             const lockKey = await fs.promises.realpath(repo);
             const previous = pendingWrites.get(lockKey) || Promise.resolve();
-            const current = previous.catch(() => {}).then(run);
+            const current = previous.then(run, run);
             pendingWrites.set(lockKey, current);
             return { lockKey, current };
           });

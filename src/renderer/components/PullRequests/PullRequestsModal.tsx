@@ -175,7 +175,7 @@ export function PullRequestsModal() {
     setSelectedRequestId(null);
     setContext(null);
     setMessage('');
-    if (selectedRemote) void loadContext(selectedRemote, value, remotes);
+    void loadContext(selectedRemote, value, remotes);
   };
 
   const openProviderSettings = () => {
@@ -217,7 +217,7 @@ export function PullRequestsModal() {
   };
 
   const activePullRequests = context?.pullRequests.filter((request) => request.state === 'open') || [];
-  const providerNeedsChoosing = !context?.provider && !!context?.remoteName;
+  const providerNeedsChoosing = !context?.provider && !!context?.remoteName && !!selectedRemote;
   const canCreate = !!context?.credentialConfigured && !!context.currentBranch && !!context.defaultBranch &&
     !context.error && context.currentBranch !== targetBranch && !!title.trim() && !currentBranchRequest;
 

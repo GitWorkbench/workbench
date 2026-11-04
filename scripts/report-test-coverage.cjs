@@ -12,11 +12,13 @@ if (!fs.existsSync(summaryFile)) {
   const report = JSON.parse(fs.readFileSync(summaryFile, 'utf8'));
   const metrics = ['lines', 'statements', 'functions', 'branches'];
   const complete = value => metrics.every(metric => value[metric].pct === 100);
-  const files = Object.entries(report).filter(([name]) => name !== 'total');
+  const files = Object.entries(report).filter(([name, value]) => name !== 'total' && metrics.some(metric => value[metric].total > 0));
+  const emptyFiles = Object.keys(report).filter(name => name !== 'total' && !metrics.some(metric => report[name][metric].total > 0));
   const gaps = files.filter(([, value]) => !complete(value)).sort(([a, av], [b, bv]) => av.lines.pct - bv.lines.pct || av.branches.pct - bv.branches.pct || a.localeCompare(b));
   const text = [
     '# Source coverage gaps', '',
-    `Source files: ${files.length}. All four metrics at 100%: ${files.filter(([, value]) => complete(value)).length}.`, '',
+    `Executable source files: ${files.length}. All four metrics at 100%: ${files.filter(([, value]) => complete(value)).length}.`,
+    ...(emptyFiles.length ? [`Files with no instrumentable code skipped: ${emptyFiles.length}.`] : []), '',
     ...metrics.map(metric => `- ${metric}: ${report.total[metric].pct}% (${report.total[metric].covered}/${report.total[metric].total})`), '',
     gaps.length ? 'The strict 100% per-file gate is not yet satisfied.' : 'Every included source file satisfies the strict 100% gate.', '',
     '| Source file | Lines | Statements | Functions | Branches |',

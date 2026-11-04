@@ -181,3 +181,10 @@ it('retains the initial block when an ancestor choice has no base text', () => {
   const model = createMergeModel(file('plain', { currentContent: 'ours', incomingContent: 'theirs', baseContent: null }));
   expect(mergeChoiceText(model.blocks[0], 'base')).toBe(model.blocks[0].initial);
 });
+it('joins both resolution sides with one separator only when needed', () => {
+  const block = { current: 'ours', incoming: 'theirs', initial: '', base: undefined } as ReturnType<typeof createMergeModel>['blocks'][number];
+  expect(mergeChoiceText(block, 'both')).toBe('ours\ntheirs');
+  expect(mergeChoiceText(block, 'incoming-first')).toBe('theirs\nours');
+  expect(mergeChoiceText({ ...block, current: 'ours\n' }, 'both')).toBe('ours\ntheirs');
+  expect(mergeChoiceText({ ...block, current: '' }, 'both')).toBe('theirs');
+});

@@ -160,7 +160,12 @@ function activeFlow(id: string) {
 export async function openGitHubSignInPage(id: string) { activeFlow(id); await shell.openExternal(verificationUri); }
 export function copyGitHubSignInCode(id: string) { clipboard.writeText(activeFlow(id).userCode!); }
 export function githubCredentialsChanged() { cancelGitHubSignIn(); progress = { phase: 'idle' }; publish(); }
-export function stopGitHubSignIn() { if (flow) { flow.controller.abort(); if (flow.timer) clearTimeout(flow.timer); flow = null; } }
+export function stopGitHubSignIn() {
+  if (!flow) return;
+  flow.controller.abort();
+  if (flow.timer) clearTimeout(flow.timer);
+  flow = null;
+}
 
 /** Only invalidate the rejected session, never a replacement saved during an API call. */
 export function githubSessionRejected(input: PullRequestCredential) {

@@ -16,6 +16,19 @@ beforeEach(() => {
 });
 
 describe('settings persistence and normalization', () => {
+  it('skips body styling when the document body is unavailable', async () => {
+    const { useSettings, applySettingsToDOM } = await load();
+    const body = vi.spyOn(document, 'body', 'get').mockReturnValue(null as unknown as HTMLElement);
+    expect(() => applySettingsToDOM(useSettings.getState())).not.toThrow();
+    body.mockRestore();
+  });
+  it('loads and applies settings when there is no document global', async () => {
+    vi.stubGlobal('document', undefined);
+    try {
+      const { useSettings } = await load();
+      expect(useSettings.getState().theme).toBe('git-workbench-dark');
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('loads defaults and writes normalized storage without exposing store methods', async () => {
     const { useSettings } = await load();
     expect(useSettings.getState()).toMatchObject({ theme: 'git-workbench-dark', uiFontSize: 13, codeFontSize: 12, homeFontSize: 13, guideFontSize: 13, graphRowHeight: 26, milestoneAnimations: true });

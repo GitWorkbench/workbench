@@ -9,7 +9,7 @@ const mock = vi.hoisted(() => ({ api: {
 } }));
 vi.mock('../../src/renderer/lib/api', () => ({ api: mock.api }));
 vi.mock('../../src/renderer/components/CommitGraph/GitGraphCanvas', () => ({
-  GitGraphCanvas: ({ onSelect }: { onSelect?: (hash: string) => void }) => <button type="button" onClick={() => onSelect?.('b'.repeat(40))}>Select newest graph node</button>
+  GitGraphCanvas: ({ onSelect }: { onSelect?: (hash: string) => void }) => <><button type="button" onClick={() => onSelect?.('b'.repeat(40))}>Select newest graph node</button><button type="button" onClick={() => onSelect?.('missing')}>Select unknown graph node</button></>
 }));
 vi.mock('../../src/renderer/components/DiffViewer/UnifiedDiffView', () => ({
   UnifiedDiffView: ({ hunks }: { hunks: unknown[] }) => <div>Historical diff ({hunks.length})</div>
@@ -43,6 +43,8 @@ describe('history time machine', () => {
     await screen.findByText('Start the project');
     expect(mock.api.getHistoryReplay).toHaveBeenCalledWith('main', false);
     expect(screen.getByText('Step 1 of 2')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Play history replay' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Pause history replay' }));
     await screen.findByText('src/app.ts');
     fireEvent.click(screen.getByText('src/app.ts').closest('button')!);
     await screen.findByText('Historical diff (1)');
@@ -52,6 +54,8 @@ describe('history time machine', () => {
     await screen.findByText('Add the feature');
     expect(screen.getByText('Step 2 of 2')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Select newest graph node' }));
+    expect(screen.getByText('Step 2 of 2')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Select unknown graph node' }));
     expect(screen.getByText('Step 2 of 2')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Previous commit' }));
     await screen.findByText('Start the project');
@@ -173,5 +177,46 @@ describe('history time machine', () => {
     unmount();
     await act(async () => resolveBranches(branchData));
     expect(mock.api.getHistoryReplay).not.toHaveBeenCalled();
+  });
+
+  it('ignores branch-list and replay failures after unmount', async () => {
+    let rejectReplay!: (reason: Error) => void;
+    mock.api.getHistoryReplay.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectReplay = reject; }));
+    const first = render(<HistoryTimeMachine onClose={vi.fn()} />);
+    await waitFor(() => expect(mock.api.getHistoryReplay).toHaveBeenCalledOnce());
+    first.unmount();
+    await act(async () => rejectReplay(new Error('late replay failure')));
+    expect(screen.queryByText('late replay failure')).not.toBeInTheDocument();
+
+    mock.api.getBranches.mockClear(); mock.api.getHistoryReplay.mockClear();
+    let rejectBranches!: (reason: Error) => void;
+    mock.api.getBranches.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectBranches = reject; }));
+    const second = render(<HistoryTimeMachine onClose={vi.fn()} />);
+    await waitFor(() => expect(mock.api.getBranches).toHaveBeenCalledOnce());
+    second.unmount();
+    await act(async () => rejectBranches(new Error('late branch failure')));
+    expect(mock.api.getHistoryReplay).not.toHaveBeenCalled();
+  });
+
+  it('ignores stale detail failures after a commit change and diff failures after a file change', async () => {
+    let rejectDetail!: (reason: Error) => void;
+    mock.api.getCommitDetail.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectDetail = reject; }))
+      .mockResolvedValueOnce(details([{ path: 'first.txt', status: 'modified' }, { path: 'second.txt', status: 'modified' }]));
+    const view = render(<HistoryTimeMachine onClose={vi.fn()} />);
+    await screen.findByText('Start the project');
+    fireEvent.click(screen.getByRole('button', { name: 'Next commit' }));
+    await screen.findByText('first.txt');
+    await act(async () => rejectDetail(new Error('stale detail failure')));
+    expect(screen.queryByText('stale detail failure')).not.toBeInTheDocument();
+
+    let rejectDiff!: (reason: Error) => void;
+    mock.api.getFileDiff.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectDiff = reject; }))
+      .mockResolvedValueOnce({ hunks: [{ header: '@@ -1 +1 @@', lines: [] }] });
+    fireEvent.click(screen.getByText('first.txt').closest('button')!);
+    fireEvent.click(screen.getByText('second.txt').closest('button')!);
+    await screen.findByText('Historical diff (1)');
+    await act(async () => rejectDiff(new Error('stale diff failure')));
+    expect(screen.queryByText('stale diff failure')).not.toBeInTheDocument();
+    view.unmount();
   });
 });

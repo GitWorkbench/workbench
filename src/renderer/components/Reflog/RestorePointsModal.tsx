@@ -17,7 +17,7 @@ function RestorePoints() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const point = points.find(p => p.id === selected);
-  const close = () => { if (!busy) useApp.setState({ restorePointsOpen: false }); };
+  const close = () => useApp.setState({ restorePointsOpen: false });
   const load = async () => { const list = await api.listRestorePoints(); setPoints(list); setSelected(old => list.some(p => p.id === old) ? old : list[0]?.id); };
   useEffect(() => { let live = true; void api.listRestorePoints().then(list => { if (live) { setPoints(list); setSelected(list[0]?.id); } }).catch(e => { if (live) setMessage(String(e)); }); return () => { live = false; }; }, []);
   const run = async (fn: () => Promise<unknown>, success: string) => {

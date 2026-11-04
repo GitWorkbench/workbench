@@ -25,8 +25,9 @@ function diffPath(value: string): string {
       if (octal) { chunks.push(Buffer.from([parseInt(octal, 8)])); i += octal.length; }
       else { i++; chunks.push(Buffer.from(escapes[value[i]] ?? value[i])); }
     } else {
-      const point = value.codePointAt(i);
-      if (point !== undefined) { chunks.push(Buffer.from(String.fromCodePoint(point))); if (point > 0xffff) i++; }
+      const point = value.codePointAt(i)!;
+      chunks.push(Buffer.from(String.fromCodePoint(point)));
+      if (point > 0xffff) i++;
     }
   }
   return Buffer.concat(chunks).toString('utf8');

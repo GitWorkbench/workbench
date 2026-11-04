@@ -123,10 +123,8 @@ function ContextMenuPrompt({
         className="btn-primary context-menu-prompt-submit w-full"
         disabled={!val.trim()}
         onClick={() => {
-          if (val.trim()) {
-            prompt.onSubmit(val.trim());
-            onClose();
-          }
+          prompt.onSubmit(val.trim());
+          onClose();
         }}
       >
         {prompt.submitLabel}

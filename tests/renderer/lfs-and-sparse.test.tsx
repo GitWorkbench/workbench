@@ -67,6 +67,31 @@ it('reveals sparse folder choices in bounded batches', async () => {
 });
 
 describe('Git LFS manager', () => {
+  it('ignores initial load, operation, and transfer results after unmount', async () => {
+    let resolveLoad!: (state: LfsState) => void;
+    mocks.api.getLfsState.mockReturnValueOnce(new Promise<LfsState>(resolve => { resolveLoad = resolve; }));
+    const loading = render(<LfsManagerModal />); loading.unmount();
+    await act(async () => resolveLoad(lfs()));
+
+    let rejectLoad!: (reason: Error) => void;
+    mocks.api.getLfsState.mockReturnValueOnce(new Promise<LfsState>((_resolve, reject) => { rejectLoad = reject; }));
+    const failing = render(<LfsManagerModal />); failing.unmount();
+    await act(async () => rejectLoad(new Error('late state failure')));
+
+    let rejectConfigure!: (reason: Error) => void;
+    mocks.api.configureLfs.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectConfigure = reject; }));
+    const operating = render(<LfsManagerModal />); await lfsReady();
+    fireEvent.click(screen.getByRole('button', { name: 'Configure local LFS' }));
+    operating.unmount(); await act(async () => rejectConfigure(new Error('late operation failure')));
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    let finishTransfer!: (value: LfsTransfer) => void;
+    mocks.api.runLfsTransfer.mockReturnValueOnce(new Promise<LfsTransfer>(resolve => { finishTransfer = resolve; }));
+    const transferring = render(<LfsManagerModal />); await lfsReady();
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch to cache' }));
+    await waitFor(() => expect(mocks.api.runLfsTransfer).toHaveBeenCalledOnce());
+    transferring.unmount(); await act(async () => finishTransfer(transfer()));
+  });
   it('does not track twice when the form is submitted during an operation', async () => {
     let finish!: (state: LfsState) => void;
     mocks.api.setLfsTracking.mockImplementation(() => new Promise<LfsState>(resolve => { finish = resolve; }));
@@ -168,6 +193,20 @@ describe('Git LFS manager', () => {
 });
 
 describe('Sparse checkout folder editor', () => {
+  it('ignores layout success and failure after unmount and renders non-empty folder roots', async () => {
+    let resolve!: (state: SparseCheckoutState) => void;
+    mocks.api.getSparseCheckout.mockReturnValueOnce(new Promise<SparseCheckoutState>(done => { resolve = done; }));
+    const loading = render(<SparseCheckoutModal />); loading.unmount(); await act(async () => resolve(sparse()));
+
+    let reject!: (reason: Error) => void;
+    mocks.api.getSparseCheckout.mockReturnValueOnce(new Promise<SparseCheckoutState>((_resolve, fail) => { reject = fail; }));
+    const failing = render(<SparseCheckoutModal />); failing.unmount(); await act(async () => reject(new Error('late layout failure')));
+
+    mocks.api.getSparseDirectories.mockResolvedValue(['src']);
+    render(<SparseCheckoutModal />); await sparseReady();
+    expect(screen.getByRole('checkbox', { name: 'Include src' })).toBeVisible();
+    expect(screen.queryByText('No tracked subfolders in this revision.')).not.toBeInTheDocument();
+  });
   it('only opens for an active repository, closes on request and loads an empty revision safely', async () => {
     mocks.app.activeTab = null; const { container, rerender } = render(<SparseCheckoutModal />); expect(container).toBeEmptyDOMElement();
     mocks.app.activeTab = '/repo'; mocks.app.sparseCheckoutOpen = false; rerender(<SparseCheckoutModal />); expect(container).toBeEmptyDOMElement();
@@ -180,6 +219,9 @@ describe('Sparse checkout folder editor', () => {
     mocks.api.getSparseCheckout.mockResolvedValue(sparse({ directories: ['src/nested'] }));
     mocks.api.getSparseDirectories.mockImplementation(async prefix => prefix === 'src' ? ['src/nested', 'src/other'] : prefix ? [] : ['src', 'docs']);
     render(<SparseCheckoutModal />); await sparseReady();
+    const pathInput = screen.getByRole('textbox', { name: 'Repository directory path' });
+    fireEvent.change(pathInput, { target: { value: '   ' } }); fireEvent.submit(pathInput.closest('form')!);
+    expect(mocks.api.previewSparseCheckout).not.toHaveBeenCalled();
     expect(screen.getByRole('checkbox', { name: 'Include src' })).toHaveAttribute('aria-checked', 'mixed');
     fireEvent.click(screen.getByTitle('Expand src')); await screen.findByRole('checkbox', { name: 'Include src/nested' });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Include src' }));

@@ -110,6 +110,7 @@ describe('first-run setup', () => {
     fireEvent.keyDown(first, { key: 'Tab', shiftKey: true }); expect(last).toHaveFocus();
     screen.getByRole('heading', { name: 'Commit profile' }).focus(); fireEvent.keyDown(document.activeElement!, { key: 'Tab', shiftKey: true }); expect(last).toHaveFocus();
     fireEvent.keyDown(last, { key: 'Escape' }); expect(done).not.toHaveBeenCalled();
+    const profile = screen.getByLabelText('Profile name'); profile.focus(); fireEvent.keyDown(profile, { key: 'Tab', shiftKey: true }); expect(profile).toHaveFocus();
     fireEvent.keyDown(screen.getByLabelText('Your name'), { key: 'x' }); fireEvent.keyDown(first, { key: 'Tab' });
   });
   it('debounces avatar requests, ignores stale hashes, supports opt-out and falls back on image errors', async () => {
@@ -145,6 +146,24 @@ describe('first-run setup', () => {
     let finished!: () => void; mock.complete.mockReturnValue(new Promise(resolve => { finished = resolve; }));
     const third = render(<SetupPage onComplete={done} />); await flush(); fireEvent.click(screen.getByRole('button', { name: 'Skip setup' })); third.unmount(); await act(async () => finished()); expect(done).not.toHaveBeenCalled();
   });
+  it('ignores rejected identity, profile-save and completion requests after unmount', async () => {
+    let failIdentity!: (error: Error) => void;
+    mock.gitGet.mockReturnValueOnce(new Promise((_resolve, reject) => { failIdentity = reject; }));
+    const first = render(<SetupPage onComplete={vi.fn()} />); first.unmount();
+    await act(async () => failIdentity(new Error('late identity failure')));
+
+    mock.gitGet.mockResolvedValueOnce({ name: 'Author', email: 'author@example.test' });
+    let failSave!: (error: Error) => void; mock.gitSet.mockReturnValueOnce(new Promise((_resolve, reject) => { failSave = reject; }));
+    const second = render(<SetupPage onComplete={vi.fn()} />); await flush();
+    fireEvent.click(screen.getByLabelText('Also set this identity in my global Git configuration'));
+    fireEvent.submit(screen.getByRole('form', { name: 'Commit profile' })); second.unmount();
+    await act(async () => failSave(new Error('late profile failure')));
+
+    let failComplete!: (error: Error) => void; mock.complete.mockReturnValueOnce(new Promise((_resolve, reject) => { failComplete = reject; }));
+    const third = render(<SetupPage onComplete={vi.fn()} />); await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Skip setup' })); third.unmount();
+    await act(async () => failComplete(new Error('late completion failure')));
+  });
 });
 
 describe('shared secure AI setup form', () => {
@@ -177,6 +196,11 @@ describe('shared secure AI setup form', () => {
     fireEvent.change(screen.getByLabelText('API endpoint URL'), { target: { value: 'http://localhost:1234/v1' } }); await flush();
     fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' })); await screen.findByText(/AI settings saved/);
   });
+  it('ignores an unknown provider selection without corrupting the current configuration', async () => {
+    render(<AiSetupForm />); await flush();
+    fireEvent.change(screen.getByLabelText('Model provider'), { target: { value: 'unknown-provider' } });
+    expect(screen.getByLabelText('Model provider')).toHaveValue('local');
+  });
   it('tests a saved configuration with built-in example content, shows pending state and connection failures', async () => {
     let respond!: (value: { ok: boolean; message?: string; error?: string }) => void;
     mock.test.mockReturnValueOnce(new Promise(resolve => { respond = resolve; }));
@@ -203,5 +227,19 @@ describe('shared secure AI setup form', () => {
     const second = render(<AiSetupForm onSaved={saved} />); await flush(); fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' })); second.unmount(); await act(async () => saveDone({ config: OFFLINE_AI, hasApiKey: false })); expect(saved).not.toHaveBeenCalled();
     let testDone!: (result: { ok: boolean }) => void; mock.test.mockReturnValueOnce(new Promise(resolve => { testDone = resolve; }));
     const third = render(<AiSetupForm />); await flush(); fireEvent.click(screen.getByRole('button', { name: 'Save & test' })); await waitFor(() => expect(mock.test).toHaveBeenCalled()); third.unmount(); await act(async () => testDone({ ok: true }));
+  });
+  it('ignores save failures and secure-storage retries delivered after unmount', async () => {
+    let rejectSave!: (reason: Error) => void;
+    mock.save.mockReturnValueOnce(new Promise((_resolve, reject) => { rejectSave = reject; }));
+    const saving = render(<AiSetupForm />); await flush(); fireEvent.click(screen.getByRole('button', { name: 'Save AI settings' }));
+    await waitFor(() => expect(mock.save).toHaveBeenCalledOnce()); saving.unmount();
+    await act(async () => rejectSave(new Error('late save failure')));
+
+    mock.get.mockRejectedValueOnce(new Error('keyring locked'));
+    const loading = render(<AiSetupForm />); await screen.findByText(/Could not read saved keys/);
+    let retryDone!: () => void;
+    useSettings.setState({ initializeAiSettings: vi.fn(() => new Promise<void>(resolve => { retryDone = resolve; })) });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry secure storage' })); loading.unmount();
+    await act(async () => retryDone());
   });
 });

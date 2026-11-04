@@ -74,6 +74,15 @@ describe('commit hover preview', () => {
     const next = show(); await load(); next.unmount(); await act(async () => resolve(summary()));
     expect(screen.queryByRole('group')).not.toBeInTheDocument(); expect(mocks.disconnect).toHaveBeenCalled();
   });
+  it('ignores a rejected detail request after its preview has unmounted', async () => {
+    let reject!: (error: Error) => void;
+    mocks.detail.mockImplementation(() => new Promise<CommitDetail>((_resolve, fail) => { reject = fail; }));
+    const preview = show();
+    await load();
+    preview.unmount();
+    await act(async () => reject(new Error('request failed after close')));
+    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+  });
 
   it.each([
     [0, 'just now'], [59, 'just now'], [60, '1 minute ago'], [120, '2 minutes ago'], [3600, '1 hour ago'], [7200, '2 hours ago'], [86400, '1 day ago'], [172800, '2 days ago']

@@ -5,7 +5,7 @@ import path from 'node:path';
 const mock = vi.hoisted(() => ({ raw: vi.fn(), shadow: vi.fn() }));
 vi.mock('../../src/main/git/core', () => ({ gitFor: () => ({ raw: mock.raw }) }));
 vi.mock('../../src/main/git/advanced-process', () => ({ gitWithEnvironment: () => ({ raw: mock.shadow }) }));
-import { captureResolutionMemory } from '../../src/main/git/resolution-memory';
+import { captureResolutionMemory, resolutionMemoryState } from '../../src/main/git/resolution-memory';
 let root: string, gitDir: string;
 let files: string[];
 beforeEach(async () => {
@@ -22,6 +22,21 @@ beforeEach(async () => {
 afterEach(async () => { await fs.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
 
 describe('suggestion-only conflict memory filesystem boundaries', () => {
+  it('treats missing rerere settings and cache records as disabled memory', async () => {
+    const cache = path.join(gitDir, 'rr-cache'); await fs.mkdir(cache);
+    await fs.writeFile(path.join(cache, 'a'.repeat(40)), 'not a cache folder');
+    mock.raw.mockImplementation(async (args: string[]) => {
+      if (args[0] === 'config') throw new Error('setting absent');
+      if (args[0] === 'rev-parse') return '.git/rr-cache';
+      return '';
+    });
+    expect(await resolutionMemoryState(root)).toEqual({ enabled: false, gitAutomatic: false, remembered: 0 });
+  });
+  it('returns no suggestions when the rerere enablement setting cannot be read', async () => {
+    mock.raw.mockRejectedValueOnce(new Error('setting absent'));
+    expect(await captureResolutionMemory(root)).toEqual(new Map());
+    expect(mock.shadow).not.toHaveBeenCalled();
+  });
   it('copies split-index dependencies and forgets only the requested conflicted path in the shadow checkout', async () => {
     await fs.writeFile(path.join(gitDir, 'sharedindex.abcdef'), 'shared index');
     mock.shadow.mockImplementation(async (args: string[]) => {

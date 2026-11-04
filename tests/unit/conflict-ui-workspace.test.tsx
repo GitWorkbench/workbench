@@ -9,7 +9,7 @@ import { setMergeRegions } from '../../src/renderer/components/ConflictResolver/
 import { parseConflictSections } from '../../src/shared/conflicts';
 
 const mocks = vi.hoisted(() => ({
-  editors: new Map<string, { onView: (view: EditorView | null) => void; onChoose?: (id: string, side: 'current' | 'incoming') => void; onSave?: () => void; onScroll?: (view: EditorView) => void }>(),
+  editors: new Map<string, { onView: (view: EditorView | null) => void; onChoose?: (id: string, side: 'current' | 'incoming') => void; onSave?: () => void; onScroll?: (view: EditorView) => void; onNavigate?: (direction: number) => void }>(),
   state: {} as Record<string, any>, listeners: new Set<() => void>(), close: vi.fn(), open: vi.fn(), notify: vi.fn(), refresh: vi.fn(), run: vi.fn(),
   api: { getConflictFile: vi.fn(), getResolutionSuggestion: vi.fn(), forgetResolution: vi.fn(), resolveConflictFile: vi.fn(), getRepoOperationState: vi.fn(), continueOperation: vi.fn() }
 }));
@@ -119,6 +119,12 @@ it('keeps queued editor actions safe while the result pane is detached', async (
   act(() => boundary.onSave?.());
   expect(result.state.doc.toString()).toBe('draft'); expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
 });
+it('skips an unmounted source pane when moving focus between conflict regions', async () => {
+  await open(twoConflicts());
+  mocks.editors.get('current')?.onView(null);
+  act(() => mocks.editors.get('result')?.onNavigate?.(1));
+  expect(screen.getByText('Conflict 2 of 2')).toBeVisible();
+});
 it('removes drag listeners when the merge workspace unmounts during a resize', async () => {
   const { unmount } = await open();
   const divider = screen.getByRole('separator', { name: 'Resize current and result panes' });
@@ -166,8 +172,48 @@ it('ignores keyboard saves for unresolved content and duplicate saves before con
 it('tolerates an editor update that removes the selected conflict region', async () => {
   await open();
   act(() => view().dispatch({ effects: setMergeRegions.of([]) }));
+  act(() => mocks.editors.get('result')?.onNavigate?.(1));
   expect(screen.getByText('0 unresolved')).toBeVisible();
   expect(screen.queryByRole('button', { name: /^Conflict 1/ })).not.toBeInTheDocument();
+});
+it('skips a pane removed while linked-scroll measurements are queued', async () => {
+  await open();
+  await act(async () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))));
+  const source = view('Current file version, read only');
+  const target = view('Incoming file version, read only');
+  let write: (() => void) | undefined;
+  vi.spyOn(source, 'requestMeasure').mockImplementation(request => {
+    if (!request) return;
+    const positions = request.read(source);
+    write = () => request.write?.(positions, source);
+  });
+  fireEvent.scroll(source.scrollDOM);
+  await act(async () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))));
+  expect(write).toBeTypeOf('function');
+  mocks.editors.get('incoming')?.onView(null);
+  write?.();
+  expect(target.scrollDOM.scrollTop).toBe(0);
+});
+it('keeps history controls safe after the result editor detaches', async () => {
+  await open();
+  const result = view();
+  act(() => result.dispatch({ changes: { from: 0, to: 0, insert: 'draft' } }));
+  act(() => result.dispatch({ changes: { from: result.state.doc.length, insert: ' follow-up' } }));
+  click('Undo merge edit');
+  expect(screen.getByRole('button', { name: 'Undo merge edit' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Redo merge edit' })).toBeEnabled();
+  mocks.editors.get('result')?.onView(null);
+  click('Undo merge edit'); click('Redo merge edit');
+  expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
+});
+it('keeps deletion overlays separate from the base view and tolerates a detached undo editor', async () => {
+  await open(conflict({ baseContent: 'ancestor version', currentContent: null }));
+  click('Keep deletion'); expect(screen.getByText('This file will be deleted')).toBeVisible();
+  click('Show base'); expect(screen.getByText('Base revision')).toBeVisible();
+  click('Show result'); expect(screen.getByText('This file will be deleted')).toBeVisible();
+  mocks.editors.get('result')?.onView(null);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo deletion' }));
+  expect(mocks.api.resolveConflictFile).not.toHaveBeenCalled();
 });
 it('cancels superseded scroll measurements and ignores queued measurements after unmount', async () => {
   const { unmount } = await open();
@@ -496,6 +542,14 @@ describe('whole-file conflicts and deletion choices', () => {
 });
 
 describe('remembered resolution review', () => {
+  it('ignores a remembered-resolution lookup failure after unmount', async () => {
+    let reject!: (reason: Error) => void;
+    mocks.api.getResolutionSuggestion.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const workspace = await open();
+    await waitFor(() => expect(mocks.api.getResolutionSuggestion).toHaveBeenCalledOnce());
+    workspace.unmount();
+    await act(async () => reject(new Error('late memory failure')));
+  });
   it('previews and loads remembered text only after explicit review, without writing disk', async () => {
     mocks.api.getResolutionSuggestion.mockResolvedValue({ snapshot: 'snapshot', enabled: true, content: 'remembered\r\n' });
     await open(); fireEvent.click(await screen.findByRole('button', { name: 'Preview remembered result' }));
@@ -525,6 +579,18 @@ describe('remembered resolution review', () => {
     vi.mocked(window.confirm).mockReturnValueOnce(false); click('Forget this resolution'); expect(mocks.api.forgetResolution).not.toHaveBeenCalled();
     click('Forget this resolution'); await waitFor(() => expect(screen.queryByRole('button', { name: 'Preview remembered result' })).not.toBeInTheDocument());
     expect(mocks.api.forgetResolution).toHaveBeenCalledWith('file.txt'); click('Memory settings'); expect(mocks.state.resolutionMemoryOpen).toBe(true);
+  });
+  it('hides a preview when its remembered suggestion is forgotten', async () => {
+    mocks.api.getResolutionSuggestion.mockResolvedValue({ snapshot: 'snapshot', enabled: true, content: 'remembered' });
+    await open(); await screen.findByRole('button', { name: 'Preview remembered result' });
+    click('Preview remembered result');
+    const preview = screen.getByRole('dialog', { name: 'Preview remembered resolution' });
+    expect(preview).toBeVisible();
+    fireEvent.keyDown(preview, { key: 'Enter' });
+    expect(preview).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Forget this resolution' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Preview remembered resolution' })).not.toBeInTheDocument());
+    expect(mocks.api.forgetResolution).toHaveBeenCalledWith('file.txt');
   });
   it('reports suggestion lookup and forgetting failures without changing the result', async () => {
     mocks.api.getResolutionSuggestion.mockRejectedValueOnce(new Error('memory unavailable'));

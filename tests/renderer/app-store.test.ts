@@ -328,4 +328,11 @@ describe('Git operation wrappers', () => {
     else if (result.hasConflicts) { expect(state().conflictedFileToResolve).toBe('file.ts'); expect(state().toast?.text).toMatch(/Please resolve conflicts/); }
     else expect(state().toast?.text).toBe(result.error || 'Cherry-pick failed');
   });
+  it('reports cherry-pick conflicts even when Git has no conflict paths to open', async () => {
+    mocks.api.cherryPick.mockResolvedValue({ ok: false, hasConflicts: true });
+    mocks.api.getRepoOperationState.mockResolvedValue({ conflictedFiles: [] });
+    await state().cherryPickCommit('hash');
+    expect(state().conflictedFileToResolve).toBeNull();
+    expect(state().toast?.text).toContain('Please resolve conflicts');
+  });
 });

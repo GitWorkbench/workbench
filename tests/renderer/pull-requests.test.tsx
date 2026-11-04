@@ -25,6 +25,46 @@ beforeEach(() => {
 const ready = async () => screen.findByRole('heading', { name: /^(Pull|Merge) Requests$/ });
 
 describe('hosted request context', () => {
+  it('does not suggest a title when the current branch is missing', async () => {
+    mocks.api.getPullRequestContext.mockResolvedValue(context({ currentBranch: '' }));
+    render(<PullRequestsModal />); await ready();
+    expect(screen.getByRole('textbox', { name: 'Title' })).toHaveValue('');
+  });
+  it('ignores an older context rejection after switching repositories', async () => {
+    let reject!: (reason: Error) => void;
+    mocks.api.getPullRequestContext.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; })).mockResolvedValueOnce(context({ remoteName: 'backup' }));
+    const view = render(<PullRequestsModal />);
+    await waitFor(() => expect(mocks.api.getPullRequestContext).toHaveBeenCalledOnce());
+    mocks.app.activeTab = '/other-repo'; view.rerender(<PullRequestsModal />);
+    await waitFor(() => expect(mocks.api.getPullRequestContext).toHaveBeenCalledTimes(2));
+    await act(async () => reject(new Error('stale context error')));
+    expect(screen.queryByText('stale context error')).not.toBeInTheDocument();
+  });
+  it('ignores an initial remote-list rejection after unmount', async () => {
+    let reject!: (reason: Error) => void;
+    mocks.api.getRemotes.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const view = render(<PullRequestsModal />); view.unmount();
+    await act(async () => reject(new Error('late remote-list error')));
+  });
+  it('honors review and create intents after context loads', async () => {
+    mocks.app.pullRequestIntent = { requestId: '12', mode: 'review' };
+    mocks.api.getPullRequestContext.mockResolvedValue(context({ pullRequests: [request()] }));
+    const review = render(<PullRequestsModal />);
+    expect(await screen.findByLabelText('Request review')).toHaveTextContent('Review 12: github/origin');
+    review.unmount();
+
+    mocks.app.pullRequestIntent = { mode: 'create' };
+    render(<PullRequestsModal />); await ready();
+    expect(screen.getByRole('textbox', { name: 'Title' })).toHaveFocus();
+  });
+  it('handles create intents with a selected request and review intents without one', async () => {
+    mocks.app.pullRequestIntent = { requestId: '12', mode: 'create' };
+    mocks.api.getPullRequestContext.mockResolvedValue(context({ pullRequests: [request()] }));
+    const withSelectedRequest = render(<PullRequestsModal />); await ready();
+    expect(screen.queryByLabelText('Request review')).not.toBeInTheDocument(); withSelectedRequest.unmount();
+    mocks.app.pullRequestIntent = { mode: 'review' };
+    render(<PullRequestsModal />); await ready(); expect(screen.getByRole('textbox', { name: 'Title' })).not.toHaveFocus();
+  });
   it('ignores provider context delivered after the modal closes', async () => {
     let finish!: (value: PullRequestContext) => void;
     mocks.api.getPullRequestContext.mockImplementation(() => new Promise<PullRequestContext>(resolve => { finish = resolve; }));
@@ -112,6 +152,15 @@ describe('hosted request context', () => {
 });
 
 describe('request browsing and creation', () => {
+  it('ignores creation failures after the request workspace closes', async () => {
+    let reject!: (reason: Error) => void;
+    mocks.api.createHostedPullRequest.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const workspace = render(<PullRequestsModal />); await ready();
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Title' }).closest('form')!);
+    workspace.unmount();
+    await act(async () => reject(new Error('late creation failure')));
+    expect(screen.queryByText('late creation failure')).not.toBeInTheDocument();
+  });
   it.each([true, false])('shows the selected request status consistently when draft is %s', async draft => {
     mocks.api.getPullRequestContext.mockResolvedValue(context({ pullRequests: [request({ sourceBranch: 'feature/new-work', draft })] }));
     render(<PullRequestsModal />);

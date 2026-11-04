@@ -72,10 +72,22 @@ describe('repository pseudoterminal boundary', () => {
     const session = open(); const child = mock.children[0]; child.data('a'.repeat(256 * 1024)); child.data('last'); expect(child.pause).toHaveBeenCalledOnce();
     call('acknowledge', session.id, 0); expect(child.resume).not.toHaveBeenCalled();
     call('acknowledge', session.id, 1); expect(child.resume).toHaveBeenCalledOnce();
-    child.data('b'.repeat(256 * 1024)); call('detach', session.id, session.connectionId); expect(child.resume).toHaveBeenCalledTimes(2);
+    child.data('b'.repeat(256 * 1024)); child.data('more output'); call('detach', session.id, session.connectionId); expect(child.resume).toHaveBeenCalledTimes(2);
     mock.send.mockClear(); child.data('background output'); expect(mock.send).not.toHaveBeenCalled();
     const attached = open(); expect(attached.output).toHaveLength(256 * 1024); expect(attached.output.endsWith('background output')).toBe(true);
     child.data('c'.repeat(256 * 1024)); const resumed = open(); expect(resumed.id).toBe(session.id); expect(child.resume).toHaveBeenCalledTimes(3);
+  });
+  it('resumes a paused shell when its renderer detaches', () => {
+    const session = open(); const child = mock.children[0];
+    child.data('a'.repeat(256 * 1024));
+    expect(child.pause).toHaveBeenCalledOnce();
+    call('detach', session.id, session.connectionId);
+    expect(child.resume).toHaveBeenCalledOnce();
+  });
+  it('leaves an unpaused shell unchanged when its renderer detaches', () => {
+    const session = open(); const child = mock.children[0];
+    call('detach', session.id, session.connectionId);
+    expect(child.resume).not.toHaveBeenCalled();
   });
   it('keeps exited output until explicit restart and does not write, resize, or kill an exited shell', () => {
     const session = open(); const child = mock.children[0]; child.exit({ exitCode: 7 });

@@ -184,7 +184,18 @@ describe('file revision history', () => {
     let resolve!: (data: any) => void; mock.api.getFileHistory.mockReturnValueOnce(new Promise(done => { resolve = done; }));
     const stale = render(<FileHistoryView filePath="old" />); stale.unmount(); await act(async () => resolve(entries));
     let reject!: (error: Error) => void; mock.api.getFileHistory.mockReturnValueOnce(new Promise((_done, fail) => { reject = fail; }));
-    const failed = render(<FileHistoryView filePath="old" />); failed.unmount(); await act(async () => reject(new Error('late')));
+    const failed = render(<FileHistoryView filePath="old" />); await waitFor(() => expect(mock.api.getFileHistory).toHaveBeenCalledWith('old'));
+    failed.unmount(); await act(async () => reject(new Error('late')));
+  });
+  it('ignores a rejected historical blame snapshot after its view unmounts', async () => {
+    mock.api.getFileHistory.mockResolvedValue(entries);
+    let reject!: (reason: Error) => void;
+    mock.api.getBlame.mockReturnValue(new Promise((_resolve, fail) => { reject = fail; }));
+    const view = render(<FileHistoryView filePath="history.txt" />);
+    await waitFor(() => expect(mock.api.getBlame).toHaveBeenCalled());
+    view.unmount();
+    await act(async () => reject(new Error('late blame failure')));
+    expect(screen.queryByText('late blame failure')).not.toBeInTheDocument();
   });
 
   it('scrubs revisions, searches line ownership and handles snapshots without text or blame failures', async () => {

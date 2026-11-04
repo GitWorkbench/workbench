@@ -333,6 +333,8 @@ describe('working directory staging and commit operations', () => {
   });
   it('does not issue a keyboard commit with blank text or no staged changes', async () => {
     workdir([], [changed('unstaged.ts')]); const input = screen.getByRole('textbox');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.keyDown(input, { key: 'a', ctrlKey: true });
     fireEvent.keyDown(input, { key: 'Enter', metaKey: true }); expect(mocks.api.commit).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: 'Unstaged draft' } }); fireEvent.keyDown(input, { key: 'Enter', ctrlKey: true });
     await act(async () => {}); expect(mocks.api.commit).not.toHaveBeenCalled();

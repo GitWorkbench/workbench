@@ -54,6 +54,18 @@ describe('Git LFS subprocess adapter', () => {
     expect(await getLfsState(repo)).toMatchObject({ repo, installed: true, configured: true, version: 'git-lfs/3.6.1', head, remotes: ['origin', 'backup'], totalFiles: 1,
       patterns: [expect.objectContaining({ pattern: '*.psd' })], files: [{ name: 'image.psd', oid: 'oid', size: 200, downloaded: true, checkout: false }] });
   });
+  it('keeps LFS details available when HEAD and its optional filter config are unavailable', async () => {
+    mocks.resolveCommit.mockRejectedValueOnce(new Error('no HEAD'));
+    mocks.gitCommand.mockImplementation(async (_repo, args) => {
+      if (args[0] === 'config') throw new Error('filter not configured');
+      if (args[0] === 'remote') return '';
+      if (args[1] === 'version') return 'git-lfs/3.6.1';
+      if (args[1] === 'track') return '{"patterns":[]}';
+      if (args[1] === 'ls-files') return '{"files":[]}';
+      return '';
+    });
+    expect(await getLfsState(repo)).toMatchObject({ head: '', configured: false, remotes: [], files: [] });
+  });
 
   it('returns actionable installation and malformed-output warnings', async () => {
     mocks.gitCommand.mockRejectedValueOnce(new Error('not installed'));
@@ -235,6 +247,32 @@ describe('Git LFS subprocess adapter', () => {
     const file = mocks.spawn.mock.calls[0][2].env.GIT_LFS_PROGRESS;
     await fs.unlink(file); child.emit('close', 0);
     expect(await promise).toMatchObject({ state: 'completed', message: 'LFS operation completed.' });
+  });
+
+  it('keeps the completed transfer result when temporary progress cleanup fails', async () => {
+    const originalRm = fs.rm.bind(fs);
+    const remove = vi.spyOn(fs, 'rm').mockImplementation(async (target, options) => {
+      if (String(target).includes('git-workbench-lfs-')) throw new Error('temporary directory is busy');
+      return originalRm(target, options);
+    });
+    const promise = runLfsTransfer(repo, { kind: 'checkout', remote: '', head }, vi.fn());
+    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+    const tempDirectory = path.dirname(mocks.spawn.mock.calls.at(-1)![2].env.GIT_LFS_PROGRESS);
+    child.emit('close', 0);
+    await expect(promise).resolves.toMatchObject({ state: 'completed' });
+    remove.mockRestore();
+    await originalRm(tempDirectory, { recursive: true, force: true });
+  });
+  it('cancels a transfer that reaches the bounded 30-minute safety timeout', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, 'setInterval').mockReturnValue(99 as unknown as ReturnType<typeof setInterval>);
+    const events: LfsTransfer[] = [];
+    const promise = runLfsTransfer(repo, { kind: 'checkout', remote: '', head }, state => events.push(state));
+    await vi.waitFor(() => expect(mocks.spawn).toHaveBeenCalled());
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(events).toContainEqual(expect.objectContaining({ state: 'running', message: 'Cancelling…' }));
+    child.emit('close', 0);
+    await expect(promise).resolves.toMatchObject({ state: 'cancelled' });
   });
 
 });

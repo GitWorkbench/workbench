@@ -311,6 +311,11 @@ it('explains macOS EPERM access denials without starting Git operations', async 
   vi.spyOn(fs, 'accessSync').mockImplementation(() => { throw Object.assign(new Error('denied'), { code: 'EPERM' }); });
   expect(await call('repo:open-path', root)).toMatchObject({ ok: false, error: expect.stringContaining('macOS denied') });
 });
+it('continues past macOS access errors that are not permission denials', async () => {
+  Object.defineProperty(process, 'platform', { value: 'darwin' });
+  vi.spyOn(fs, 'accessSync').mockImplementation(() => { throw Object.assign(new Error('I/O error'), { code: 'EIO' }); });
+  expect(await call('repo:open-path', root)).toMatchObject({ ok: true, repo: { path: root } });
+});
 
 it('shares a canonical write queue across aliases while other repositories keep progressing', async () => {
   const other = path.join(root, 'independent'); fs.mkdirSync(other, { recursive: true });
@@ -339,6 +344,40 @@ it('keeps write admission usable after a missing repository and after a failed m
   expect(failed).toEqual({ __error: 'index locked' });
   expect(recovered).toEqual({ staged: [], unstaged: [] });
   expect(mock.git.add.mock.calls.map(([paths]) => paths[0])).toEqual(['first', 'second']);
+});
+
+it('recovers a same-repository write queued after a completed failed mutation', async () => {
+  mock.repo = root;
+  mock.git.add.mockRejectedValueOnce(new Error('index lock expired'));
+  expect(await call('git:stage', ['first'])).toEqual({ __error: 'index lock expired' });
+  expect(await call('git:stage', ['second'])).toEqual({ staged: [], unstaged: [] });
+  expect(mock.git.add.mock.calls.map(([paths]) => paths[0])).toEqual(['first', 'second']);
+});
+it('starts the next admitted write after its predecessor rejects while queued', async () => {
+  let rejectFirst!: (error: Error) => void;
+  let markFirstStarted!: () => void;
+  const firstStarted = new Promise<void>(resolve => { markFirstStarted = resolve; });
+  const firstResult = new Promise<void>((_resolve, reject) => { rejectFirst = reject; });
+  mock.git.add.mockImplementation(async (paths: string[]) => {
+    if (paths[0] === 'first') { markFirstStarted(); await firstResult; }
+  });
+  const first = call('git:stage', ['first']);
+  await firstStarted;
+  const second = call('git:stage', ['second']);
+  rejectFirst(new Error('first index write failed'));
+  expect(await first).toEqual({ __error: 'first index write failed' });
+  expect(await second).toEqual({ staged: [], unstaged: [] });
+  expect(mock.git.add.mock.calls.map(([paths]) => paths[0])).toEqual(['first', 'second']);
+});
+
+it('continues the same repository queue when a protected predecessor fails before executing', async () => {
+  mock.functions.createRestorePoint.mockRejectedValueOnce(new Error('snapshot unavailable'));
+  const first = call('git:pull');
+  await vi.waitFor(() => expect(mock.functions.createRestorePoint).toHaveBeenCalled());
+  const next = call('git:stage', ['safe.txt']);
+  expect(await first).toEqual({ __error: 'snapshot unavailable' });
+  expect(await next).toEqual({ staged: [], unstaged: [] });
+  expect(mock.git.add).toHaveBeenCalledWith(['safe.txt']);
 });
 
 it('completes pull and push with existing upstreams without fallback commands', async () => {

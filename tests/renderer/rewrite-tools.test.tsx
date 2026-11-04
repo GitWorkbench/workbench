@@ -73,6 +73,17 @@ describe('commit split workspace', () => {
   it('reports saved-preview errors and ignores deferred results after unmount', async () => {
     mock.api.listCommitSplitPreviews.mockRejectedValueOnce('read failure'); const first = render(<CommitSplitModal />); expect(await screen.findByRole('alert')).toHaveTextContent('read failure'); first.unmount(); let resolve!: (v: any) => void; mock.api.listCommitSplitPreviews.mockReturnValue(new Promise(done => { resolve = done; })); const second = render(<CommitSplitModal />); second.unmount(); await act(async () => resolve([split()])); expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+  it('ignores a split-plan failure delivered after unmount', async () => {
+    let reject!: (reason: Error) => void;
+    mock.api.getCommitSplit.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const view = render(<CommitSplitModal />); fireEvent.click(screen.getByRole('button', { name: 'Load commit' })); view.unmount();
+    await act(async () => reject(new Error('late split failure')));
+  });
+  it('ignores saved-preview list failures delivered after unmount', async () => {
+    let reject!: (reason: Error) => void;
+    mock.api.listCommitSplitPreviews.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const view = render(<CommitSplitModal />); view.unmount(); await act(async () => reject(new Error('late preview-list failure')));
+  });
 });
 
 describe('branch stack workspace', () => {
@@ -110,4 +121,5 @@ describe('branch stack workspace', () => {
     mock.api.getBranchStack.mockRejectedValueOnce(new Error('read denied')); const first = render(<BranchStackModal />); await screen.findByRole('status'); expect(screen.getByRole('status')).toHaveTextContent('read denied'); first.unmount(); await showStack(); mock.api.getBranchStack.mockRejectedValueOnce(new Error('refresh denied')); fireEvent.click(screen.getByTitle('Refresh stack')); await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('refresh denied')); expect(screen.getByLabelText('Close')).toBeEnabled();
   });
   it('ignores an initial response or error after unmount', async () => { let reject!: (e: Error) => void; mock.api.getBranchStack.mockReturnValue(new Promise((_done, fail) => { reject = fail; })); const { unmount } = render(<BranchStackModal />); unmount(); await act(async () => reject(new Error('late error'))); expect(screen.queryByRole('dialog')).not.toBeInTheDocument(); });
+  it('ignores a successful stack load delivered after unmount', async () => { let resolve!: (value: ReturnType<typeof stack>) => void; mock.api.getBranchStack.mockReturnValueOnce(new Promise(done => { resolve = done; })); const view = render(<BranchStackModal />); view.unmount(); await act(async () => resolve(stack())); });
 });

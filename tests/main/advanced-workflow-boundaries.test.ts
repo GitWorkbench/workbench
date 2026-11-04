@@ -9,7 +9,7 @@ vi.mock('../../src/main/git/rewrite-comparison', () => ({ recordCompletedRewrite
 vi.mock('../../src/main/git/conflicts-rebase', () => ({ getRepoOperationState: mock.operation }));
 vi.mock('../../src/main/git/pull-requests', () => ({ apiPath: () => '/api/repo', hostedReviewClient: mock.client, requestJson: mock.request }));
 import { retargetPullRequest, resumeStackRestack, applyStackRestack, discardStackRestack, getBranchStack, setStackParent, previewStackRestack } from '../../src/main/git/branch-stacks';
-import { applyCommitSplit, getCommitSplit, previewCommitSplit, listCommitSplitPreviews } from '../../src/main/git/commit-split';
+import { applyCommitSplit, discardCommitSplit, getCommitSplit, previewCommitSplit, listCommitSplitPreviews } from '../../src/main/git/commit-split';
 import { getSparseCheckout, previewSparseCheckout } from '../../src/main/git/sparse-checkout';
 let root: string;
 const old = 'a'.repeat(40), next = 'b'.repeat(40), base = 'c'.repeat(40), id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', stepId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -97,6 +97,39 @@ describe('stack registry and preview safety limits', () => {
     await expect(discardStackRestack(root, id)).rejects.toThrow('Switch away');
     expect(mock.git.mock.calls.some(([, args]) => args.includes('remove'))).toBe(false);
   });
+  it('rejects a second stack mutation while the operation lock exists', async () => {
+    const directory = path.join(root, 'git-workbench-stacks'); await fs.mkdir(directory, { recursive: true });
+    await fs.writeFile(path.join(directory, 'operation.lock'), 'active');
+    await expect(setStackParent(root, 'feature', null)).rejects.toThrow('Another stack action is running');
+  });
+  it('keeps clearing a stack link successful when its pinned boundary is already gone', async () => {
+    await savedStack();
+    const original = mock.git.getMockImplementation()!;
+    mock.git.mockImplementation(async (repo, args) => {
+      if (args[0] === 'update-ref' && args[1] === '-d') throw new Error('boundary already absent');
+      return original(repo, args);
+    });
+    const state = await setStackParent(root, 'feature', null);
+    expect(state.links.some(link => link.branch === 'feature')).toBe(false);
+  });
+  it('does not fail a completed parent update when the operation lock cannot be unlinked', async () => {
+    await savedStack();
+    const original = fs.unlink.bind(fs);
+    vi.spyOn(fs, 'unlink').mockImplementation(async file => {
+      if (String(file).endsWith('operation.lock')) throw new Error('lock cleanup denied');
+      return original(file);
+    });
+    const state = await setStackParent(root, 'feature', null);
+    expect(state.links.some(link => link.branch === 'feature')).toBe(false);
+  });
+  it('returns stack state when operation inspection fails and sorts valid saved sessions', async () => {
+    await savedStack({ createdAt: '2026-01-02' });
+    await fs.writeFile(path.join(root, 'git-workbench-stacks', `${stepId}.json`), JSON.stringify({ id: stepId, createdAt: '2026-01-01' }));
+    mock.operation.mockRejectedValue(new Error('preview status unavailable'));
+    const state = await getBranchStack(root);
+    expect(state.sessions.map(session => session.id)).toEqual([id, stepId]);
+    await expect(discardStackRestack(root, id)).resolves.toEqual({ ok: true });
+  });
   it('retargets GitLab using diff_refs when a separate sha field is absent', async () => {
     mock.request.mockResolvedValue({ state: 'opened', diff_refs: { head_sha: next }, target_branch: 'feature' });
     expect(await retarget('gitlab')).toEqual({ ok: true });
@@ -131,6 +164,25 @@ describe('split shadow-index failure boundaries', () => {
     await fs.writeFile(path.join(directory, `${id}.json`), '{bad');
     await fs.writeFile(path.join(directory, `${stepId}.json`), JSON.stringify({ worktree: '/other' }));
     expect(await listCommitSplitPreviews(root)).toEqual([]);
+  });
+  it('lists no previews when the metadata directory is absent and sorts valid previews', async () => {
+    expect(await listCommitSplitPreviews(root)).toEqual([]);
+    const directory = path.join(root, 'git-workbench-splits'); await fs.mkdir(directory);
+    for (const [recordId, createdAt] of [[id, '2026-01-01'], [stepId, '2026-02-01']] as const) {
+      await fs.writeFile(path.join(directory, `${recordId}.json`), JSON.stringify({ id: recordId, worktree: await fs.realpath(root), createdAt }));
+    }
+    expect((await listCommitSplitPreviews(root)).map(preview => preview.id)).toEqual([stepId, id]);
+  });
+  it('treats missing split metadata as already discarded and preserves a successful apply if cleanup fails', async () => {
+    await expect(discardCommitSplit(root, id)).resolves.toEqual({ ok: true });
+    const directory = path.join(root, 'git-workbench-splits'); await fs.mkdir(directory);
+    await fs.writeFile(path.join(directory, `${id}.json`), JSON.stringify({ id, worktree: await fs.realpath(root), branch: 'main', oldHead: old, newHead: next, source: old, parent: base }));
+    const original = mock.git.getMockImplementation()!;
+    mock.git.mockImplementation(async (repo, args) => {
+      if (args[0] === 'update-ref' && args[1] === '-d') throw new Error('preview ref already removed');
+      return original(repo, args);
+    });
+    await expect(applyCommitSplit(root, id)).resolves.toMatchObject({ ok: true, warning: '' });
   });
   it('rejects mismatched trees before saving a restore point or updating a branch', async () => {
     const directory = path.join(root, 'git-workbench-splits'); await fs.mkdir(directory);

@@ -59,6 +59,22 @@ describe('bisect wizard', () => {
     await startBisect(); expect(mock.api.startBisect).toHaveBeenCalledWith('abc123full', 'good-old'); expect(screen.getByText('Bisecting 3 revisions')).toBeVisible();
     expect(screen.getByText('good old')).toBeVisible(); expect(screen.getByText('Regression commit')).toBeVisible(); expect(mock.state.runAndRefresh).toHaveBeenCalled();
   });
+  it('accepts successful start and step responses that omit an updated state snapshot', async () => {
+    mock.api.startBisect.mockResolvedValueOnce({ ok: true });
+    const first = render(<BisectModal />);
+    fireEvent.change(screen.getByPlaceholderText(/e.g. v1.0.0/), { target: { value: 'old' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Start Bisect' }));
+    await waitFor(() => expect(mock.state.runAndRefresh).toHaveBeenCalledWith(expect.any(Function), 'Git bisect session started'));
+    first.unmount();
+
+    mock.api.getBisectState.mockResolvedValueOnce({ active: true });
+    const active = render(<BisectModal />);
+    await screen.findByRole('button', { name: 'Good (No Bug)' });
+    mock.api.stepBisect.mockResolvedValueOnce({ ok: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Good (No Bug)' }));
+    await waitFor(() => expect(mock.state.runAndRefresh).toHaveBeenLastCalledWith(expect.any(Function), 'Marked commit as good'));
+    active.unmount();
+  });
   it.each([['good', 'Good (No Bug)'], ['bad', 'Bad (Bug Present)'], ['skip', 'Skip Commit']])('submits a %s verdict', async (verdict, label) => {
     await startBisect(); fireEvent.click(screen.getByRole('button', { name: label })); await waitFor(() => expect(mock.api.stepBisect).toHaveBeenCalledWith(verdict));
     await waitFor(() => expect(mock.state.runAndRefresh).toHaveBeenLastCalledWith(expect.any(Function), `Marked commit as ${verdict}`));
@@ -120,6 +136,13 @@ describe('reflog recovery workspace', () => {
     fireEvent.click(screen.getByTitle('Refresh reflog')); await waitFor(() => expect(screen.getByLabelText('Branch name')).toHaveValue('recovered/def456-commit'));
     let resolve!: (value: unknown) => void; mock.api.getReflog.mockReturnValueOnce(new Promise(done => { resolve = done; })); fireEvent.click(screen.getByTitle('Refresh reflog')); unmount();
     await act(async () => resolve(entries())); expect(screen.queryByText('Reflog & Recovery')).not.toBeInTheDocument();
+  });
+  it('does not notify when a reflog refresh rejects after closing', async () => {
+    const view = render(<ReflogModal />); await screen.findByText('3 entries shown');
+    let reject!: (reason: Error) => void; mock.api.getReflog.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    fireEvent.click(screen.getByTitle('Refresh reflog')); view.unmount();
+    await act(async () => reject(new Error('stale reflog failure')));
+    expect(mock.state.notify).not.toHaveBeenCalledWith('error', expect.stringContaining('stale reflog failure'));
   });
   it('creates an explicitly named recovery branch and reports provider errors', async () => {
     render(<ReflogModal />);

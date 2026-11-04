@@ -18,6 +18,9 @@ describe('status and patch fallback behavior', () => {
   it('accepts both successful and diff exit-one output for an untracked file', async () => { mock.raw.mockResolvedValue('file\0'); mock.exec.mockResolvedValueOnce({ stdout: 'new patch' }); expect(await getWorkingDiffText('/repo', 'file')).toBe('new patch'); mock.exec.mockRejectedValueOnce({ code: 1, stdout: 'difference patch' }); expect(await getWorkingDiffText('/repo', 'file')).toBe('difference patch'); });
   it.each([{ code: 1, stdout: undefined }, { code: 2, stdout: 'fatal' }, new Error('spawn failed')])('propagates genuine no-index failure %#', async error => { mock.raw.mockResolvedValue('file\0'); mock.exec.mockRejectedValue(error); await expect(getWorkingDiffText('/repo', 'file')).rejects.toEqual(error); });
   it('preserves no-newline annotations, empty context lines and ignores unrecognized headers', () => { expect(parseUnifiedDiff('metadata\n@@ -1 +1 @@\n-old\n+new\n\\ No newline at end of file\n?unexpected\n\n', 'file')).toMatchObject({ insertions: 1, deletions: 1, hunks: [{ oldLines: 1, newLines: 1, lines: [{ content: 'old', kind: 'del' }, { content: 'new', kind: 'add' }, { content: '', kind: 'context' }] }] }); });
+  it('parses a final diff line that has no terminating newline', () => {
+    expect(parseUnifiedDiff('@@ -1 +1 @@\n-old\n+new', 'file')).toMatchObject({ insertions: 1, deletions: 1 });
+  });
   it('unstages no paths without mutation, or all paths with and without HEAD', async () => { await unstageFiles('/repo', []); expect(mock.raw).not.toHaveBeenCalled(); await unstageFiles('/repo'); expect(mock.raw).toHaveBeenCalledWith(['reset', 'HEAD', '--', '.']); mock.raw.mockRejectedValueOnce(new Error('unborn')); await unstageFiles('/repo'); expect(mock.raw).toHaveBeenCalledWith(['rm', '--cached', '--force', '--ignore-unmatch', '-r', '--', '.']); });
   it('discards only worktree content for tracked files and cleans literal untracked paths', async () => { mock.raw.mockResolvedValueOnce('file\0'); await discardFile('/repo', 'file'); expect(mock.raw).toHaveBeenCalledWith(['restore', '--worktree', '--', ':(literal)file']); await discardFile('/repo', 'new'); expect(mock.raw).toHaveBeenCalledWith(['clean', '-f', '-d', '--', ':(literal)new']); });
 });
@@ -76,6 +79,19 @@ describe('partial patch metadata boundaries', () => {
     expect(await getBlameLines('/repo', 'file', 'b'.repeat(40))).toMatchObject([{ author: 'Unknown', content: 'content' }]);
     expect(mock.raw).toHaveBeenLastCalledWith(['blame', '--line-porcelain', 'b'.repeat(40), '--', 'file']);
     expect(await getBlameLines('/repo', 'file', '--all')).toEqual([]);
+  });
+  it('ignores an invalid author timestamp while preserving the blamed line', async () => {
+    mock.raw.mockResolvedValue(`${'a'.repeat(40)} 1 1\nauthor Dev\nauthor-time not-a-number\nauthor-tz +0000\nfilename file\n\tcontent\n`);
+    expect(await getBlameLines('/repo', 'file')).toMatchObject([{ author: 'Dev', date: '', content: 'content' }]);
+  });
+  it('stages a selected hunk when the source diff has no final newline', async () => {
+    mock.diff.mockResolvedValue('diff --git a/file b/file\n--- a/file\n+++ b/file\n@@ -1 +1 @@\n-old\n+new');
+    let patch = '';
+    const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough() });
+    child.stdin.on('data', chunk => { patch += chunk.toString(); });
+    mock.spawn.mockImplementation(() => { queueMicrotask(() => child.emit('close', 0)); return child; });
+    await stageLines('/repo', 'file', 0, [1]);
+    expect(patch).toContain('+new');
   });
 });
 

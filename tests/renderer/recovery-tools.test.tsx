@@ -34,6 +34,17 @@ beforeEach(() => {
 });
 
 describe('RestorePointsModal', () => {
+  it('ignores list success and failure results after unmount', async () => {
+    let resolve!: (points: RestorePoint[]) => void;
+    mocks.api.listRestorePoints.mockReturnValueOnce(new Promise<RestorePoint[]>(done => { resolve = done; }));
+    const first = render(<RestorePointsModal />); first.unmount();
+    await act(async () => resolve([point()]));
+
+    let reject!: (reason: Error) => void;
+    mocks.api.listRestorePoints.mockReturnValueOnce(new Promise<RestorePoint[]>((_done, fail) => { reject = fail; }));
+    const second = render(<RestorePointsModal />); second.unmount();
+    await act(async () => reject(new Error('late list failure')));
+  });
   it('ignores another form submission while a restore point is being saved', async () => {
     let finish!: (point: RestorePoint) => void;
     mocks.api.createRestorePoint.mockImplementation(() => new Promise<RestorePoint>(resolve => { finish = resolve; }));
@@ -127,6 +138,22 @@ describe('RangeComparisonModal', () => {
     const { unmount } = render(<RangeComparisonModal />); unmount();
     await act(async () => finish([session()]));
     expect(mocks.api.compareCommitRanges).not.toHaveBeenCalled();
+  });
+  it.each(['success', 'failure'] as const)('ignores a range-comparison %s delivered after unmount', async outcome => {
+    mocks.api.listRewriteSessions.mockResolvedValue([]);
+    let resolve!: (value: RangeComparison) => void, reject!: (reason: Error) => void;
+    mocks.api.compareCommitRanges.mockReturnValueOnce(new Promise<RangeComparison>((done, fail) => { resolve = done; reject = fail; }));
+    const view = render(<RangeComparisonModal />);
+    await waitFor(() => expect(mocks.api.listRewriteSessions).toHaveBeenCalledOnce());
+    for (const [name, value] of [['Before base', 'a'], ['Before tip', 'b'], ['After base', 'c'], ['After tip', 'd']]) fireEvent.change(screen.getByRole('textbox', { name }), { target: { value } });
+    fireEvent.click(screen.getByRole('button', { name: 'Compare ranges' })); await waitFor(() => expect(mocks.api.compareCommitRanges).toHaveBeenCalledOnce());
+    view.unmount();
+    await act(async () => outcome === 'success' ? resolve(comparison()) : reject(new Error('stale compare failure')));
+  });
+  it('ignores a rewrite-record failure delivered after unmount', async () => {
+    let reject!: (reason: Error) => void;
+    mocks.api.listRewriteSessions.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const view = render(<RangeComparisonModal />); view.unmount(); await act(async () => reject(new Error('late rewrite-list failure')));
   });
   it('loads a saved completed rewrite automatically and filters patch matches', async () => {
     render(<RangeComparisonModal />);

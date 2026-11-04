@@ -53,6 +53,7 @@ describe('browser preview API', () => {
       const { api } = await import('../../src/renderer/lib/api');
       expect(await api.getStatus()).toMatchObject({ currentBranch: 'main' });
       expect(await api.generateAiCommitMessage()).toMatchObject({ ok: true });
+      await expect(api.openExternal('https://example.com')).rejects.toThrow('requires a browser or the desktop app');
     } finally { vi.unstubAllGlobals(); }
   });
   it('exposes stable realistic repository data without requiring Electron', async () => {
@@ -97,6 +98,8 @@ describe('browser preview API', () => {
   it('simulates request credentials per provider and creates visible requests', async () => {
     const { api } = client;
     expect((await api.getPullRequestContext()).credentialConfigured).toBe(false);
+    expect(await api.getPullRequestContext('origin', 'gitlab')).toMatchObject({ provider: 'gitlab', repositoryUrl: 'https://gitlab.com/GitWorkbench/workbench' });
+    expect(await api.getPullRequestContext('origin', 'gitea')).toMatchObject({ provider: 'gitea', repositoryUrl: 'https://gitea.example.com/GitWorkbench/workbench' });
     for (const provider of ['github', 'gitlab', 'bitbucket'] as const) {
       await api.savePullRequestCredential(provider, { token: 'preview-only' });
       expect((await api.getPullRequestCredentialStatus())[provider]).toBe(true);
@@ -189,6 +192,8 @@ it('models Gitea server connections in browser previews without storing tokens',
   expect(JSON.stringify(await api.getPullRequestCredentialStatus())).not.toContain('preview-token');
   await api.removePullRequestCredential('gitea', 'https://code.example/forge');
   expect(await api.getPullRequestCredentialStatus()).toMatchObject({ gitea: false, giteaServers: [] });
+  await expect(api.savePullRequestCredential('gitea', { token: 'preview-token' })).rejects.toThrow('Enter your Gitea server URL.');
+  await expect(api.removePullRequestCredential('gitea')).rejects.toThrow('Enter your Gitea server URL.');
 });
 
 

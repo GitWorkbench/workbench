@@ -8,7 +8,7 @@ vi.mock('../../src/main/git/resolution-memory', () => ({ captureResolutionMemory
 vi.mock('../../src/main/git/core', () => ({ withGit: async (_repo: string, run: any) => run({ raw: mock.raw, deleteLocalBranch: mock.deleteLocalBranch }), errorMessage: String }));
 import { getConflictFile, resolveConflictFile } from '../../src/main/git/conflict-files';
 import { continueOperation, simulateMerge, getRepoOperationState, getCommitsForRebase, cherryPick, executeInteractiveRebase } from '../../src/main/git/conflicts-rebase';
-import { dropCommit, deleteBranchEx, createWorktree } from '../../src/main/git/history';
+import { dropCommit, deleteBranchEx, createWorktree, editCommitMessage } from '../../src/main/git/history';
 let root: string, file: string;
 const hash = 'a'.repeat(40);
 beforeEach(() => {
@@ -29,8 +29,36 @@ describe('conflict filesystem errors and save races', () => {
 });
 describe('Git operation and history failure boundaries', () => {
   it.each([true, false])('continues a rebase using the saved editor when present: %s', async withEditor => { fs.mkdirSync(path.join(root, 'rebase-merge')); const editorDir = path.join(root, 'git-workbench-rebase-editor'); if (withEditor) { fs.mkdirSync(editorDir); fs.writeFileSync(path.join(editorDir, 'message.cjs'), 'message editor'); fs.writeFileSync(path.join(editorDir, 'todo.cjs'), 'todo editor'); } const original = mock.exec.getMockImplementation()!; mock.exec.mockImplementation(async (cmd, args, opts) => { if (args[0] === 'rebase' && args[1] === '--continue') fs.rmdirSync(path.join(root, 'rebase-merge')); return original(cmd, args, opts); }); await continueOperation(root); expect(mock.exec).toHaveBeenCalledWith('git', ['rebase', '--continue'], expect.objectContaining({ cwd: root, env: expect.objectContaining({ GIT_EDITOR: withEditor ? `node ${JSON.stringify(path.join(editorDir, 'message.cjs'))}` : 'true' }) })); expect(fs.existsSync(editorDir)).toBe(false); });
+  it('keeps the saved editor when Git still reports an active rebase after continue', async () => {
+    const rebaseDir = path.join(root, 'rebase-merge'), editorDir = path.join(root, 'git-workbench-rebase-editor');
+    fs.mkdirSync(rebaseDir); fs.mkdirSync(editorDir); fs.writeFileSync(path.join(editorDir, 'message.cjs'), 'message editor');
+    await continueOperation(root);
+    expect(fs.existsSync(path.join(editorDir, 'message.cjs'))).toBe(true);
+  });
   it('parses generic conflict messages and handles failed merge simulation without output', async () => { mock.exec.mockRejectedValueOnce({ stdout: 'CONFLICT (modify/delete): file.txt deleted\nCONFLICT (unknown):    \n', stderr: '' }); expect(await simulateMerge(root, 'feature')).toMatchObject({ clean: false, conflicts: ['file.txt'], message: expect.stringContaining('1 file') }); mock.exec.mockRejectedValueOnce('unsupported Git'); expect(await simulateMerge(root, 'feature')).toEqual({ clean: false, conflicts: [], message: 'Merge with feature will encounter conflicts.' }); });
   it.each([new Error('nothing to do'), 'nothing to do', new Error('other rebase failure')])('reports the only-commit drop refusal or original failure: %s', async error => { const original = mock.exec.getMockImplementation()!; mock.exec.mockImplementation(async (cmd, args, opts) => { if (args[0] === 'rebase' && args[1] === '-i') throw error; return original(cmd, args, opts); }); await expect(dropCommit(root, hash)).rejects.toThrow(String(error).includes('nothing to do') ? 'only commit in its history range' : 'other rebase failure'); expect(mock.exec).toHaveBeenCalledWith('git', ['rebase', '--abort'], { cwd: root }); });
+  it('preserves a reword error when abort and temporary editor cleanup fail', async () => {
+    const originalExec = mock.exec.getMockImplementation()!;
+    mock.exec.mockImplementation(async (cmd, args, opts) => {
+      if (args[0] === 'rebase' && args[1] === '-i') throw new Error('reword failed');
+      if (args[0] === 'rebase' && args[1] === '--abort') throw new Error('nothing to abort');
+      return originalExec(cmd, args, opts);
+    });
+    const originalUnlink = fs.promises.unlink.bind(fs.promises), attempted: string[] = [];
+    const unlink = vi.spyOn(fs.promises, 'unlink').mockImplementation(async target => {
+      if (String(target).includes('git-workbench-')) { attempted.push(String(target)); throw new Error('cleanup denied'); }
+      return originalUnlink(target);
+    });
+    try {
+      await expect(editCommitMessage(root, 'older-commit', 'Revised message')).rejects.toThrow('reword failed');
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(mock.exec).toHaveBeenCalledWith('git', ['rebase', '--abort'], { cwd: root });
+      expect(attempted).toHaveLength(2);
+    } finally {
+      unlink.mockRestore();
+      await Promise.all(attempted.map(file => originalUnlink(file).catch(() => {})));
+    }
+  });
   it('explains unmerged branch deletion without leaking Git advice and propagates unrelated or forced deletion failures', async () => { const hint = 'error: The branch \'feature\' is not fully merged.\nhint: If you are sure you want to delete it, run \'git branch -D feature\'\nhint: Disable this message with "git config set advice.forceDeleteBranch false"'; mock.deleteLocalBranch.mockRejectedValue(new Error(hint)); await expect(deleteBranchEx(root, 'feature', { local: true })).rejects.toThrow(/^Branch \'feature\' is not fully merged\. Use "force delete" to discard its commits\.$/); mock.deleteLocalBranch.mockRejectedValue(hint); await expect(deleteBranchEx(root, 'feature', { local: true })).rejects.toThrow(/^Branch \'feature\' is not fully merged\. Use "force delete" to discard its commits\.$/); mock.deleteLocalBranch.mockRejectedValue(new Error('not fully merged')); await expect(deleteBranchEx(root, 'feature', { local: true, force: true })).rejects.toThrow('not fully merged'); mock.deleteLocalBranch.mockRejectedValue(new Error('branch checked out')); await expect(deleteBranchEx(root, 'feature', { local: true })).rejects.toThrow('branch checked out'); });
 });
 

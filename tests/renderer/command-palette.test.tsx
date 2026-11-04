@@ -49,6 +49,7 @@ describe('palette navigation and filtering', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Files' })); expect(screen.getByText('2 results')).toBeVisible();
     expect(screen.getAllByText('file.ts')).toHaveLength(1); expect(screen.queryByText('Fetch All Remotes')).not.toBeInTheDocument();
     search('missing'); expect(screen.getByText(/No matching files/)).toBeVisible();
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
   });
   it('wraps keyboard selection, follows hover selection and executes the selected item', () => {
     render(<CommandPalette />); fireEvent.click(screen.getByRole('button', { name: 'Files' }));

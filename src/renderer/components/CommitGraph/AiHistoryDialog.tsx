@@ -42,7 +42,7 @@ export function AiHistoryDialog({ kind, commit, repo, onClose }: {
         const controls = [...(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled)') || [])];
         if (!controls.length) { event.preventDefault(); panel.current?.focus(); return; }
         const first = controls[0], last = controls[controls.length - 1];
-        if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last?.focus(); }
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel.current)) { event.preventDefault(); first?.focus(); }
       }
     };

@@ -135,7 +135,8 @@ export function CommitHoverCard({
 
     updatePosition();
     const observer = new ResizeObserver(updatePosition);
-    if (cardRef.current) observer.observe(cardRef.current);
+    // Layout effects run after the portal has committed, so the card ref is present here.
+    observer.observe(cardRef.current!);
     window.addEventListener('resize', updatePosition);
     return () => {
       observer.disconnect();

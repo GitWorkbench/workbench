@@ -136,6 +136,19 @@ describe('Gitea instance credentials', () => {
   });
 });
 
+it('removes one self-hosted GitLab connection while retaining other instance credentials', () => {
+  credentials.savePullRequestCredential('gitlab', { serverUrl: 'https://gitlab-one.example', token: 'one' });
+  credentials.savePullRequestCredential('gitlab', { serverUrl: 'https://gitlab-two.example', token: 'two' });
+  credentials.removePullRequestCredential('gitlab', 'https://gitlab-one.example');
+  expect(credentials.getPullRequestCredentialStatus().gitlabServers).toEqual(['https://gitlab-two.example']);
+  expect(credentials.getPullRequestCredential('gitlab', 'https://gitlab-two.example')?.token).toBe('two');
+});
+it('removes the legacy GitLab.com credential when no per-instance map exists', () => {
+  fs.writeFileSync(filename(), 'encrypted:{"gitlab":{"token":"cloud-token"}}');
+  credentials.removePullRequestCredential('gitlab');
+  expect(credentials.getPullRequestCredentialStatus().gitlabServers).toEqual([]);
+});
+
 
 it('reads the cloud GitLab credential format, replaces it per instance, and refuses a provider collision', () => {
   fs.writeFileSync(filename(), 'encrypted:{"gitlab":{"token":"cloud-token"}}');

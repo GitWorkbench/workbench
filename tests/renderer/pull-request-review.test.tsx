@@ -25,6 +25,12 @@ const ready = async () => screen.findByRole('button', { name: 'Files (1)' });
 function fillMessage(value: string) { fireEvent.change(screen.getByRole('textbox', { name: 'Review message' }), { target: { value } }); }
 
 describe('pull request review loading and navigation', () => {
+  it('ignores a review-load rejection after the modal unmounts', async () => {
+    let reject!: (reason: Error) => void;
+    mocks.api.getPullReview.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const view = render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />);
+    view.unmount(); await act(async () => reject(new Error('late review failure')));
+  });
   it('bounds large patches and omits a conversation state that the provider did not supply', async () => {
     mocks.api.getPullReview.mockResolvedValue(detail({ files: [{ ...detail().files[0], patch: '@@ -1,4001 +1,4001 @@\n' + ' line\n'.repeat(4001) }], comments: [{ id: 'note', author: 'Alice', body: 'General note' }] }));
     render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />);
@@ -152,6 +158,13 @@ describe('review submission and inline replies', () => {
     await act(async () => reject(new Error('Permission denied')));
     expect(screen.getByRole('status')).toHaveTextContent('Error: Permission denied'); expect(screen.getByRole('textbox', { name: 'Review message' })).toHaveValue('Keep this draft');
   });
+  it('ignores a submission rejection after the review modal unmounts', async () => {
+    let reject!: (reason: Error) => void;
+    mocks.api.submitPullReview.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+    const view = render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />); await ready();
+    fillMessage('Late reply'); fireEvent.click(screen.getByRole('button', { name: 'Post comment' }));
+    view.unmount(); await act(async () => reject(new Error('late review submission failure')));
+  });
   it('clears stale inline targets when refreshing a newer head while retaining a review draft', async () => {
     render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />); await ready();
     fireEvent.click(screen.getAllByTitle('Comment on new line').find(button => !(button as HTMLButtonElement).disabled)!);
@@ -195,6 +208,16 @@ describe('review worktrees', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create worktree' })); await screen.findByText('Error: Branch already exists');
     expect(screen.getByRole('button', { name: 'Create worktree' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Open in worktree…' })); expect(screen.queryByRole('textbox', { name: 'New folder' })).not.toBeInTheDocument();
+  });
+  it.each(['success', 'failure'] as const)('ignores a worktree %s after the review modal unmounts', async outcome => {
+    let resolve!: (result: { path: string }) => void, reject!: (reason: Error) => void;
+    mocks.api.openPullRequestWorktree.mockReturnValueOnce(new Promise((yes, no) => { resolve = yes; reject = no; }));
+    const view = render(<PullRequestReview request={request} target={target} onClose={vi.fn()} />); await ready(); await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose parent folder…' })); await screen.findByText('/reviews/');
+    fireEvent.change(screen.getByRole('textbox', { name: 'New folder' }), { target: { value: 'pr-12' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create worktree' }));
+    view.unmount();
+    await act(async () => outcome === 'success' ? resolve({ path: '/reviews/pr-12' }) : reject(new Error('late worktree failure')));
   });
 });
 

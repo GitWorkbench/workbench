@@ -151,6 +151,13 @@ it('traps reverse focus from the panel and keeps focus when all controls are dis
   dialog.focus(); fireEvent.keyDown(window, { key: 'Tab' });
   expect(dialog).toHaveFocus();
 });
+it('allows reverse tabbing from an interior control without wrapping focus', () => {
+  show();
+  const settings = screen.getByRole('button', { name: 'AI settings' });
+  settings.focus();
+  fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+  expect(settings).toHaveFocus();
+});
 it('cleans up the focus trap and tolerates an already queued event after unmount', () => {
   const listen = vi.spyOn(window, 'addEventListener'), remove = vi.spyOn(window, 'removeEventListener');
   const { unmount } = show();
@@ -159,4 +166,50 @@ it('cleans up the focus trap and tolerates an already queued event after unmount
   unmount();
   expect(remove).toHaveBeenCalledWith('keydown', keydown, true);
   expect(() => keydown.call(window, new KeyboardEvent('keydown', { key: 'Tab' }))).not.toThrow();
+});
+
+it('does not restore focus to a non-HTML element when the dialog closes', () => {
+  const previous = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  previous.setAttribute('tabindex', '0'); document.body.append(previous); previous.focus();
+  const { unmount } = show();
+  unmount();
+  expect(document.activeElement).not.toBe(previous);
+  previous.remove();
+});
+
+it('ignores stale explanation successes and failures after repository change or unmount', async () => {
+  let resolve!: (value: BranchChangesExplanation) => void;
+  mock.api.explainBranchChanges.mockImplementationOnce(() => new Promise(done => { resolve = done; }));
+  const first = show('explain'); fireEvent.click(screen.getByRole('button', { name: 'Explain changes' }));
+  mock.app.activeTab = '/other';
+  await act(async () => resolve(explanation));
+  expect(screen.queryByText(explanation.explanation)).not.toBeInTheDocument(); first.unmount(); mock.app.activeTab = '/repo';
+
+  let reject!: (reason: Error) => void;
+  mock.api.explainBranchChanges.mockImplementationOnce(() => new Promise((_resolve, rejectPromise) => { reject = rejectPromise; }));
+  const second = show('explain'); fireEvent.click(screen.getByRole('button', { name: 'Explain changes' }));
+  second.unmount();
+  await act(async () => reject(new Error('late provider failure')));
+  expect(screen.queryByText('late provider failure')).not.toBeInTheDocument();
+});
+
+it('does not surface a failed apply after switching repositories or unmounting', async () => {
+  let reject!: (reason: Error) => void;
+  mock.api.editCommitMessage.mockImplementation(() => new Promise((_resolve, rejectPromise) => { reject = rejectPromise; }));
+  const first = show(); await generate();
+  fireEvent.click(screen.getByRole('button', { name: 'Apply message' }));
+  await waitFor(() => expect(mock.api.editCommitMessage).toHaveBeenCalledOnce());
+  mock.app.activeTab = '/other';
+  await act(async () => reject(new Error('stale apply failure')));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument(); first.unmount(); mock.api.editCommitMessage.mockClear();
+
+  mock.app.activeTab = '/repo';
+  let rejectUnmounted!: (reason: Error) => void;
+  mock.api.editCommitMessage.mockImplementation(() => new Promise((_resolve, rejectPromise) => { rejectUnmounted = rejectPromise; }));
+  const second = show(); await generate();
+  fireEvent.click(screen.getByRole('button', { name: 'Apply message' }));
+  await waitFor(() => expect(mock.api.editCommitMessage).toHaveBeenCalledOnce());
+  second.unmount();
+  await act(async () => rejectUnmounted(new Error('apply after unmount')));
+  expect(screen.queryByText('apply after unmount')).not.toBeInTheDocument();
 });

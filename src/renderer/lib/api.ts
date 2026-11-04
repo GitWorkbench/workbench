@@ -271,14 +271,22 @@ const createMockApi = (): Api & GitWorkbenchApi => {
       return { ok: true, username: 'preview-user' };
     },
     savePullRequestCredential: async (provider: PullRequestProvider, credential: import('../../shared/types').PullRequestCredential) => {
-      if (provider === 'gitlab') mockGitLabServers.add(normalizeGitLabServer(credential.serverUrl ?? 'https://gitlab.com'));
-      if (provider === 'gitea') mockGiteaServers.add(normalizeHostingServer(credential.serverUrl ?? '', 'Gitea'));
+      switch (provider) {
+        case 'gitlab': mockGitLabServers.add(normalizeGitLabServer(credential.serverUrl ?? 'https://gitlab.com')); break;
+        case 'gitea': mockGiteaServers.add(normalizeHostingServer(credential.serverUrl ?? '', 'Gitea')); break;
+        case 'github':
+        case 'bitbucket': break;
+      }
       mockProviderCredentials[provider] = true;
       return { ok: true };
     },
     removePullRequestCredential: async (provider: PullRequestProvider, serverUrl?: string) => {
-      if (provider === 'gitlab') mockGitLabServers.delete(normalizeGitLabServer(serverUrl ?? 'https://gitlab.com'));
-      if (provider === 'gitea') mockGiteaServers.delete(normalizeHostingServer(serverUrl ?? '', 'Gitea'));
+      switch (provider) {
+        case 'gitlab': mockGitLabServers.delete(normalizeGitLabServer(serverUrl ?? 'https://gitlab.com')); break;
+        case 'gitea': mockGiteaServers.delete(normalizeHostingServer(serverUrl ?? '', 'Gitea')); break;
+        case 'github':
+        case 'bitbucket': break;
+      }
       mockProviderCredentials[provider] = provider === 'gitlab' ? mockGitLabServers.size > 0 : provider === 'gitea' ? mockGiteaServers.size > 0 : false;
       return { ok: true };
     },

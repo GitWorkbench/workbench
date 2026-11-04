@@ -96,6 +96,17 @@ describe('commit graph rendering, metadata and selection', () => {
   it('supports canvas hover without a pointer location and omits reset actions without a current branch', async () => {
     vi.useFakeTimers(); mock.state.status = null; render(<CommitGraph />); await act(async () => mock.canvas.onHover('aaaa1111')); await act(async () => vi.advanceTimersByTime(301)); expect(screen.getByRole('group', { name: 'Preview for commit aaaa111' })).toBeInTheDocument(); context(); expect(screen.queryByRole('button', { name: /Reset .* to this commit/ })).not.toBeInTheDocument();
   });
+  it('keeps row hover ownership when canvas hover changes and ignores zero-height resize observations', async () => {
+    vi.useFakeTimers();
+    render(<CommitGraph />);
+    fireEvent.mouseEnter(row(), { clientX: 310, clientY: 200 });
+    await act(async () => mock.canvas.onHover('aaaa1111', { x: 320, y: 205 }));
+    expect(mock.observers.length).toBeGreaterThan(0);
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 0 });
+    await act(async () => mock.observers.at(-1)?.());
+    await act(async () => vi.advanceTimersByTime(301));
+    expect(screen.getAllByRole('group', { name: 'Preview for commit aaaa111' })).toHaveLength(1);
+  });
   it('keeps additional references discoverable and uses raw dates if locale formatting fails', () => {
     mock.state.log.commits[0].refs.push({ kind: 'tag', label: 'extra-tag' }); vi.spyOn(Date.prototype, 'toLocaleString').mockImplementation(() => { throw new Error('locale unavailable'); }); vi.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(() => { throw new Error('locale unavailable'); });
     mock.settings.commitColumns.date = false; mock.state.log.commits[0].date = '2020-01-01'; render(<CommitGraph />); expect(screen.getByTitle('extra-tag')).toHaveTextContent('+1'); expect(screen.getByText('2020-01-01')).toBeVisible();

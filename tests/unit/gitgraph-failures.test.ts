@@ -91,6 +91,12 @@ describe('GitGraph renderer boundary handling', () => {
     ]);
     expect(graph.branches.map(b => b.name)).toEqual(['trunk', 'side-1', 'side-2', 'side-1']);
   });
+  it('does not release the trunk lane when merging a side branch into its trunk parent', () => {
+    buildGitGraph([
+      commit('head', ['main']), commit('merge', ['side', 'main']), commit('side', ['root']), commit('main', ['root']), commit('root')
+    ]);
+    expect(graph.branches.find(branch => branch.name === 'side-1')?.merge).toHaveBeenCalledOnce();
+  });
   it('starts a merge branch at its first parent when that parent is no longer a branch tip', () => {
     buildGitGraph([
       commit('head', ['kid']), commit('merge', ['old', 'other']), commit('kid', ['old']), commit('other', ['root']), commit('old', ['root']), commit('root')

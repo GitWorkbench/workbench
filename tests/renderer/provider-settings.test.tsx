@@ -235,6 +235,56 @@ it.each(['check', 'save', 'remove'] as const)('ignores an instance %s completion
   if (phase === 'check') expect(mocks.api.savePullRequestCredential).not.toHaveBeenCalled();
 });
 
+it('suppresses connection check errors after the settings view unmounts', async () => {
+  let reject!: (reason: Error) => void;
+  mocks.api.testGiteaConnection.mockReturnValueOnce(new Promise((_resolve, fail) => { reject = fail; }));
+  const view = render(<PullRequestProvidersSettings />); await ready();
+  fireEvent.click(instanceDraft('Gitea').getByRole('button', { name: 'Test connection' }));
+  await waitFor(() => expect(mocks.api.testGiteaConnection).toHaveBeenCalledOnce()); view.unmount();
+  await act(async () => reject(new Error('late connection failure')));
+});
+
+it('suppresses saved-server test results delivered after unmount', async () => {
+  mocks.api.getPullRequestCredentialStatus.mockResolvedValue({ ...empty, gitea: true, giteaServers: ['https://saved.example'] });
+  let resolve!: (value: { ok: true; username: string }) => void;
+  mocks.api.testGiteaConnection.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  const view = render(<PullRequestProvidersSettings />); await ready();
+  const row = provider('Gitea').getByText('https://saved.example').closest('li')!;
+  fireEvent.click(within(row).getByRole('button', { name: 'Test connection' }));
+  await waitFor(() => expect(mocks.api.testGiteaConnection).toHaveBeenCalledOnce()); view.unmount();
+  await act(async () => resolve({ ok: true, username: 'alice' }));
+});
+
+it('suppresses draft test results delivered after unmount', async () => {
+  let resolve!: (value: { ok: true; username: string }) => void;
+  mocks.api.testGiteaConnection.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+  const view = render(<PullRequestProvidersSettings />); await ready();
+  fireEvent.click(instanceDraft('Gitea').getByRole('button', { name: 'Test connection' }));
+  await waitFor(() => expect(mocks.api.testGiteaConnection).toHaveBeenCalledOnce()); view.unmount();
+  await act(async () => resolve({ ok: true, username: 'alice' }));
+});
+
+it('suppresses save completion after the connection list refresh resolves post-unmount', async () => {
+  let finishRefresh!: (value: PullRequestCredentialStatus) => void;
+  mocks.api.getPullRequestCredentialStatus.mockResolvedValueOnce(empty).mockReturnValueOnce(new Promise(resolve => { finishRefresh = resolve; }));
+  const view = render(<PullRequestProvidersSettings />); await ready();
+  fireEvent.click(instanceDraft('Gitea').getByRole('button', { name: 'Connect Gitea' }));
+  await waitFor(() => expect(mocks.api.savePullRequestCredential).toHaveBeenCalledOnce());
+  await waitFor(() => expect(mocks.api.getPullRequestCredentialStatus).toHaveBeenCalledTimes(2)); view.unmount();
+  await act(async () => finishRefresh({ ...empty, gitea: true, giteaServers: ['https://code.example:8443/forge'] }));
+});
+
+it('suppresses removal completion after the connection list refresh resolves post-unmount', async () => {
+  const saved = { ...empty, gitea: true, giteaServers: ['https://saved.example'] };
+  let finishRefresh!: (value: PullRequestCredentialStatus) => void;
+  mocks.api.getPullRequestCredentialStatus.mockResolvedValueOnce(saved).mockReturnValueOnce(new Promise(resolve => { finishRefresh = resolve; }));
+  const view = render(<PullRequestProvidersSettings />); await ready();
+  fireEvent.click(provider('Gitea').getByRole('button', { name: 'Remove Gitea connection https://saved.example' }));
+  await waitFor(() => expect(mocks.api.removePullRequestCredential).toHaveBeenCalledOnce());
+  await waitFor(() => expect(mocks.api.getPullRequestCredentialStatus).toHaveBeenCalledTimes(2)); view.unmount();
+  await act(async () => finishRefresh(empty));
+});
+
 it('does not reset an instance draft when Add server is queued in the same event batch as save', async () => {
   let finish: ((value: { ok: true; username: string }) => void) | undefined;
   mocks.api.testGiteaConnection.mockImplementation(() => new Promise(resolve => { finish = resolve; }));

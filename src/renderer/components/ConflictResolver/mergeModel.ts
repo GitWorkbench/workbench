@@ -24,8 +24,9 @@ export function blockText(lines: string[], trailingNewline: boolean): string {
 }
 
 function sourceRange(source: string, text: string, cursor: number, fallbackLine: number, context: string): [number, number] {
-  const contextLines = context.split('\n');
-  if (contextLines[contextLines.length - 1] === '') contextLines.pop();
+  // A valid conflict marker starts at offset 0 or directly after a newline.
+  // Drop that delimiter before searching so it is not treated as context text.
+  const contextLines = context.split('\n').slice(0, -1);
   let contextEnd: number | undefined;
   for (let count = Math.min(6, contextLines.length); count > 0; count--) {
     const anchor = contextLines.slice(-count).join('\n') + '\n';

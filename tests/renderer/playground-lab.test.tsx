@@ -117,4 +117,12 @@ describe('guided practice desk', () => {
     let ran!: (value: unknown) => void; mock.run.mockReturnValueOnce(new Promise(resolve => { ran = resolve; })); const third = await open(); enter('git status'); fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true })); third.unmount(); const calls = vi.mocked(props.onProgress).mock.calls.length; await act(async () => ran({ ok: true, output: 'late', snapshot: snapshot() })); expect(props.onProgress).toHaveBeenCalledTimes(calls);
     let saved!: (value: unknown) => void; mock.save.mockReturnValueOnce(new Promise(resolve => { saved = resolve; })); const fourth = await open(); fireEvent.change(screen.getByLabelText('Edit notes.txt'), { target: { value: 'draft' } }); fireEvent.click(screen.getByRole('button', { name: 'Save file' })); fourth.unmount(); const afterSave = vi.mocked(props.onProgress).mock.calls.length; await act(async () => saved(snapshot())); expect(props.onProgress).toHaveBeenCalledTimes(afterSave);
   });
+  it('does not show an operation error after the practice desk unmounts', async () => {
+    let fail!: (reason: Error) => void;
+    mock.run.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
+    const view = await open(); enter('git status'); fireEvent.submit(screen.getByLabelText('Git practice command').closest('form')!);
+    view.unmount();
+    await act(async () => fail(new Error('late command failure')));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

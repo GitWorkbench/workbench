@@ -208,6 +208,15 @@ describe('UsageGuideModal navigation and persistence', () => {
     expect(first).toHaveFocus();
     unmount(); expect(opener).toHaveFocus(); opener.remove();
   });
+  it('handles ordinary keys and reverse tabbing from an interior guide control', () => {
+    vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{ width: 1, height: 1 } as DOMRect] as unknown as DOMRectList);
+    render(<UsageGuideModal onClose={vi.fn()} />);
+    const search = screen.getByRole('textbox', { name: 'Search Git Workbench guides' });
+    search.focus();
+    fireEvent.keyDown(window, { key: 'x' });
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(search).toHaveFocus();
+  });
   it('focuses the root if the dialog has no visible focus targets', () => {
     vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([] as unknown as DOMRectList);
     render(<UsageGuideModal onClose={vi.fn()} />);

@@ -110,7 +110,25 @@ describe('interactive repository terminal', () => {
     for (let sequence = 0; sequence < 130; sequence++) emit({ id: snapshot.id, sequence, type: 'data', data: String(sequence) });
     await act(async () => resolve({ ...snapshot, sequence: 128 })); expect(mock.terms[0].write).toHaveBeenLastCalledWith('129', expect.any(Function));
     unmount(); const term = mock.terms[0]; term.write.mock.calls[0][1]();
-    mock.open.mockReturnValueOnce(new Promise<TerminalSession>(done => { resolve = done; })); const next = render(<TerminalDrawer />); next.unmount(); await act(async () => resolve(snapshot)); expect(mock.detach).toHaveBeenCalledTimes(2);
+    mock.open.mockReturnValueOnce(new Promise<TerminalSession>(done => { resolve = done; })); const next = render(<TerminalDrawer />); next.unmount(); mock.detach.mockRejectedValueOnce(new Error('stale session cleanup failed')); await act(async () => resolve(snapshot)); expect(mock.detach).toHaveBeenCalledTimes(2);
+  });
+  it('ignores failed opens after unmount and contains detach cleanup failures', async () => {
+    let rejectOpen!: (reason: Error) => void;
+    mock.open.mockReturnValueOnce(new Promise<TerminalSession>((_resolve, reject) => { rejectOpen = reject; }));
+    const pending = render(<TerminalDrawer />); pending.unmount();
+    await act(async () => rejectOpen(new Error('late open failure')));
+
+    mock.open.mockResolvedValueOnce(snapshot); mock.detach.mockRejectedValueOnce(new Error('detach failed'));
+    const mounted = render(<TerminalDrawer />); await ready();
+    fireEvent.click(screen.getByLabelText('Hide terminal')); mock.state.terminalDrawerOpen = false; mounted.rerender(<TerminalDrawer />);
+    await act(async () => {});
+    expect(mock.detach).toHaveBeenCalledWith(snapshot.id, snapshot.connectionId);
+
+    let resolveStale!: (session: TerminalSession) => void;
+    mock.open.mockReturnValueOnce(new Promise<TerminalSession>(resolve => { resolveStale = resolve; }));
+    mock.detach.mockRejectedValueOnce(new Error('stale detach failed'));
+    const stale = render(<TerminalDrawer />); await waitFor(() => expect(mock.open).toHaveBeenCalled()); stale.unmount();
+    await act(async () => resolveStale(snapshot));
   });
   it('reports exited shells and restarts only after confirmation', async () => {
     render(<TerminalDrawer />); await ready(); emit({ id: snapshot.id, sequence: 3, type: 'exit', exitCode: 7 }); expect(screen.getByText(/Shell exited with code 7/)).toBeVisible(); expect(mock.terms[0].options.disableStdin).toBe(true);
@@ -131,6 +149,7 @@ describe('interactive repository terminal', () => {
     mock.external.mockResolvedValueOnce({ ok: false, error: 'No terminal' }); fireEvent.click(screen.getByLabelText('Open external terminal')); await screen.findByText('No terminal');
     mock.external.mockResolvedValueOnce({ ok: false }); fireEvent.click(screen.getByLabelText('Open external terminal')); await screen.findByText('Could not open the external terminal.');
     mock.external.mockRejectedValueOnce(new Error('offline')); fireEvent.click(screen.getByLabelText('Open external terminal')); await screen.findByText('Could not open the external terminal.');
+    mock.external.mockResolvedValueOnce({ ok: true }); fireEvent.click(screen.getByLabelText('Open external terminal')); await waitFor(() => expect(mock.external).toHaveBeenCalledTimes(4));
     mock.close.mockRejectedValueOnce(new Error('close failed')); fireEvent.click(screen.getByLabelText('Restart shell')); fireEvent.click(screen.getByText('Restart shell now')); await screen.findByText('Error: close failed');
   });
   it('copies a selection, clears scrollback and preserves native copy/paste shortcuts', async () => {

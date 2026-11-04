@@ -40,6 +40,10 @@ describe('sparse checkout filesystem and concurrency boundaries', () => {
     await fs.writeFile(path.join(folder, 'cccccccc-cccc-cccc-cccc-cccccccccccc.json'), JSON.stringify({ worktree: '/elsewhere' }));
     expect((await getSparseCheckout(root)).backups.map(value => value.id)).toEqual([id]);
   });
+  it('keeps sparse state inspectable when HEAD cannot be resolved', async () => {
+    mock.resolve.mockRejectedValueOnce(new Error('HEAD is unavailable'));
+    expect(await getSparseCheckout(root)).toMatchObject({ head: '', enabled: false, directories: [] });
+  });
   it('rejects oversized existing rules before reading or mutating the layout', async () => {
     await fs.mkdir(path.join(root, 'info')); await fs.writeFile(path.join(root, 'info/sparse-checkout'), 'x'.repeat(1_000_001));
     await expect(getSparseCheckout(root)).rejects.toThrow('Sparse rules exceed 1 MB');
@@ -76,6 +80,13 @@ describe('sparse checkout filesystem and concurrency boundaries', () => {
     expect(preview.added).toBe(22); expect(preview.blockers).toHaveLength(20);
     expect(preview.blockers.every(message => message.includes('already exists'))).toBe(true);
     expect(await fs.readFile(path.join(root, files[21]), 'utf8')).toBe('valuable');
+  });
+  it('caps ignored-file warnings when a removed folder contains many ignored files', async () => {
+    ignored = Array.from({ length: 22 }, (_, index) => `app/cache-${index}/local.bin\0`).join('');
+    const state = await getSparseCheckout(root);
+    const preview = await previewSparseCheckout(root, selection(state, ['docs']));
+    expect(preview.blockers).toHaveLength(20);
+    expect(preview.blockers.every(message => message.startsWith('Move ignored file'))).toBe(true);
   });
   it('rejects index changes between preview and apply without saving a snapshot', async () => {
     const state = await getSparseCheckout(root), original = mock.git.getMockImplementation()!; let reads = 0;

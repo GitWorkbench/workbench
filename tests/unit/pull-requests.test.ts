@@ -365,6 +365,13 @@ describe('self-hosted connection verification and boundaries', () => {
     expect((await getPullRequestContext('/repo', undefined, 'gitea', credentials)).provider).toBeNull();
     await expect(hostedReviewClient('/repo', 'origin', 'gitea', credentials)).rejects.toThrow('Select a supported remote');
   });
+  it('accepts a self-hosted instance configured at its origin without a base path', async () => {
+    mocks.remotes.mockResolvedValue([remote('https://code.example/team/repo.git')]);
+    const fetch = fakeFetch(response({}), response([], 200));
+    const lookup = (provider: PullRequestProvider) => provider === 'gitea' ? { token: 'test-token', serverUrl: 'https://code.example' } : null;
+    expect(await getPullRequestContext('/repo', undefined, undefined, lookup)).toMatchObject({ provider: 'gitea', repository: 'team/repo' });
+    expect(fetch).toHaveBeenCalled();
+  });
   it('uses the push URL when a supported review remote has no fetch URL', async () => {
     mocks.remotes.mockResolvedValue([remote('', 'origin', 'https://github.com/owner/repo.git')]);
     expect((await hostedReviewClient('/repo', 'origin', 'github', credentials)).config.provider).toBe('github');

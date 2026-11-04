@@ -96,6 +96,15 @@ describe('Git Playground workspace', () => {
     await act(async () => useApp.setState({ playgroundOpen: false })); await act(async () => finish(session('late', 'git-basics')));
     expect(screen.queryByRole('main')).not.toBeInTheDocument();
   });
+  it('ignores a guided lesson creation that resolves after the component unmounts', async () => {
+    let finish!: (value: PlaygroundSession) => void;
+    mock.create.mockReturnValueOnce(new Promise<PlaygroundSession>(resolve => { finish = resolve; }));
+    const view = render(<Playground />); await waitFor(() => expect(screen.getByRole('button', { name: 'Start guided lesson' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Start guided lesson' }));
+    view.unmount();
+    await act(async () => finish(session('late-unmount', 'git-basics')));
+    expect(screen.queryByRole('heading', { name: 'Git Playground' })).not.toBeInTheDocument();
+  });
   it('keeps workspace-opening and next-lesson failures visible in the practice desk', async () => {
     const attempt = session('ready', 'git-basics', true); mock.list.mockResolvedValue({ sessions: [attempt], warnings: [] }); mock.lab.mockResolvedValue(labState(attempt));
     render(<Playground />); await screen.findByText(attempt.path); fireEvent.click(screen.getByRole('button', { name: 'Resume guided lesson' }));
@@ -205,5 +214,25 @@ describe('Git Playground workspace', () => {
     const openingView = render(<Playground />); chooseFirst(); await waitFor(() => expect(screen.getByRole('button', { name: 'Start challenge' })).toBeEnabled()); fireEvent.click(screen.getByRole('button', { name: 'Start challenge' })); await waitFor(() => expect(useApp.getState().openRepo).toHaveBeenCalled()); openingView.unmount(); await act(async () => open());
     mock.list.mockResolvedValue({ sessions: [session()], warnings: [] }); let check!: (value: unknown) => void; mock.check.mockReturnValueOnce(new Promise(resolve => { check = resolve; }));
     const checking = render(<Playground />); chooseFirst(); await screen.findByText(session().path); fireEvent.click(screen.getByRole('button', { name: 'Check progress' })); checking.unmount(); await act(async () => check({ session: session(), checks: [], observation: '' }));
+  });
+  it('does not surface a rejected challenge creation after the catalog unmounts', async () => {
+    let fail!: (reason: Error) => void;
+    mock.create.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
+    const view = render(<Playground />);
+    chooseFirst(); await waitFor(() => expect(screen.getByRole('button', { name: 'Start challenge' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Start challenge' }));
+    view.unmount();
+    await act(async () => fail(new Error('late setup failure')));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+  it('ignores a guided attempt that finishes after the playground unmounts', async () => {
+    let finish!: (value: PlaygroundSession) => void;
+    mock.create.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const view = render(<Playground />);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Start guided lesson' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Start guided lesson' }));
+    view.unmount();
+    await act(async () => finish(session('late-guided', 'git-basics')));
+    expect(useApp.getState().openRepo).not.toHaveBeenCalled();
   });
 });

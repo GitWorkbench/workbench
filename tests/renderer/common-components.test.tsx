@@ -125,6 +125,14 @@ describe('ContextMenu', () => {
     expect(onSubmit).toHaveBeenCalledWith('git@example.com:owner/project.git');
     expect(onClose).toHaveBeenCalledOnce();
   });
+  it('does not submit a whitespace-only prompt when Enter is pressed', () => {
+    const onSubmit = vi.fn(), onClose = vi.fn();
+    render(<ContextMenu x={0} y={0} onClose={onClose} items={[{ label: 'Name', prompt: { placeholder: 'Branch name', submitLabel: 'Create', onSubmit } }]} />);
+    const input = screen.getByPlaceholderText('Branch name');
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onSubmit).not.toHaveBeenCalled(); expect(onClose).not.toHaveBeenCalled();
+  });
   it('rejects whitespace-only input and ignores unrelated keys', () => {
     const onSubmit = vi.fn(), onClose = vi.fn();
     render(<ContextMenu x={0} y={0} onClose={onClose} items={[{ label: 'Name', prompt: { placeholder: 'Name', submitLabel: 'Rename', onSubmit } }]} />);

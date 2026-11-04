@@ -37,3 +37,12 @@ it('ignores malformed metadata on restore-point refs', async () => {
   mock.raw.mockResolvedValue('Git Workbench restore point: {invalid\n');
   expect(await listRestorePoints(root)).toEqual([]);
 });
+it('sorts valid restore points newest first', async () => {
+  const { listRestorePoints } = await import('../../src/main/git/restore-points');
+  const worktree = await fs.realpath(root);
+  mock.raw.mockResolvedValue([
+    `Git Workbench restore point: ${JSON.stringify({ id, worktree, head, createdAt: '2026-01-01' })}`,
+    `Git Workbench restore point: ${JSON.stringify({ id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', worktree, head, createdAt: '2026-02-01' })}`
+  ].join('\n'));
+  expect((await listRestorePoints(root)).map(point => point.createdAt)).toEqual(['2026-02-01', '2026-01-01']);
+});

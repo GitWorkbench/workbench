@@ -27,6 +27,7 @@ beforeEach(async () => {
   mock.fetch.mockReset().mockRejectedValue(new Error('Unmocked GitHub request'));
   vi.stubGlobal('fetch', mock.fetch);
   auth = await import('../../src/main/git/github-auth'); auth.registerGitHubSignIn(mock.emit);
+  auth.stopGitHubSignIn();
 });
 afterEach(() => { auth.stopGitHubSignIn(); vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -90,6 +91,14 @@ describe('device authorization', () => {
     mock.fetch.mockReturnValue(new Promise(resolve => { done = resolve; }));
     const pending = auth.startGitHubSignIn(); auth.cancelGitHubSignIn(); done(response(code()));
     expect((await pending).phase).toBe('cancelled'); expect(mock.save).not.toHaveBeenCalled();
+  });
+  it('stops a pending code request before its polling timer is scheduled', async () => {
+    let resolve!: (value: Response) => void;
+    mock.fetch.mockReturnValueOnce(new Promise<Response>(done => { resolve = done; }));
+    const pending = auth.startGitHubSignIn(); auth.stopGitHubSignIn();
+    resolve(response(code())); await pending;
+    expect(auth.getGitHubSignInState().flowId).toBeUndefined();
+    expect(mock.save).not.toHaveBeenCalled();
   });
   it.each([
     { device_code: 'short' }, { device_code: 42 }, { user_code: 'invalid' }, { user_code: undefined },
@@ -315,5 +324,54 @@ describe('device flow cancellation and delayed responses', () => {
     mock.fetch.mockResolvedValueOnce(response({ error: 'access_denied' }));
     expect(await withoutSubscriber.startGitHubSignIn()).toMatchObject({ phase: 'error' });
     withoutSubscriber.stopGitHubSignIn();
+  });
+});
+
+describe('GitHub authorization cleanup edge cases', () => {
+  it('does nothing when asked to stop with no device flow running', () => {
+    auth.githubCredentialsChanged();
+    auth.stopGitHubSignIn();
+    expect(auth.getGitHubSignInState().phase).toBe('idle');
+  });
+  it('stops an active device flow and cancels its scheduled poll', async () => {
+    mock.fetch.mockResolvedValueOnce(response(code()));
+    await auth.startGitHubSignIn();
+    auth.stopGitHubSignIn();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mock.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('does not replace an active device-flow status when the saved session is rejected', async () => {
+    mock.fetch.mockResolvedValueOnce(response(code()));
+    await auth.startGitHubSignIn();
+    mock.saved = oauth();
+    auth.githubSessionRejected(mock.saved);
+    expect(mock.saved.githubOAuth.reauthRequired).toBe(true);
+    expect(auth.getGitHubSignInState().phase).toBe('waiting');
+  });
+
+  it('keeps refresh cleanup scoped to its own promise when another account refresh starts', async () => {
+    mock.saved = oauth();
+    const firstCredential = mock.saved;
+    const pending: Array<(value: Response) => void> = [];
+    mock.fetch.mockImplementation(() => new Promise(resolve => pending.push(resolve)));
+    const first = auth.githubRequestCredential(firstCredential);
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+
+    mock.saved = oauth(); mock.saved.token = `${token}_replacement`;
+    const second = auth.githubRequestCredential(mock.saved);
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    pending[0](response({ access_token: `${token}_first` }));
+    await expect(first).rejects.toThrow(/connection changed/);
+    pending[1](response({ access_token: `${token}_second` }));
+    await expect(second).resolves.toMatchObject({ token: `${token}_second` });
+  });
+
+  it('propagates an identity network error without marking the session as rejected', async () => {
+    mock.saved = oauth({ expiresAt: '2099-01-01' });
+    mock.fetch.mockRejectedValueOnce(new Error('identity service offline'));
+    await expect(auth.refreshGitHubAccount()).rejects.toThrow('identity service offline');
+    expect(mock.saved.githubOAuth.reauthRequired).toBeFalsy();
+    expect(mock.save).not.toHaveBeenCalled();
   });
 });

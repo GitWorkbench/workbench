@@ -60,7 +60,8 @@ export function Playground() {
   });
   const openGuided = (id: PlaygroundChallengeId, fresh = false) => perform(async () => {
     const session = !fresh && sessions.find(item => item.challengeId === id) || await unwrap(api.createPlaygroundSession(id));
-    if (alive.current) { updateSession(session); setSelected(id); setLabSession(session); }
+    if (!alive.current) return;
+    updateSession(session); setSelected(id); setLabSession(session);
   });
   const launchTool = (session: PlaygroundSession) => {
     useApp.setState({ playgroundOpen: false });
