@@ -6,11 +6,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const app: Record<string, any> = {};
-  return { app, clipboard: vi.fn(), checkout: null as null | { onClose: () => void; onConfirmCheckout: () => void; onMoreActions?: () => void }, useApp: Object.assign((selector: (state: any) => any) => selector(app), { getState: () => app, setState: vi.fn((patch: any) => Object.assign(app, patch)) }),
-    api: Object.fromEntries(['checkoutBranch', 'createBranch', 'renameBranch', 'mergeBranch', 'rebaseBranch', 'pushSetUpstream', 'setUpstream', 'deleteBranch', 'pull', 'pushTag', 'deleteTag', 'fetch', 'pruneRemote', 'setRemoteUrl', 'renameRemote', 'removeRemote', 'updateSubmodules', 'removeWorktree', 'stashPop', 'stashApply', 'stashDrop', 'stash', 'getPullRequestContext'].map(name => [name, vi.fn()])) };
+  return { app, clipboard: vi.fn(), contextItems: [] as Array<{ label: string; onClick?: () => void }>, checkout: null as null | { onClose: () => void; onConfirmCheckout: () => void; onMoreActions?: () => void }, useApp: Object.assign((selector: (state: any) => any) => selector(app), { getState: () => app, setState: vi.fn((patch: any) => Object.assign(app, patch)) }),
+    api: Object.fromEntries(['checkoutBranch', 'createBranch', 'renameBranch', 'mergeBranch', 'rebaseBranch', 'pushSetUpstream', 'setUpstream', 'deleteBranch', 'getBranches', 'pull', 'pushTag', 'deleteTag', 'fetch', 'pruneRemote', 'setRemoteUrl', 'renameRemote', 'removeRemote', 'updateSubmodules', 'removeWorktree', 'stashPop', 'stashApply', 'stashDrop', 'stash', 'getPullRequestContext'].map(name => [name, vi.fn()])) };
 });
 vi.mock('../../src/renderer/store', () => ({ useApp: mocks.useApp }));
 vi.mock('../../src/renderer/lib/api', () => ({ api: mocks.api }));
+vi.mock('../../src/renderer/components/ui/ContextMenu', async original => {
+  const module = await original<typeof import('../../src/renderer/components/ui/ContextMenu')>();
+  return { ...module, ContextMenu: (props: React.ComponentProps<typeof module.ContextMenu>) => {
+    mocks.contextItems = props.items;
+    return <module.ContextMenu {...props} />;
+  } };
+});
 vi.mock('../../src/renderer/components/Sidebar/CheckoutBranchModal', async original => {
   const module = await original<typeof import('../../src/renderer/components/Sidebar/CheckoutBranchModal')>();
   return { ...module, CheckoutBranchModal: (props: React.ComponentProps<typeof module.CheckoutBranchModal>) => {
@@ -33,6 +40,7 @@ beforeEach(() => {
   mocks.useApp.setState.mockClear(); mocks.clipboard.mockReset().mockResolvedValue(undefined);
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: mocks.clipboard } });
   for (const method of Object.values(mocks.api)) method.mockReset().mockResolvedValue({ ok: true });
+  mocks.api.getBranches.mockResolvedValue({ local: [], remote: [], cleanupTarget: 'main' });
   mocks.api.getPullRequestContext.mockResolvedValue({ provider: 'gitea', remoteName: 'origin', currentBranch: 'main', defaultBranch: 'main', credentialConfigured: true, pullRequests: [{ id: '12', title: 'Improve request navigation', author: 'Alice', sourceBranch: 'feature', targetBranch: 'main', draft: true, state: 'open' }] });
 });
 const branchButton = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s*✓)?$`) });
@@ -42,6 +50,30 @@ function context(kind: 'local' | 'remoteBranch' | 'tag' | 'remote' | 'submodule'
 }
 
 describe('Sidebar navigation, sizing and selection', () => {
+  it('opens the safe branch cleanup dialog from the Local section action', async () => {
+    render(<Sidebar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Clean up merged branches' }));
+    expect(await screen.findByRole('dialog', { name: 'Safe branch cleanup' })).toBeVisible();
+    expect(mocks.api.getBranches).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog', { name: 'Safe branch cleanup' })).not.toBeInTheDocument();
+  });
+  it('keeps current checkout guarded and handles branches with no loaded graph commit', () => {
+    mocks.app.log = { commits: [{ hash: 'other-tip', refs: [{ label: 'other' }] }] };
+    render(<Sidebar />);
+    fireEvent.contextMenu(branchButton('main'));
+    expect(screen.getByRole('button', { name: 'Checkout "main" (Active)' })).toBeDisabled();
+    const activeCheckout = mocks.contextItems.find(item => item.label === 'Checkout "main" (Active)');
+    expect(activeCheckout).toBeDefined();
+    activeCheckout?.onClick?.();
+    expect(mocks.api.checkoutBranch).not.toHaveBeenCalled();
+
+    fireEvent.click(branchButton('main'));
+    expect(mocks.app.selectCommit).not.toHaveBeenCalled();
+    fireEvent.click(branchButton('origin/remote-feature'));
+    expect(mocks.app.selectCommit).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { name: 'Checkout Branch' })).toBeVisible();
+  });
   it('celebrates a completed rebase from the branch actions and skips failed rebases', async () => {
     render(<Sidebar />); fireEvent.contextMenu(branchButton('feature'));
     fireEvent.click(screen.getByRole('button', { name: 'Rebase "main" onto "feature"' }));

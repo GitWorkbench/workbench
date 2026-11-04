@@ -59,7 +59,7 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       { title: 'Find a repository', description: 'Use Home’s shared search to filter project names and paths. Open a recent entry, or use Resume to return to a workspace that is already open.' },
       { title: 'Pin projects you watch', description: 'Use a recent repository’s pin button to add it to the pinned list. Pinned projects leave the recent list so each project appears once. Unpin to return it to your recent history.' },
-      { title: 'Read local status', description: 'Each pinned row aligns the repository name and path, branch, working-tree status, and sync counts. When there are no ahead/behind commits, Sync shows Up to date instead of repeated zero counters. Use All pinned, With changes, or Needs attention to narrow the list; unavailable folders also need attention.' },
+      { title: 'Read local status', description: 'Each pinned row aligns the repository name and path, branch, working-tree status, and sync counts. Repository attention summarizes conflicts, uncommitted changes, commits to push or pull, and unavailable folders; choose an item to open that repository. Use All pinned, With changes, or Needs attention to narrow the list.' },
       { title: 'Refresh the information you need', description: 'Refresh rescans local status. Check requests explicitly contacts the configured provider; expand a row’s request section to inspect its loaded requests and links.' }
     ],
     tips: ['Ahead/behind compares with the last fetched upstream. A local refresh does not fetch new commits.', 'Removing a recent entry does not delete its folder. Missing pinned folders stay visible until you reconnect or unpin them.'],
@@ -157,7 +157,7 @@ export const guideTopics: GuideTopic[] = [
     steps: [
       { title: 'Inspect before switching', description: 'A single click on a branch selects its tip in the loaded graph. An inactive branch also opens a checkout confirmation; clicking the already active local branch only inspects it and does not open that dialog.' },
       { title: 'Checkout deliberately', description: 'Confirm checkout in the dialog, or double-click an inactive branch to request checkout directly. Double-clicking a remote branch also requests checkout. Review any Git error or conflict instead of assuming the switch completed.' },
-      { title: 'Create or manage a branch', description: 'Use the Branch button or Local section menu to create a branch. Right-click a branch for rename, merge, rebase, upstream, push, and deletion actions. Read which branch is the source and which is current.' },
+      { title: 'Create or manage a branch', description: 'Use the Branch button or Local section menu to create a branch. Right-click a branch for rename, merge, rebase, upstream, push, and deletion actions. The Local section cleanup action lists branches merged into the detected default (or current branch), while protecting the current branch, default branch, worktree branches, and unmerged work. Git rechecks each ordinary deletion before removing it.' },
       { title: 'Create a milestone tag', description: 'Use the Tags section’s create control, the palette’s Create Tag, or a commit’s Create tag here action. Check the target revision and tag options before creating it.' },
       { title: 'Publish only when intended', description: 'A local tag is not automatically a hosted release. Use its Push Tag action for a selected remote. Branch deletion and remote deletion are separate actions; inspect each confirmation carefully.' }
     ],

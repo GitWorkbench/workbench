@@ -1,16 +1,37 @@
 import { applyHunkPatch } from './hunk-actions';
 import { getDiffSummary } from './diff-summary';
 import { BranchInfo, StashInfo, StashDetail, FileDiff, FileChange } from '../../shared/types';
+import type { BranchList } from '../../shared/types';
 import { withGit, errorMessage } from './core';
 import { parseUnifiedDiff } from './status-diff';
 import { gitCommand } from './advanced-process';
 
-export async function getBranches(repoPath: string): Promise<{ local: BranchInfo[]; remote: BranchInfo[] }> {
+export async function getBranches(repoPath: string): Promise<BranchList> {
   try {
     return await withGit(repoPath, async (git) => {
       const res = await git.branch(['-vv', '-a']);
       const local: BranchInfo[] = [];
       const remote: BranchInfo[] = [];
+      let defaultRef = '';
+      let defaultBranch = '';
+      try {
+        const remotes = (await git.raw(['remote'])).split(/\r?\n/).map(name => name.trim()).filter(Boolean);
+        for (const remoteName of ['origin', ...remotes.filter(name => name !== 'origin')]) {
+          try {
+            defaultRef = (await git.raw(['symbolic-ref', '--quiet', '--short', `refs/remotes/${remoteName}/HEAD`])).trim();
+            if (defaultRef) { defaultBranch = defaultRef.slice(`${remoteName}/`.length); break; }
+          } catch { /* This remote has no symbolic default branch. */ }
+        }
+      } catch { /* A local-only repository may not have any remotes. */ }
+      const cleanupTarget = defaultRef || 'HEAD';
+      const defaultBranches = defaultBranch
+        ? new Set([defaultBranch])
+        : new Set(['main', 'master', 'develop', 'development', 'trunk'].filter(name => Object.hasOwn(res.branches, name)));
+      let mergedBranches = new Set<string>();
+      try {
+        const merged = await git.raw(['branch', '--merged', cleanupTarget, '--format=%(refname:short)']);
+        mergedBranches = new Set(merged.split(/\r?\n/).map(name => name.trim()).filter(Boolean));
+      } catch { /* Branch listing stays available if Git cannot resolve its cleanup target. */ }
       for (const [name, info] of Object.entries(res.branches)) {
         // simple-git BranchSummary has no `type` field — remote detection must use the `remotes/` prefix.
         const isRemote = name.startsWith('remotes/');
@@ -24,14 +45,15 @@ export async function getBranches(repoPath: string): Promise<{ local: BranchInfo
           isCurrent: !!(info as { current?: boolean }).current,
           isRemote,
           lastCommitDate: (info as { date?: string }).date,
-          tracking: (info as { label?: string }).label?.match(/\[(.+?)\]/)?.[1]
+          tracking: (info as { label?: string }).label?.match(/\[(.+?)\]/)?.[1],
+          ...(!isRemote ? { isMerged: mergedBranches.has(cleanName), isDefault: defaultBranches.has(cleanName) } : {})
         };
         if (isRemote) remote.push(b);
         else local.push(b);
       }
       local.sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || a.name.localeCompare(b.name));
       remote.sort((a, b) => a.fullName.localeCompare(b.fullName));
-      return { local, remote };
+      return { local, remote, cleanupTarget };
     });
   } catch (err) {
     console.error('getBranches failed:', errorMessage(err));

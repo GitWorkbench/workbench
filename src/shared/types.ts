@@ -58,6 +58,17 @@ export interface BranchInfo {
   isRemote: boolean;
   lastCommitDate?: string;
   tracking?: string;
+  /** Local branch tip is reachable from the cleanup target selected by Git Workbench. */
+  isMerged?: boolean;
+  /** Matches the repository default branch when Git exposes that ref. */
+  isDefault?: boolean;
+}
+
+export interface BranchList {
+  local: BranchInfo[];
+  remote: BranchInfo[];
+  /** Ref used for safe cleanup checks, usually origin's symbolic default branch. */
+  cleanupTarget?: string;
 }
 
 export interface StashInfo {
@@ -744,7 +755,7 @@ export interface GitWorkbenchApi extends AdvancedGitApi, TerminalApi, Playground
   getReflog(): Promise<ReflogEntry[]>;
   createRecoveryBranch(hash: string, branchName?: string): Promise<{ ok: boolean; branchName?: string; error?: string }>;
   restoreHeadFromReflog(hash: string): Promise<{ ok: boolean; branchName?: string; backupBranch?: string; error?: string }>;
-  getBranches(): Promise<{ local: BranchInfo[]; remote: BranchInfo[] }>;
+  getBranches(): Promise<BranchList>;
   getStashes(): Promise<StashInfo[]>;
   getCommitDetail(hash: string): Promise<CommitDetail | null>;
   getFileDiff(hash: string, filePath: string, opts?: { staged?: boolean; worktree?: boolean }): Promise<FileDiff | null>;

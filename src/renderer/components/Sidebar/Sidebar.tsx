@@ -32,6 +32,7 @@ import { api } from '../../lib/api';
 import { ContextMenu, ContextMenuItem } from '../ui/ContextMenu';
 import { CheckoutBranchModal, CheckoutTarget } from './CheckoutBranchModal';
 import { SidebarPullRequests } from './SidebarPullRequests';
+import { BranchCleanupDialog } from './BranchCleanupDialog';
 import {
   BranchInfo,
   StashInfo,
@@ -353,6 +354,7 @@ function SidebarFull({
   activeTab: string | null;
 }) {
   const [view, setView] = useState<'repository' | 'requests'>('repository');
+  const [branchCleanupOpen, setBranchCleanupOpen] = useState(false);
   const [requestFilter, setRequestFilter] = useState('');
   const q = filter.toLowerCase();
   const locals = [...new Map(branches.local.map((b) => [b.fullName, b] as const)).values()].filter((b) =>
@@ -912,16 +914,22 @@ function SidebarFull({
           count={locals.length}
           onContextMenu={handleLocalSectionContextMenu}
           action={
-            <button
-              className="btn-icon !w-5 !h-5 opacity-0 group-hover:opacity-100 transition-opacity"
-              title="Create branch"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleLocalSectionContextMenu(e);
-              }}
-            >
-              <Plus size={11} />
-            </button>
+            <div className="flex items-center gap-0.5">
+              <button
+                className="btn-icon !w-5 !h-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Clean up merged branches"
+                aria-label="Clean up merged branches"
+                onClick={(e) => { e.stopPropagation(); setBranchCleanupOpen(true); }}
+              ><Trash2 size={11} /></button>
+              <button
+                className="btn-icon !w-5 !h-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Create branch"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleLocalSectionContextMenu(e);
+                }}
+              ><Plus size={11} /></button>
+            </div>
           }
         >
           {locals.map((b, i) => (
@@ -1163,6 +1171,9 @@ function SidebarFull({
         className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-accent/40 transition-colors"
         onMouseDown={startResize}
       />
+
+      {/* Safe branch cleanup dialog */}
+      {branchCleanupOpen && <BranchCleanupDialog onClose={() => setBranchCleanupOpen(false)} />}
 
       {/* Context Menu Modal */}
       {contextMenu && (

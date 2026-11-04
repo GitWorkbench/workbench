@@ -15,13 +15,35 @@ describe('branch, stash and repository object workflows', () => {
 
   it('creates branches without switching, checks out, renames and deletes merged branches', async () => {
     await createBranch(fixture.repo, 'feature/topic');
-    expect((await getBranches(fixture.repo)).local.map(branch => branch.name)).toEqual(['main', 'feature/topic']);
+    const initialBranches = await getBranches(fixture.repo);
+    expect(initialBranches.local.map(branch => branch.name)).toEqual(['main', 'feature/topic']);
+    expect(initialBranches).toMatchObject({ cleanupTarget: 'HEAD', local: [
+      expect.objectContaining({ name: 'main', isDefault: true, isMerged: true }),
+      expect.objectContaining({ name: 'feature/topic', isDefault: false, isMerged: true })
+    ] });
     await checkoutBranch(fixture.repo, 'feature/topic');
     await renameBranch(fixture.repo, 'feature/topic', 'feature/renamed');
     expect((await getBranches(fixture.repo)).local[0]).toMatchObject({ name: 'feature/renamed', isCurrent: true, isRemote: false });
     await checkoutBranch(fixture.repo, 'main');
     await deleteBranch(fixture.repo, 'feature/renamed');
     expect((await getBranches(fixture.repo)).local.map(branch => branch.name)).toEqual(['main']);
+  });
+
+  it('marks only branches merged into the detected remote default as safe cleanup candidates', async () => {
+    await fixture.git('remote', 'add', 'origin', 'https://example.invalid/workbench.git');
+    await fixture.git('update-ref', 'refs/remotes/origin/main', fixture.initialHash);
+    await fixture.git('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main');
+    await fixture.git('branch', 'feature/merged');
+    await fixture.git('checkout', '-b', 'feature/unmerged');
+    await fixture.write('not-merged.txt', 'keep this commit\n');
+    await fixture.commitAll('Feature work not merged to default');
+    await fixture.git('checkout', 'main');
+
+    const branches = await getBranches(fixture.repo);
+    expect(branches.cleanupTarget).toBe('origin/main');
+    expect(branches.local.find(branch => branch.name === 'main')).toMatchObject({ isDefault: true, isMerged: true });
+    expect(branches.local.find(branch => branch.name === 'feature/merged')).toMatchObject({ isDefault: false, isMerged: true });
+    expect(branches.local.find(branch => branch.name === 'feature/unmerged')).toMatchObject({ isMerged: false });
   });
 
   it('merges a branch and protects unmerged commits from ordinary deletion', async () => {
