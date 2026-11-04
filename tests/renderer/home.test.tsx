@@ -45,7 +45,7 @@ describe('Home workspace hub', () => {
     expect(review.getByText('1 conflict')).toBeVisible(); expect(review.getByText('—')).toBeVisible(); expect(review.getByTitle('2 to pull')).toHaveTextContent('2');
     expect(within(screen.getByRole('button', { name: 'All pinned' })).getByText('3')).toBeVisible();
     expect(within(screen.getByRole('button', { name: 'With changes' })).getByText('2')).toBeVisible();
-    expect(within(screen.getByRole('button', { name: 'Needs attention' })).getByText('1')).toBeVisible();
+    expect(within(screen.getByRole('button', { name: 'Needs attention' })).getByText('2')).toBeVisible();
     expect(screen.getByRole('button', { name: 'All pinned' })).toHaveAttribute('aria-pressed', 'true');
   });
   it('marks refreshing rows busy and keeps unresolved filter totals distinct from zero', () => {
@@ -96,8 +96,8 @@ describe('Home workspace hub', () => {
     expect(pinned().getAllByRole('article')).toHaveLength(2);
     expect(pinned().queryByText('Clean')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Needs attention' }));
-    expect(pinned().getAllByRole('article')).toHaveLength(2);
-    expect(pinned().queryByText('2 changed')).not.toBeInTheDocument();
+    expect(pinned().getAllByRole('article')).toHaveLength(3);
+    expect(pinned().getByText('2 changed')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'All pinned' })); expect(pinned().getAllByRole('article')).toHaveLength(5);
   });
   it('searches by name/path, clears with Escape or button and restores an empty filter result', () => {
@@ -159,5 +159,37 @@ describe('Home workspace hub', () => {
     render(<Home />);
     expect(screen.getByText('All your recent repositories are pinned. Open another project to add it here.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Unpin /' })).toBeVisible();
+  });
+  it('shows repository attention reasons and opens a repository from its attention row', () => {
+    mocks.home.pins = ['/work/dirty', '/work/behind', '/work/broken', '/work/clean'];
+    mocks.home.rows = {
+      '/work/dirty': row({ changed: 3, staged: 1, conflicts: 2, ahead: 1 }),
+      '/work/behind': row({ behind: 4 }),
+      '/work/broken': row({ error: 'Folder unavailable', changed: 9, conflicts: 2 }),
+      '/work/clean': row()
+    };
+    const { rerender } = render(<Home />);
+    const attention = screen.getByRole('region', { name: 'Repository attention' });
+    expect(within(attention).getByText('3 repositories need a closer look')).toBeVisible();
+    expect(within(attention).getAllByRole('listitem')[0].textContent).toMatch(/2 conflicts.*3 uncommitted changes.*1 to push/);
+    expect(within(attention).getByText('4 to pull')).toBeVisible();
+    expect(within(attention).getByText('Unavailable')).toBeVisible();
+    fireEvent.click(within(attention).getByTitle('Open /work/behind'));
+    expect(mocks.app.openRepo).toHaveBeenCalledWith('/work/behind');
+    fireEvent.click(screen.getByRole('button', { name: 'Needs attention' }));
+    expect(pinned().getAllByRole('article')).toHaveLength(3);
+
+    mocks.home.pins = ['/work/clean']; mocks.home.rows = { '/work/clean': row() }; rerender(<Home />);
+    expect(screen.getByText('Pinned repositories have no local issues right now.')).toBeVisible();
+  });
+  it('uses singular attention copy and resumes a repository already open in a workspace tab', () => {
+    mocks.home.pins = ['/work/open']; mocks.home.rows = { '/work/open': row({ changed: 1 }) };
+    mocks.app.tabs = [{ path: '/work/open' }];
+    render(<Home />);
+    const attention = screen.getByRole('region', { name: 'Repository attention' });
+    expect(within(attention).getByText('1 repository needs a closer look')).toBeVisible();
+    fireEvent.click(within(attention).getByTitle('Open /work/open'));
+    expect(mocks.app.setActiveTab).toHaveBeenCalledWith('/work/open');
+    expect(mocks.app.openRepo).not.toHaveBeenCalled();
   });
 });

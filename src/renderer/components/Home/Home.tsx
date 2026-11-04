@@ -9,6 +9,7 @@ import { useApp } from '../../store';
 import { useSettings } from '../../store/settings';
 import { useHomeRepositories } from './useHomeRepositories';
 import type { HomeRepositoryOverview } from './useHomeRepositories';
+import { getRepositoryAttention } from './repository-attention';
 import './home.css';
 
 type StatusFilter = 'all' | 'changed' | 'attention';
@@ -22,13 +23,14 @@ export function Home() {
   const [query, setQuery] = useState(''), [filter, setFilter] = useState<StatusFilter>('all');
   const search = query.trim().toLocaleLowerCase();
   const matches = (repo: string) => repo.toLocaleLowerCase().includes(search);
+  const attentionItems = getRepositoryAttention(pins, rows);
+  const attentionPaths = new Set(attentionItems.map(item => item.path));
   const visiblePins = pins.filter(repo => matches(repo) && (
-    filter === 'all' || (filter === 'changed' ? !rows[repo]?.error && (rows[repo]?.changed || 0) > 0 : !!rows[repo]?.error || (rows[repo]?.conflicts || 0) > 0)
+    filter === 'all' || (filter === 'changed' ? !rows[repo]?.error && (rows[repo]?.changed || 0) > 0 : attentionPaths.has(repo))
   ));
   const unpinnedRecent = [...new Set(recent)].filter(repo => !pins.includes(repo));
   const visibleRecent = unpinnedRecent.filter(matches);
   const changed = pins.filter(repo => !rows[repo]?.error && (rows[repo]?.changed || 0) > 0).length;
-  const attention = pins.filter(repo => !!rows[repo]?.error || (rows[repo]?.conflicts || 0) > 0).length;
   const unresolved = initializing || pins.some(repo => !rows[repo]);
   const busy = initializing || !!refreshing || !!mutating;
   const open = (repo: string) => {
@@ -51,13 +53,30 @@ export function Home() {
 
       {error && <div role="alert" className="home-error"><CircleAlert size={15} /><p>{error}</p><button className="btn-secondary home-action" disabled={busy} onClick={() => void reload()}>Retry</button></div>}
 
+      {!!pins.length && <section className="home-attention" aria-labelledby="home-attention-title">
+        <header className="home-attention-header">
+          <span className="home-attention-icon"><CircleAlert size={15} /></span>
+          <div className="min-w-0 flex-1"><h2 id="home-attention-title">Repository attention</h2><p>{unresolved ? 'Checking the latest local status for pinned repositories…' : attentionItems.length ? `${attentionItems.length} ${attentionItems.length === 1 ? 'repository needs' : 'repositories need'} a closer look` : 'Pinned repositories have no local issues right now.'}</p></div>
+          <span className={`home-attention-count ${attentionItems.length ? 'has-attention' : ''}`}>{unresolved ? '…' : attentionItems.length}</span>
+        </header>
+        {unresolved ? <div className="home-attention-loading" aria-busy="true"><Loader2 size={13} className="animate-spin" />Checking repositories…</div> : attentionItems.length ? <ul className="home-attention-list">
+          {attentionItems.map(item => <li key={item.path}>
+            <button className="home-attention-open" title={`Open ${item.path}`} disabled={opening} onClick={() => open(item.path)}>
+              <span className="home-attention-repo"><FolderGit2 size={14} /><strong>{nameOf(item.path)}</strong><small title={item.path}>{item.path}</small></span>
+              <span className="home-attention-reasons">{item.reasons.map(reason => <span key={reason}>{reason}</span>)}</span>
+              <span className="home-attention-action">{tabs.some(tab => tab.path === item.path) ? 'Resume' : 'Open'}<ArrowRight size={12} /></span>
+            </button>
+          </li>)}
+        </ul> : <p className="home-attention-clear"><Check size={13} />Everything looks clear. Local status was checked without fetching; sync counts use the last fetch.</p>}
+      </section>}
+
       <div className="home-controls">
         <div className="home-search"><Search size={14} /><input aria-label="Search repositories" placeholder="Search by name or path…" value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Escape' && query) { e.preventDefault(); e.stopPropagation(); setQuery(''); } }} />{query && <button className="home-icon-button" aria-label="Clear search" onClick={() => setQuery('')}><X size={13} /></button>}</div>
         <div className="home-filters" role="group" aria-label="Filter pinned repositories">
           {([
             ['all', 'All pinned', initializing ? '—' : pins.length],
             ['changed', 'With changes', unresolved ? '—' : changed],
-            ['attention', 'Needs attention', unresolved ? '—' : attention]
+            ['attention', 'Needs attention', unresolved ? '—' : attentionItems.length]
           ] as const).map(([value, label, count]) => <button key={value} aria-label={label} aria-pressed={filter === value} className={filter === value ? 'is-selected' : ''} onClick={() => setFilter(value)}>{label}<span aria-hidden="true" className="home-filter-count">{count}</span></button>)}
         </div>
       </div>
