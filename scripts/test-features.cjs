@@ -21,7 +21,10 @@ function fixture(t, content = Array.from({ length: 35 }, (_, i) => `line ${i + 1
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'git-workbench-test-')));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const repo = path.join(dir, 'repo'); fs.mkdirSync(repo);
-  git(repo, 'init', '-b', 'main'); git(repo, 'config', 'user.name', 'Test'); git(repo, 'config', 'user.email', 'test@example.invalid');
+  git(repo, 'init', '-b', 'main');
+  // Make fixture bytes independent of Git for Windows' global line-ending defaults.
+  git(repo, 'config', 'core.autocrlf', 'false'); git(repo, 'config', 'core.eol', 'lf');
+  git(repo, 'config', 'user.name', 'Test'); git(repo, 'config', 'user.email', 'test@example.invalid');
   const file = path.join(repo, 'file.txt'); fs.writeFileSync(file, content);
   const commit = () => { git(repo, 'add', '.'); git(repo, 'commit', '-m', 'fixture'); return git(repo, 'rev-parse', 'HEAD'); };
   const initial = commit();
@@ -98,10 +101,10 @@ test('bisect locates culprit, survives reopening, and resets linked worktree', a
   const f = fixture(t); const hashes = [f.initial];
   for (let i = 1; i <= 5; i++) { fs.writeFileSync(f.file, `revision ${i}\n`); hashes.push(f.commit()); }
   const wt = path.join(f.dir, 'linked'); await createWorktree(f.repo, wt, hashes[5]);
-  let result = await startBisect(wt, hashes[5], hashes[0]); assert.equal(result.ok, true); assert.equal(result.state.active, true);
+  let result = await startBisect(wt, hashes[5], hashes[0]); assert.equal(result.ok, true, result.error); assert.equal(result.state.active, true);
   for (let i = 0; i < 8 && !result.state.culpritCommit; i++) {
     const current = hashes.indexOf(result.state.currentCommit.hash);
-    result = await stepBisect(wt, current >= 3 ? 'bad' : 'good'); assert.equal(result.ok, true);
+    result = await stepBisect(wt, current >= 3 ? 'bad' : 'good'); assert.equal(result.ok, true, result.error);
   }
   assert.equal(result.state.culpritCommit.hash, hashes[3]);
   assert.equal((await getBisectState(wt)).culpritCommit.hash, hashes[3]);
@@ -165,7 +168,7 @@ test('line indices remain correct when a deleted line begins with dashes', async
 test('bisect reports ambiguous candidates when all remaining commits are skipped', async t => {
   const f = fixture(t); const hashes = [f.initial];
   for (let i = 1; i <= 3; i++) { fs.writeFileSync(f.file, `revision ${i}\n`); hashes.push(f.commit()); }
-  let result = await startBisect(f.repo, hashes[3], hashes[0]);
+  let result = await startBisect(f.repo, hashes[3], hashes[0]); assert.equal(result.ok, true, result.error);
   for (let i = 0; i < 5 && !result.state?.ambiguousCommits?.length; i++) {
     result = await stepBisect(f.repo, 'skip');
     assert.equal(result.ok, true, result.error);
